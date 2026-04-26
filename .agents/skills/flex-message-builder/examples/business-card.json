@@ -1,0 +1,95 @@
+{
+  "type": "flex",
+  "altText": "Brown — Designer at Brown Inc.",
+  "contents": {
+    "type": "bubble",
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "contents": [
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "spacing": "md",
+          "contents": [
+            {
+              "type": "image",
+              "url": "https://example.com/avatars/brown.jpg",
+              "size": "lg",
+              "aspectMode": "cover",
+              "aspectRatio": "1:1",
+              "flex": 0
+            },
+            {
+              "type": "box",
+              "layout": "vertical",
+              "contents": [
+                { "type": "text", "text": "Brown", "weight": "bold", "size": "xl" },
+                { "type": "text", "text": "Senior Designer", "size": "sm", "color": "#888888" },
+                { "type": "text", "text": "Brown Inc.", "size": "sm", "color": "#1DB446", "weight": "bold" }
+              ]
+            }
+          ]
+        },
+        { "type": "separator", "margin": "xxl" },
+        {
+          "type": "box",
+          "layout": "vertical",
+          "margin": "lg",
+          "spacing": "sm",
+          "contents": [
+            {
+              "type": "box",
+              "layout": "baseline",
+              "spacing": "sm",
+              "contents": [
+                { "type": "icon", "url": "https://example.com/icons/phone.png", "size": "sm" },
+                { "type": "text", "text": "+81 90 1234 5678", "size": "sm", "color": "#555555", "flex": 0 }
+              ]
+            },
+            {
+              "type": "box",
+              "layout": "baseline",
+              "spacing": "sm",
+              "contents": [
+                { "type": "icon", "url": "https://example.com/icons/mail.png", "size": "sm" },
+                { "type": "text", "text": "brown@example.com", "size": "sm", "color": "#555555", "flex": 0 }
+              ]
+            },
+            {
+              "type": "box",
+              "layout": "baseline",
+              "spacing": "sm",
+              "contents": [
+                { "type": "icon", "url": "https://example.com/icons/pin.png", "size": "sm" },
+                { "type": "text", "text": "Tokyo, Japan", "size": "sm", "color": "#555555", "flex": 0 }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "footer": {
+      "type": "box",
+      "layout": "horizontal",
+      "spacing": "sm",
+      "contents": [
+        {
+          "type": "button",
+          "style": "secondary",
+          "height": "sm",
+          "flex": 1,
+          "action": { "type": "uri", "label": "Call", "uri": "tel:+819012345678" }
+        },
+        {
+          "type": "button",
+          "style": "primary",
+          "color": "#1DB446",
+          "height": "sm",
+          "flex": 1,
+          "action": { "type": "uri", "label": "Email", "uri": "mailto:brown@example.com" }
+        }
+      ]
+    }
+  }
+}

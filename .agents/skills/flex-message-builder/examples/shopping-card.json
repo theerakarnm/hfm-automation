@@ -1,0 +1,102 @@
+{
+  "type": "flex",
+  "altText": "Spring jacket — limited stock",
+  "contents": {
+    "type": "bubble",
+    "hero": {
+      "type": "image",
+      "url": "https://example.com/products/jacket.jpg",
+      "size": "full",
+      "aspectRatio": "1:1",
+      "aspectMode": "cover",
+      "action": { "type": "uri", "label": "View product", "uri": "https://example.com/p/jacket" }
+    },
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "spacing": "md",
+      "contents": [
+        {
+          "type": "box",
+          "layout": "vertical",
+          "contents": [
+            { "type": "text", "text": "Spring Jacket", "weight": "bold", "size": "xl", "wrap": true },
+            { "type": "text", "text": "Brown's Apparel", "size": "xs", "color": "#999999" }
+          ]
+        },
+        {
+          "type": "box",
+          "layout": "baseline",
+          "spacing": "sm",
+          "contents": [
+            { "type": "icon", "url": "https://example.com/icons/star_full.png", "size": "sm" },
+            { "type": "icon", "url": "https://example.com/icons/star_full.png", "size": "sm" },
+            { "type": "icon", "url": "https://example.com/icons/star_full.png", "size": "sm" },
+            { "type": "icon", "url": "https://example.com/icons/star_full.png", "size": "sm" },
+            { "type": "icon", "url": "https://example.com/icons/star_half.png", "size": "sm" },
+            { "type": "text", "text": "4.5 (128)", "size": "xs", "color": "#999999", "margin": "md", "flex": 0 }
+          ]
+        },
+        { "type": "separator" },
+        {
+          "type": "box",
+          "layout": "horizontal",
+          "contents": [
+            {
+              "type": "box",
+              "layout": "baseline",
+              "spacing": "xs",
+              "flex": 0,
+              "contents": [
+                { "type": "text", "text": "$89", "weight": "bold", "size": "xxl", "color": "#1DB446", "flex": 0 },
+                { "type": "text", "text": ".00", "weight": "bold", "size": "lg", "color": "#1DB446", "flex": 0 }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "$129.00",
+              "decoration": "line-through",
+              "color": "#aaaaaa",
+              "size": "sm",
+              "align": "end",
+              "gravity": "center"
+            }
+          ]
+        },
+        {
+          "type": "box",
+          "layout": "baseline",
+          "spacing": "xs",
+          "contents": [
+            { "type": "icon", "url": "https://example.com/icons/fire.png", "size": "xs" },
+            { "type": "text", "text": "Only 3 left in stock", "size": "xs", "color": "#FF4444", "flex": 0 }
+          ]
+        }
+      ]
+    },
+    "footer": {
+      "type": "box",
+      "layout": "vertical",
+      "spacing": "sm",
+      "contents": [
+        {
+          "type": "button",
+          "style": "primary",
+          "color": "#1DB446",
+          "action": {
+            "type": "postback",
+            "label": "Add to cart",
+            "data": "action=cart_add&sku=JKT-001",
+            "displayText": "Add Spring Jacket to cart"
+          }
+        },
+        {
+          "type": "button",
+          "style": "secondary",
+          "height": "sm",
+          "action": { "type": "uri", "label": "View details", "uri": "https://example.com/p/jacket" }
+        }
+      ]
+    }
+  }
+}

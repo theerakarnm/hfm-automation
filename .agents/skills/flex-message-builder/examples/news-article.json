@@ -1,0 +1,65 @@
+{
+  "type": "flex",
+  "altText": "Today's top story",
+  "contents": {
+    "type": "bubble",
+    "size": "giga",
+    "hero": {
+      "type": "image",
+      "url": "https://example.com/news/headline.jpg",
+      "size": "full",
+      "aspectRatio": "20:13",
+      "aspectMode": "cover",
+      "action": { "type": "uri", "label": "Read article", "uri": "https://example.com/news/123" }
+    },
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "contents": [
+        { "type": "text", "text": "TECHNOLOGY", "size": "xs", "color": "#1DB446", "weight": "bold" },
+        { "type": "text", "text": "AI assistants are reshaping how teams collaborate", "weight": "bold", "size": "lg", "wrap": true, "margin": "sm" },
+        {
+          "type": "box",
+          "layout": "baseline",
+          "margin": "md",
+          "spacing": "sm",
+          "contents": [
+            { "type": "icon", "url": "https://example.com/icons/clock.png", "size": "xs" },
+            { "type": "text", "text": "5 min read", "size": "xs", "color": "#aaaaaa", "flex": 0 },
+            { "type": "text", "text": "•", "size": "xs", "color": "#aaaaaa", "flex": 0 },
+            { "type": "text", "text": "Apr 26, 2026", "size": "xs", "color": "#aaaaaa", "flex": 0 }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "A new generation of AI workspace tools is changing how engineering and product teams plan, write, and ship — without replacing the humans in the loop.",
+          "wrap": true,
+          "color": "#555555",
+          "size": "sm",
+          "margin": "lg"
+        }
+      ]
+    },
+    "footer": {
+      "type": "box",
+      "layout": "horizontal",
+      "spacing": "sm",
+      "contents": [
+        {
+          "type": "button",
+          "style": "link",
+          "height": "sm",
+          "flex": 1,
+          "action": { "type": "uri", "label": "Share", "uri": "https://example.com/share?id=123" }
+        },
+        {
+          "type": "button",
+          "style": "primary",
+          "height": "sm",
+          "flex": 2,
+          "action": { "type": "uri", "label": "Read", "uri": "https://example.com/news/123" }
+        }
+      ]
+    }
+  }
+}

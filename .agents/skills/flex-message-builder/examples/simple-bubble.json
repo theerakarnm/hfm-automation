@@ -1,0 +1,45 @@
+{
+  "type": "flex",
+  "altText": "Welcome to our service!",
+  "contents": {
+    "type": "bubble",
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "spacing": "md",
+      "contents": [
+        {
+          "type": "text",
+          "text": "Welcome",
+          "weight": "bold",
+          "size": "xl"
+        },
+        {
+          "type": "text",
+          "text": "Thanks for adding us as a friend. Tap below to get started.",
+          "wrap": true,
+          "color": "#666666",
+          "size": "sm"
+        }
+      ]
+    },
+    "footer": {
+      "type": "box",
+      "layout": "vertical",
+      "spacing": "sm",
+      "contents": [
+        {
+          "type": "button",
+          "style": "primary",
+          "color": "#1DB446",
+          "action": {
+            "type": "postback",
+            "label": "Get started",
+            "data": "action=onboard&step=1",
+            "displayText": "Get started"
+          }
+        }
+      ]
+    }
+  }
+}

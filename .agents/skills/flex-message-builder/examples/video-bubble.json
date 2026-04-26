@@ -1,0 +1,81 @@
+{
+  "type": "flex",
+  "altText": "Watch our product demo",
+  "contents": {
+    "type": "bubble",
+    "size": "mega",
+    "hero": {
+      "type": "video",
+      "url": "https://example.com/media/demo.mp4",
+      "previewUrl": "https://example.com/media/demo-preview.jpg",
+      "altContent": {
+        "type": "image",
+        "url": "https://example.com/media/demo-preview.jpg",
+        "size": "full",
+        "aspectRatio": "20:13",
+        "aspectMode": "cover"
+      },
+      "aspectRatio": "20:13",
+      "action": {
+        "type": "uri",
+        "label": "Watch on web",
+        "uri": "https://example.com/demo"
+      }
+    },
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "spacing": "md",
+      "contents": [
+        { "type": "text", "text": "Product Demo", "weight": "bold", "size": "xl" },
+        {
+          "type": "text",
+          "text": "See how teams ship faster with our new workflow tools. 90 seconds — worth it.",
+          "wrap": true,
+          "color": "#666666",
+          "size": "sm"
+        },
+        {
+          "type": "box",
+          "layout": "baseline",
+          "margin": "md",
+          "spacing": "sm",
+          "contents": [
+            { "type": "icon", "url": "https://example.com/icons/clock.png", "size": "xs" },
+            { "type": "text", "text": "1:30", "size": "xs", "color": "#aaaaaa", "flex": 0 },
+            { "type": "text", "text": "•", "size": "xs", "color": "#aaaaaa", "flex": 0 },
+            { "type": "text", "text": "Released today", "size": "xs", "color": "#aaaaaa", "flex": 0 }
+          ]
+        }
+      ]
+    },
+    "footer": {
+      "type": "box",
+      "layout": "vertical",
+      "spacing": "sm",
+      "contents": [
+        {
+          "type": "button",
+          "style": "primary",
+          "color": "#1DB446",
+          "action": {
+            "type": "uri",
+            "label": "Try it free",
+            "uri": "https://example.com/signup"
+          }
+        },
+        {
+          "type": "button",
+          "style": "link",
+          "height": "sm",
+          "action": {
+            "type": "postback",
+            "label": "Remind me later",
+            "data": "action=remind&topic=demo",
+            "displayText": "Remind me later"
+          }
+        }
+      ]
+    }
+  }
+}

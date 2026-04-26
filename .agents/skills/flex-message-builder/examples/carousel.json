@@ -1,0 +1,105 @@
+{
+  "type": "flex",
+  "altText": "New arrivals",
+  "contents": {
+    "type": "carousel",
+    "contents": [
+      {
+        "type": "bubble",
+        "size": "kilo",
+        "hero": {
+          "type": "image",
+          "url": "https://example.com/products/item1.jpg",
+          "size": "full",
+          "aspectRatio": "1:1",
+          "aspectMode": "cover"
+        },
+        "body": {
+          "type": "box",
+          "layout": "vertical",
+          "spacing": "sm",
+          "contents": [
+            { "type": "text", "text": "Linen Shirt", "weight": "bold", "size": "md" },
+            { "type": "text", "text": "$48.00", "color": "#1DB446", "weight": "bold", "size": "sm" }
+          ]
+        },
+        "footer": {
+          "type": "box",
+          "layout": "vertical",
+          "contents": [
+            {
+              "type": "button",
+              "style": "secondary",
+              "height": "sm",
+              "action": { "type": "uri", "label": "View", "uri": "https://example.com/p/1" }
+            }
+          ]
+        }
+      },
+      {
+        "type": "bubble",
+        "size": "kilo",
+        "hero": {
+          "type": "image",
+          "url": "https://example.com/products/item2.jpg",
+          "size": "full",
+          "aspectRatio": "1:1",
+          "aspectMode": "cover"
+        },
+        "body": {
+          "type": "box",
+          "layout": "vertical",
+          "spacing": "sm",
+          "contents": [
+            { "type": "text", "text": "Canvas Tote", "weight": "bold", "size": "md" },
+            { "type": "text", "text": "$32.00", "color": "#1DB446", "weight": "bold", "size": "sm" }
+          ]
+        },
+        "footer": {
+          "type": "box",
+          "layout": "vertical",
+          "contents": [
+            {
+              "type": "button",
+              "style": "secondary",
+              "height": "sm",
+              "action": { "type": "uri", "label": "View", "uri": "https://example.com/p/2" }
+            }
+          ]
+        }
+      },
+      {
+        "type": "bubble",
+        "size": "kilo",
+        "hero": {
+          "type": "image",
+          "url": "https://example.com/products/item3.jpg",
+          "size": "full",
+          "aspectRatio": "1:1",
+          "aspectMode": "cover"
+        },
+        "body": {
+          "type": "box",
+          "layout": "vertical",
+          "spacing": "sm",
+          "contents": [
+            { "type": "text", "text": "Leather Wallet", "weight": "bold", "size": "md" },
+            { "type": "text", "text": "$78.00", "color": "#1DB446", "weight": "bold", "size": "sm" }
+          ]
+        },
+        "footer": {
+          "type": "box",
+          "layout": "vertical",
+          "contents": [
+            {
+              "type": "button",
+              "style": "secondary",
+              "height": "sm",
+              "action": { "type": "uri", "label": "View", "uri": "https://example.com/p/3" }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

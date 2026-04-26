@@ -8,6 +8,7 @@ export interface HFMPerformanceData {
   deposits: number;
   account_currency: string;
   equity: number;
+  archived: boolean;
 }
 
 export interface HFMClientsPerformanceResponse {

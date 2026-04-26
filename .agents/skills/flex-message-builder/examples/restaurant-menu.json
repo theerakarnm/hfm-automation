@@ -1,0 +1,82 @@
+{
+  "type": "flex",
+  "altText": "Brown's Cafe — book a table",
+  "contents": {
+    "type": "bubble",
+    "hero": {
+      "type": "image",
+      "url": "https://example.com/cafe-hero.jpg",
+      "size": "full",
+      "aspectRatio": "20:13",
+      "aspectMode": "cover",
+      "action": { "type": "uri", "label": "Open website", "uri": "https://example.com/cafe" }
+    },
+    "body": {
+      "type": "box",
+      "layout": "vertical",
+      "contents": [
+        { "type": "text", "text": "Brown's Cafe", "weight": "bold", "size": "xl" },
+        {
+          "type": "box",
+          "layout": "baseline",
+          "margin": "md",
+          "contents": [
+            { "type": "icon", "url": "https://example.com/icons/star_full.png", "size": "sm" },
+            { "type": "icon", "url": "https://example.com/icons/star_full.png", "size": "sm" },
+            { "type": "icon", "url": "https://example.com/icons/star_full.png", "size": "sm" },
+            { "type": "icon", "url": "https://example.com/icons/star_full.png", "size": "sm" },
+            { "type": "icon", "url": "https://example.com/icons/star_empty.png", "size": "sm" },
+            { "type": "text", "text": "4.0", "size": "sm", "color": "#999999", "margin": "md", "flex": 0 }
+          ]
+        },
+        {
+          "type": "box",
+          "layout": "vertical",
+          "margin": "lg",
+          "spacing": "sm",
+          "contents": [
+            {
+              "type": "box",
+              "layout": "baseline",
+              "spacing": "sm",
+              "contents": [
+                { "type": "text", "text": "Place", "color": "#aaaaaa", "size": "sm", "flex": 1 },
+                { "type": "text", "text": "Miraina Tower, 4-1-6 Shinjuku, Tokyo", "wrap": true, "color": "#666666", "size": "sm", "flex": 5 }
+              ]
+            },
+            {
+              "type": "box",
+              "layout": "baseline",
+              "spacing": "sm",
+              "contents": [
+                { "type": "text", "text": "Time", "color": "#aaaaaa", "size": "sm", "flex": 1 },
+                { "type": "text", "text": "10:00 - 23:00", "wrap": true, "color": "#666666", "size": "sm", "flex": 5 }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "footer": {
+      "type": "box",
+      "layout": "vertical",
+      "spacing": "sm",
+      "flex": 0,
+      "contents": [
+        {
+          "type": "button",
+          "style": "link",
+          "height": "sm",
+          "action": { "type": "uri", "label": "CALL", "uri": "tel:000000000" }
+        },
+        {
+          "type": "button",
+          "style": "link",
+          "height": "sm",
+          "action": { "type": "uri", "label": "WEBSITE", "uri": "https://example.com/cafe" }
+        },
+        { "type": "box", "layout": "vertical", "contents": [], "margin": "sm" }
+      ]
+    }
+  }
+}

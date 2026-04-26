@@ -130,7 +130,7 @@ describe("buildTradingCard", () => {
     expect(texts.some((t) => t === "THB")).toBe(true);
   });
 
-  test("USC currency divides by 100 and shows USD label", () => {
+  test("USC currency shows raw value with USC label", () => {
     const uscData: HFMPerformanceData = {
       ...mockData,
       deposits: 1245080,
@@ -139,9 +139,9 @@ describe("buildTradingCard", () => {
     };
     const card = buildTradingCard(uscData, WALLET_ID, matchAllConditions);
     const texts = extractTexts(card);
-    expect(texts.some((t) => t === "$12,450.80")).toBe(true);
-    expect(texts.some((t) => t === "$12,998.35")).toBe(true);
-    expect(texts.some((t) => t === "USD")).toBe(true);
+    expect(texts.some((t) => t === "1,245,080.00 USC")).toBe(true);
+    expect(texts.some((t) => t === "1,299,835.00 USC")).toBe(true);
+    expect(texts.some((t) => t === "USC")).toBe(true);
   });
 
   test("unknown currency falls back to USD", () => {

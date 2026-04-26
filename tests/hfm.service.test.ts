@@ -66,14 +66,16 @@ describe("fetchPerformance", () => {
     globalThis.fetch = ORIGINAL_FETCH;
   });
 
-  test("successful response returns ok true with data", async () => {
+  test("successful response returns ok true with data array", async () => {
     globalThis.fetch = mockFetch(200, mockHfmResponse);
     const result = await fetchPerformance("WL-98241376");
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data.client_id).toBe(45219);
-      expect(result.data.account_id).toBe(78451293);
-      expect(result.data.trades).toBe(24);
+      expect(Array.isArray(result.data)).toBe(true);
+      expect(result.data.length).toBe(1);
+      expect(result.data[0]!.client_id).toBe(45219);
+      expect(result.data[0]!.account_id).toBe(78451293);
+      expect(result.data[0]!.trades).toBe(24);
     }
   });
 
@@ -118,6 +120,25 @@ describe("fetchPerformance", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("server_error");
+    }
+  });
+
+  test("multiple non-archived clients returned as array", async () => {
+    const multiResponse: HFMClientsPerformanceResponse = {
+      clients: [
+        { ...mockHfmResponse.clients[0]!, client_id: 1, account_id: 100 },
+        { ...mockHfmResponse.clients[0]!, client_id: 2, account_id: 200 },
+        { ...mockHfmResponse.clients[0]!, client_id: 3, account_id: 300, archived: true },
+      ],
+      totals: mockHfmResponse.totals,
+    };
+    globalThis.fetch = mockFetch(200, multiResponse);
+    const result = await fetchPerformance("WL-98241376");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.length).toBe(2);
+      expect(result.data[0]!.client_id).toBe(1);
+      expect(result.data[1]!.client_id).toBe(2);
     }
   });
 });

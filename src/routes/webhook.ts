@@ -55,9 +55,19 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
   const result = await fetchPerformance(walletId);
 
   if (result.ok) {
-    const conditions = checkConditions(result.data, walletId);
-    const bubble = buildTradingCard(result.data, walletId, conditions);
-    await pushFlex(userId, `Trading Summary — ${walletId}`, bubble);
+    const bubbles = result.data.map((clientData) => {
+      const conditions = checkConditions(clientData, walletId);
+      return buildTradingCard(clientData, walletId, conditions);
+    });
+
+    if (bubbles.length === 1) {
+      await pushFlex(userId, `Trading Summary — ${walletId}`, bubbles[0]!);
+    } else {
+      await pushFlex(userId, `Trading Summary — ${walletId}`, {
+        type: "carousel",
+        contents: bubbles,
+      });
+    }
     return;
   }
 

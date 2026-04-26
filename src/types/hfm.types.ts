@@ -33,5 +33,5 @@ export interface HFMClientsPerformanceResponse {
 }
 
 export type HFMApiResult =
-  | { ok: true; data: HFMPerformanceData }
+  | { ok: true; data: HFMPerformanceData[] }
   | { ok: false; reason: "not_found" | "server_error" | "timeout" };

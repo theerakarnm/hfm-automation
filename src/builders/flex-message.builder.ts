@@ -3,10 +3,7 @@ import type { ConditionCheck } from "../types/hfm.types";
 
 const fmtCurrency = (n: number, currency: string): string => {
   if (currency === "USC") {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(n / 100);
+    return `${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USC`;
   }
   const displayCurrency = ["USD", "THB"].includes(currency) ? currency : "USD";
   return new Intl.NumberFormat("en-US", {
@@ -29,8 +26,7 @@ const fmtDate = (iso: string): string => {
   return `${day} ${month} ${year}`;
 };
 
-const displayCurrencyLabel = (raw: string): string =>
-  raw === "USC" ? "USD" : raw;
+const displayCurrencyLabel = (raw: string): string => raw;
 
 const colors = {
   green: "#1DB954",
@@ -125,8 +121,6 @@ const valueText = (
   color: options.color ?? colors.text,
   align: options.align,
   wrap: true,
-  maxLines: 2,
-  adjustMode: "shrink-to-fit",
 });
 
 const infoCard = (label: string, value: string): object => ({

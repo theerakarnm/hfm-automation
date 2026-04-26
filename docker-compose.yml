@@ -1,0 +1,10 @@
+services:
+  bot:
+    build: .
+    container_name: hfm-line-bot
+    restart: always
+    env_file: .env
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - PORT=3000

@@ -1,0 +1,283 @@
+{
+  "type": "bubble",
+  "size": "kilo",
+  "styles": {
+    "header": {
+      "backgroundColor": "#1DB954"
+    },
+    "footer": {
+      "backgroundColor": "#F5F5F5"
+    }
+  },
+  "header": {
+    "type": "box",
+    "layout": "vertical",
+    "contents": [
+      {
+        "type": "text",
+        "text": "📊 Trading Account Summary",
+        "color": "#FFFFFF",
+        "weight": "bold",
+        "size": "md"
+      },
+      {
+        "type": "text",
+        "text": "Forex Customer Support",
+        "color": "#E8F5E9",
+        "size": "sm"
+      }
+    ]
+  },
+  "body": {
+    "type": "box",
+    "layout": "vertical",
+    "spacing": "md",
+    "paddingAll": "16px",
+    "contents": [
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "vertical",
+            "flex": 1,
+            "contents": [
+              {
+                "type": "text",
+                "text": "🪪 Wallet ID",
+                "size": "xs",
+                "color": "#9E9E9E"
+              },
+              {
+                "type": "text",
+                "text": "WL-98241376",
+                "size": "sm",
+                "weight": "bold",
+                "color": "#1A1A1A"
+              }
+            ]
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "flex": 1,
+            "contents": [
+              {
+                "type": "text",
+                "text": "📋 Account ID",
+                "size": "xs",
+                "color": "#9E9E9E"
+              },
+              {
+                "type": "text",
+                "text": "78451293",
+                "size": "sm",
+                "weight": "bold",
+                "color": "#1A1A1A"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "contents": [
+          {
+            "type": "text",
+            "text": "🛡️ Registration",
+            "size": "sm",
+            "color": "#9E9E9E",
+            "flex": 3
+          },
+          {
+            "type": "text",
+            "text": "✓ Active",
+            "size": "sm",
+            "color": "#1DB954",
+            "weight": "bold",
+            "align": "end",
+            "flex": 2
+          }
+        ]
+      },
+      {
+        "type": "separator"
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "vertical",
+            "flex": 1,
+            "backgroundColor": "#E8F5E9",
+            "cornerRadius": "8px",
+            "paddingAll": "10px",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Trades",
+                "size": "xs",
+                "color": "#9E9E9E",
+                "align": "center"
+              },
+              {
+                "type": "text",
+                "text": "24",
+                "size": "md",
+                "weight": "bold",
+                "color": "#1A1A1A",
+                "align": "center"
+              }
+            ]
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "flex": 1,
+            "backgroundColor": "#E8F5E9",
+            "cornerRadius": "8px",
+            "paddingAll": "10px",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Volume",
+                "size": "xs",
+                "color": "#9E9E9E",
+                "align": "center"
+              },
+              {
+                "type": "text",
+                "text": "3.42 lots",
+                "size": "md",
+                "weight": "bold",
+                "color": "#1A1A1A",
+                "align": "center"
+              }
+            ]
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "flex": 1,
+            "backgroundColor": "#E8F5E9",
+            "cornerRadius": "8px",
+            "paddingAll": "10px",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Type",
+                "size": "xs",
+                "color": "#9E9E9E",
+                "align": "center"
+              },
+              {
+                "type": "text",
+                "text": "Standard",
+                "size": "md",
+                "weight": "bold",
+                "color": "#1A1A1A",
+                "align": "center"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "vertical",
+            "flex": 1,
+            "backgroundColor": "#E8F5E9",
+            "cornerRadius": "8px",
+            "paddingAll": "10px",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Balance",
+                "size": "xs",
+                "color": "#9E9E9E"
+              },
+              {
+                "type": "text",
+                "text": "$12,450.80",
+                "size": "md",
+                "weight": "bold",
+                "color": "#1A1A1A"
+              }
+            ]
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "flex": 1,
+            "backgroundColor": "#E8F5E9",
+            "cornerRadius": "8px",
+            "paddingAll": "10px",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Equity",
+                "size": "xs",
+                "color": "#9E9E9E"
+              },
+              {
+                "type": "text",
+                "text": "$12,998.35",
+                "size": "md",
+                "weight": "bold",
+                "color": "#1A1A1A"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "contents": [
+          {
+            "type": "text",
+            "text": "💵 Acc. Currency",
+            "size": "sm",
+            "color": "#9E9E9E",
+            "flex": 3
+          },
+          {
+            "type": "text",
+            "text": "USD",
+            "size": "sm",
+            "weight": "bold",
+            "color": "#1A1A1A",
+            "align": "end",
+            "flex": 2
+          }
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "type": "box",
+    "layout": "vertical",
+    "paddingAll": "12px",
+    "contents": [
+      {
+        "type": "text",
+        "text": "🎧 For assistance, please contact support.",
+        "size": "xs",
+        "color": "#9E9E9E",
+        "align": "center",
+        "wrap": true
+      }
+    ]
+  }
+}

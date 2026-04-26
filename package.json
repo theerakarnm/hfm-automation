@@ -16,6 +16,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "dayjs": "^1.11.20",
     "hono": "^4.12.15"
   }
 }

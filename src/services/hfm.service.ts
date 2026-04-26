@@ -1,3 +1,4 @@
+import { logError } from "../utils/logger";
 import type {
   ConditionCheck,
   HFMApiResult,
@@ -46,10 +47,22 @@ export async function fetchPerformance(
       headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
     });
 
-    if (res.status === 404) return { ok: false, reason: "not_found" };
-    if (res.status >= 500) return { ok: false, reason: "server_error" };
-    if (res.status === 401) return { ok: false, reason: "server_error" };
-    if (res.status !== 200) return { ok: false, reason: "server_error" };
+    if (res.status === 404) {
+      logError("hfm-service", `Wallet not found: ${walletNum} (status 404)`);
+      return { ok: false, reason: "not_found" };
+    }
+    if (res.status >= 500) {
+      logError("hfm-service", `HFM server error (status ${res.status})`);
+      return { ok: false, reason: "server_error" };
+    }
+    if (res.status === 401) {
+      logError("hfm-service", `HFM auth failed (status 401)`);
+      return { ok: false, reason: "server_error" };
+    }
+    if (res.status !== 200) {
+      logError("hfm-service", `HFM unexpected status ${res.status}`);
+      return { ok: false, reason: "server_error" };
+    }
 
     const body = (await res.json()) as HFMClientsPerformanceResponse;
     const clients = body?.clients;
@@ -65,8 +78,10 @@ export async function fetchPerformance(
     return { ok: true, data };
   } catch (e: unknown) {
     if (e instanceof Error && e.name === "AbortError") {
+      logError("hfm-service", `Request timeout for wallet ${walletNum}`);
       return { ok: false, reason: "timeout" };
     }
+    logError("hfm-service", e);
     return { ok: false, reason: "server_error" };
   } finally {
     clearTimeout(timer);

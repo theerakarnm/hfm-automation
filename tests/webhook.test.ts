@@ -117,6 +117,61 @@ describe("webhook", () => {
     expect(pushCalled).toBe(false);
   });
 
+  test("non-whitelisted user receives rejection message", async () => {
+    process.env.LINE_WHITELIST_UIDS = "Uallowed1,Uallowed2";
+    const { app } = await importWebhook();
+    const body = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "message",
+          message: { type: "text", id: "123", text: "WL-98241376" },
+          source: { type: "user", userId: "Ustranger" },
+          replyToken: "token123",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ],
+    });
+    const sig = computeSig(body, SECRET);
+
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      fetchCalls.push({
+        url,
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const res = app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-line-signature": sig,
+        },
+        body,
+      })
+    );
+    const response = await res;
+    expect(response.status).toBe(200);
+
+    await waitFor(() => fetchCalls.length >= 1);
+    expect(fetchCalls.length).toBe(1);
+    expect(fetchCalls[0]?.url).toBe("https://api.line.me/v2/bot/message/push");
+    const pushBody = JSON.parse(fetchCalls[0]?.body ?? "{}");
+    expect(pushBody.to).toBe("Ustranger");
+    expect(pushBody.messages[0].type).toBe("text");
+    expect(pushBody.messages[0].text).toContain("\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C");
+
+    delete process.env.LINE_WHITELIST_UIDS;
+  });
+
   test("valid text message event shows loading before fetching HFM", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({

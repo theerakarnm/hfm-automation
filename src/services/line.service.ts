@@ -1,3 +1,5 @@
+import { logError } from "../utils/logger";
+
 const LINE_PUSH_API = "https://api.line.me/v2/bot/message/push";
 const LINE_LOADING_API = "https://api.line.me/v2/bot/chat/loading/start";
 
@@ -14,8 +16,10 @@ async function pushMessage(
     body: JSON.stringify({ to: userId, messages: [message] }),
   });
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`LINE push failed ${res.status}: ${err}`);
+    const errText = await res.text();
+    const err = new Error(`LINE push failed ${res.status}: ${errText}`);
+    logError("line-service", err);
+    throw err;
   }
 }
 
@@ -33,8 +37,10 @@ export async function showLoading(
   });
 
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`LINE loading indicator failed ${res.status}: ${err}`);
+    const errText = await res.text();
+    const err = new Error(`LINE loading indicator failed ${res.status}: ${errText}`);
+    logError("line-service", err);
+    throw err;
   }
 }
 

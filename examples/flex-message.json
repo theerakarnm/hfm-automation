@@ -1,6 +1,6 @@
 {
   "type": "bubble",
-  "size": "kilo",
+  "size": "mega",
   "styles": {
     "header": {
       "backgroundColor": "#1DB954"
@@ -12,27 +12,34 @@
   "header": {
     "type": "box",
     "layout": "vertical",
+    "paddingAll": "16px",
+    "spacing": "xs",
     "contents": [
       {
         "type": "text",
-        "text": "📊 Trading Account Summary",
+        "text": "Trading Account Summary",
         "color": "#FFFFFF",
         "weight": "bold",
-        "size": "md"
+        "size": "md",
+        "wrap": true,
+        "maxLines": 2,
+        "adjustMode": "shrink-to-fit"
       },
       {
         "type": "text",
         "text": "Forex Customer Support",
         "color": "#E8F5E9",
-        "size": "sm"
+        "size": "xs",
+        "wrap": true,
+        "maxLines": 1
       }
     ]
   },
   "body": {
     "type": "box",
     "layout": "vertical",
-    "spacing": "md",
-    "paddingAll": "16px",
+    "spacing": "sm",
+    "paddingAll": "14px",
     "contents": [
       {
         "type": "box",
@@ -43,19 +50,30 @@
             "type": "box",
             "layout": "vertical",
             "flex": 1,
+            "backgroundColor": "#F4FBF7",
+            "borderColor": "#DDE7DF",
+            "borderWidth": "light",
+            "cornerRadius": "8px",
+            "paddingAll": "10px",
+            "spacing": "xs",
             "contents": [
               {
                 "type": "text",
-                "text": "🪪 Wallet ID",
+                "text": "Wallet ID",
                 "size": "xs",
-                "color": "#9E9E9E"
+                "color": "#9E9E9E",
+                "wrap": true,
+                "maxLines": 1
               },
               {
                 "type": "text",
                 "text": "WL-98241376",
                 "size": "sm",
                 "weight": "bold",
-                "color": "#1A1A1A"
+                "color": "#1A1A1A",
+                "wrap": true,
+                "maxLines": 2,
+                "adjustMode": "shrink-to-fit"
               }
             ]
           },
@@ -63,19 +81,30 @@
             "type": "box",
             "layout": "vertical",
             "flex": 1,
+            "backgroundColor": "#F4FBF7",
+            "borderColor": "#DDE7DF",
+            "borderWidth": "light",
+            "cornerRadius": "8px",
+            "paddingAll": "10px",
+            "spacing": "xs",
             "contents": [
               {
                 "type": "text",
-                "text": "📋 Account ID",
+                "text": "Account ID",
                 "size": "xs",
-                "color": "#9E9E9E"
+                "color": "#9E9E9E",
+                "wrap": true,
+                "maxLines": 1
               },
               {
                 "type": "text",
                 "text": "78451293",
                 "size": "sm",
                 "weight": "bold",
-                "color": "#1A1A1A"
+                "color": "#1A1A1A",
+                "wrap": true,
+                "maxLines": 2,
+                "adjustMode": "shrink-to-fit"
               }
             ]
           }
@@ -83,28 +112,37 @@
       },
       {
         "type": "box",
-        "layout": "horizontal",
+        "layout": "vertical",
+        "backgroundColor": "#EAF7EF",
+        "borderColor": "#DDE7DF",
+        "borderWidth": "light",
+        "cornerRadius": "8px",
+        "paddingAll": "10px",
+        "spacing": "xs",
         "contents": [
           {
             "type": "text",
-            "text": "🛡️ Registration",
-            "size": "sm",
+            "text": "Registration",
+            "size": "xs",
             "color": "#9E9E9E",
-            "flex": 3
+            "wrap": true,
+            "maxLines": 1
           },
           {
             "type": "text",
-            "text": "✓ Active",
+            "text": "\u2713 Active",
             "size": "sm",
-            "color": "#1DB954",
             "weight": "bold",
-            "align": "end",
-            "flex": 2
+            "color": "#1DB954",
+            "wrap": true,
+            "maxLines": 2,
+            "adjustMode": "shrink-to-fit"
           }
         ]
       },
       {
-        "type": "separator"
+        "type": "separator",
+        "color": "#DDE7DF"
       },
       {
         "type": "box",
@@ -115,16 +153,18 @@
             "type": "box",
             "layout": "vertical",
             "flex": 1,
-            "backgroundColor": "#E8F5E9",
+            "backgroundColor": "#EAF7EF",
             "cornerRadius": "8px",
             "paddingAll": "10px",
+            "spacing": "xs",
             "contents": [
               {
                 "type": "text",
                 "text": "Trades",
                 "size": "xs",
                 "color": "#9E9E9E",
-                "align": "center"
+                "wrap": true,
+                "maxLines": 1
               },
               {
                 "type": "text",
@@ -132,7 +172,9 @@
                 "size": "md",
                 "weight": "bold",
                 "color": "#1A1A1A",
-                "align": "center"
+                "wrap": true,
+                "maxLines": 2,
+                "adjustMode": "shrink-to-fit"
               }
             ]
           },
@@ -140,16 +182,18 @@
             "type": "box",
             "layout": "vertical",
             "flex": 1,
-            "backgroundColor": "#E8F5E9",
+            "backgroundColor": "#EAF7EF",
             "cornerRadius": "8px",
             "paddingAll": "10px",
+            "spacing": "xs",
             "contents": [
               {
                 "type": "text",
                 "text": "Volume",
                 "size": "xs",
                 "color": "#9E9E9E",
-                "align": "center"
+                "wrap": true,
+                "maxLines": 1
               },
               {
                 "type": "text",
@@ -157,32 +201,9 @@
                 "size": "md",
                 "weight": "bold",
                 "color": "#1A1A1A",
-                "align": "center"
-              }
-            ]
-          },
-          {
-            "type": "box",
-            "layout": "vertical",
-            "flex": 1,
-            "backgroundColor": "#E8F5E9",
-            "cornerRadius": "8px",
-            "paddingAll": "10px",
-            "contents": [
-              {
-                "type": "text",
-                "text": "Type",
-                "size": "xs",
-                "color": "#9E9E9E",
-                "align": "center"
-              },
-              {
-                "type": "text",
-                "text": "Standard",
-                "size": "md",
-                "weight": "bold",
-                "color": "#1A1A1A",
-                "align": "center"
+                "wrap": true,
+                "maxLines": 2,
+                "adjustMode": "shrink-to-fit"
               }
             ]
           }
@@ -197,22 +218,28 @@
             "type": "box",
             "layout": "vertical",
             "flex": 1,
-            "backgroundColor": "#E8F5E9",
+            "backgroundColor": "#EAF7EF",
             "cornerRadius": "8px",
             "paddingAll": "10px",
+            "spacing": "xs",
             "contents": [
               {
                 "type": "text",
                 "text": "Balance",
                 "size": "xs",
-                "color": "#9E9E9E"
+                "color": "#9E9E9E",
+                "wrap": true,
+                "maxLines": 1
               },
               {
                 "type": "text",
                 "text": "$12,450.80",
                 "size": "md",
                 "weight": "bold",
-                "color": "#1A1A1A"
+                "color": "#1A1A1A",
+                "wrap": true,
+                "maxLines": 2,
+                "adjustMode": "shrink-to-fit"
               }
             ]
           },
@@ -220,22 +247,28 @@
             "type": "box",
             "layout": "vertical",
             "flex": 1,
-            "backgroundColor": "#E8F5E9",
+            "backgroundColor": "#EAF7EF",
             "cornerRadius": "8px",
             "paddingAll": "10px",
+            "spacing": "xs",
             "contents": [
               {
                 "type": "text",
                 "text": "Equity",
                 "size": "xs",
-                "color": "#9E9E9E"
+                "color": "#9E9E9E",
+                "wrap": true,
+                "maxLines": 1
               },
               {
                 "type": "text",
                 "text": "$12,998.35",
                 "size": "md",
                 "weight": "bold",
-                "color": "#1A1A1A"
+                "color": "#1A1A1A",
+                "wrap": true,
+                "maxLines": 2,
+                "adjustMode": "shrink-to-fit"
               }
             ]
           }
@@ -243,14 +276,47 @@
       },
       {
         "type": "box",
-        "layout": "horizontal",
+        "layout": "vertical",
+        "backgroundColor": "#F4FBF7",
+        "borderColor": "#DDE7DF",
+        "borderWidth": "light",
+        "cornerRadius": "8px",
+        "paddingAll": "10px",
+        "spacing": "xs",
         "contents": [
           {
             "type": "text",
-            "text": "💵 Acc. Currency",
-            "size": "sm",
+            "text": "Account Type",
+            "size": "xs",
             "color": "#9E9E9E",
-            "flex": 3
+            "wrap": true,
+            "maxLines": 1
+          },
+          {
+            "type": "text",
+            "text": "Standard",
+            "size": "sm",
+            "weight": "bold",
+            "color": "#1A1A1A",
+            "wrap": true,
+            "maxLines": 2,
+            "adjustMode": "shrink-to-fit"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "contents": [
+          {
+            "type": "text",
+            "text": "Account Currency",
+            "size": "xs",
+            "color": "#9E9E9E",
+            "wrap": true,
+            "maxLines": 1,
+            "flex": 4
           },
           {
             "type": "text",
@@ -259,7 +325,10 @@
             "weight": "bold",
             "color": "#1A1A1A",
             "align": "end",
-            "flex": 2
+            "wrap": true,
+            "maxLines": 2,
+            "adjustMode": "shrink-to-fit",
+            "flex": 3
           }
         ]
       }
@@ -272,7 +341,7 @@
     "contents": [
       {
         "type": "text",
-        "text": "🎧 For assistance, please contact support.",
+        "text": "For assistance, please contact support.",
         "size": "xs",
         "color": "#9E9E9E",
         "align": "center",

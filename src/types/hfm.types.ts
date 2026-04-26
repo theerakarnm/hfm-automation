@@ -9,6 +9,15 @@ export interface HFMPerformanceData {
   account_currency: string;
   equity: number;
   archived: boolean;
+  subaffiliate: number;
+  account_regdate: string;
+  status: string;
+}
+
+export interface ConditionCheck {
+  underTargetWallet: boolean;
+  depositThresholdMet: boolean;
+  matchAll: boolean;
 }
 
 export interface HFMClientsPerformanceResponse {

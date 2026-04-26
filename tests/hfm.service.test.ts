@@ -1,5 +1,5 @@
 import { test, expect, describe, afterEach } from "bun:test";
-import { fetchPerformance, extractWalletNumber } from "../src/services/hfm.service";
+import { fetchPerformance, extractWalletNumber, checkConditions } from "../src/services/hfm.service";
 import type { HFMClientsPerformanceResponse } from "../src/types/hfm.types";
 
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -16,6 +16,10 @@ const mockHfmResponse: HFMClientsPerformanceResponse = {
       deposits: 12450.8,
       account_currency: "USD",
       equity: 12998.35,
+      archived: false,
+      subaffiliate: 0,
+      account_regdate: "2024-01-15T00:00:00Z",
+      status: "approved",
     },
   ],
   totals: {
@@ -115,5 +119,56 @@ describe("fetchPerformance", () => {
     if (!result.ok) {
       expect(result.reason).toBe("server_error");
     }
+  });
+});
+
+describe("checkConditions", () => {
+  const baseData = mockHfmResponse.clients[0]!;
+
+  afterEach(() => {
+    delete process.env.TARGET_WALLET;
+  });
+
+  test("match all when wallet matches target and deposits >= 200 USD", () => {
+    process.env.TARGET_WALLET = "98241376";
+    const result = checkConditions(baseData, "WL-98241376");
+    expect(result.underTargetWallet).toBe(true);
+    expect(result.depositThresholdMet).toBe(true);
+    expect(result.matchAll).toBe(true);
+  });
+
+  test("not match when wallet does not match target", () => {
+    process.env.TARGET_WALLET = "30506525";
+    const result = checkConditions(baseData, "WL-98241376");
+    expect(result.underTargetWallet).toBe(false);
+    expect(result.matchAll).toBe(false);
+  });
+
+  test("not match when deposits below 200 USD", () => {
+    process.env.TARGET_WALLET = "98241376";
+    const lowDeposit = { ...baseData, deposits: 150 };
+    const result = checkConditions(lowDeposit, "WL-98241376");
+    expect(result.depositThresholdMet).toBe(false);
+    expect(result.matchAll).toBe(false);
+  });
+
+  test("USC deposits normalized by dividing by 100", () => {
+    process.env.TARGET_WALLET = "98241376";
+    const uscData = { ...baseData, deposits: 200_00, account_currency: "USC" };
+    const result = checkConditions(uscData, "WL-98241376");
+    expect(result.depositThresholdMet).toBe(true);
+  });
+
+  test("USC deposits below threshold after normalization", () => {
+    process.env.TARGET_WALLET = "98241376";
+    const uscData = { ...baseData, deposits: 199_99, account_currency: "USC" };
+    const result = checkConditions(uscData, "WL-98241376");
+    expect(result.depositThresholdMet).toBe(false);
+  });
+
+  test("not match when TARGET_WALLET is not set", () => {
+    const result = checkConditions(baseData, "WL-98241376");
+    expect(result.underTargetWallet).toBe(false);
+    expect(result.matchAll).toBe(false);
   });
 });

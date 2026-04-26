@@ -1,4 +1,5 @@
 import type {
+  ConditionCheck,
   HFMApiResult,
   HFMClientsPerformanceResponse,
   HFMPerformanceData,
@@ -8,6 +9,23 @@ export function extractWalletNumber(walletId: string): number | null {
   const numericPart = walletId.replace(/^WL-/i, "");
   const num = Number(numericPart);
   return Number.isNaN(num) ? null : num;
+}
+
+export function checkConditions(
+  data: HFMPerformanceData,
+  walletId: string
+): ConditionCheck {
+  const targetWallet = Number(process.env.TARGET_WALLET);
+  const walletNum = extractWalletNumber(walletId);
+  const underTargetWallet =
+    !Number.isNaN(targetWallet) && walletNum === targetWallet;
+
+  const depositThreshold = data.account_currency === "USC" ? 200_00 : 200;
+  const depositThresholdMet = data.deposits >= depositThreshold;
+
+  const matchAll = underTargetWallet && depositThresholdMet;
+
+  return { underTargetWallet, depositThresholdMet, matchAll };
 }
 
 export async function fetchPerformance(

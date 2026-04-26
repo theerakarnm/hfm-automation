@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { verifyLineSignature } from "../utils/signature";
-import { fetchPerformance } from "../services/hfm.service";
+import { fetchPerformance, checkConditions } from "../services/hfm.service";
 import { pushText, pushFlex } from "../services/line.service";
 import { buildTradingCard } from "../builders/flex-message.builder";
 import { isTextMessageEvent } from "../types/line.types";
@@ -41,7 +41,8 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
   const result = await fetchPerformance(walletId);
 
   if (result.ok) {
-    const bubble = buildTradingCard(result.data, walletId);
+    const conditions = checkConditions(result.data, walletId);
+    const bubble = buildTradingCard(result.data, walletId, conditions);
     await pushFlex(userId, `Trading Summary — ${walletId}`, bubble);
     return;
   }

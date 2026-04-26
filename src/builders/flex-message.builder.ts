@@ -1,4 +1,5 @@
 import type { HFMPerformanceData } from "../types/hfm.types";
+import type { ConditionCheck } from "../types/hfm.types";
 
 const fmtCurrency = (n: number, currency: string): string => {
   if (currency === "USC") {
@@ -16,197 +17,254 @@ const fmtCurrency = (n: number, currency: string): string => {
 
 const fmtVolume = (n: number): string => `${n.toFixed(2)} lots`;
 
+const fmtDate = (iso: string): string => {
+  const d = new Date(iso);
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const months = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  const month = months[d.getUTCMonth()] ?? "";
+  const year = d.getUTCFullYear();
+  return `${day} ${month} ${year}`;
+};
+
 const displayCurrencyLabel = (raw: string): string =>
   raw === "USC" ? "USD" : raw;
 
+const colors = {
+  green: "#1DB954",
+  greenSoft: "#EAF7EF",
+  greenPale: "#F4FBF7",
+  text: "#1A1A1A",
+  muted: "#9E9E9E",
+  border: "#DDE7DF",
+  footer: "#F5F5F5",
+  white: "#FFFFFF",
+};
+
+const getStatusMeta = (
+  status: string
+): { label: string; color: string; backgroundColor: string } => {
+  const trimmed = status.trim();
+  const normalized = trimmed.toLowerCase();
+  const isActive = /^active(?:$|[\s_-])/.test(normalized);
+
+  if (isActive) {
+    const label = normalized === "active" ? "Active" : trimmed;
+    return {
+      label: `\u2713 ${label}`,
+      color: colors.green,
+      backgroundColor: colors.greenSoft,
+    };
+  }
+
+  return {
+    label: trimmed || "Unknown",
+    color: colors.muted,
+    backgroundColor: "#F3F4F6",
+  };
+};
+
+const getAccountStatusMeta = (
+  status: string
+): { label: string; color: string; backgroundColor: string } => {
+  const trimmed = status.trim();
+  const normalized = trimmed.toLowerCase();
+  const isApproved = normalized === "approved";
+
+  if (isApproved) {
+    return {
+      label: `\u2713 Approved`,
+      color: colors.green,
+      backgroundColor: colors.greenSoft,
+    };
+  }
+
+  return {
+    label: trimmed || "Unknown",
+    color: colors.muted,
+    backgroundColor: "#F3F4F6",
+  };
+};
+
+const getMatchAllMeta = (
+  matchAll: boolean
+): { label: string; color: string; backgroundColor: string } => {
+  if (matchAll) {
+    return {
+      label: "\u2713 Match All",
+      color: colors.green,
+      backgroundColor: colors.greenSoft,
+    };
+  }
+  return {
+    label: "\u2717 Not Match",
+    color: "#DC2626",
+    backgroundColor: "#FEF2F2",
+  };
+};
+
+const labelText = (text: string): object => ({
+  type: "text",
+  text,
+  size: "xs",
+  color: colors.muted,
+  wrap: true,
+  maxLines: 1,
+});
+
+const valueText = (
+  text: string,
+  options: { align?: "start" | "end" | "center"; color?: string; size?: string } = {}
+): object => ({
+  type: "text",
+  text,
+  size: options.size ?? "sm",
+  weight: "bold",
+  color: options.color ?? colors.text,
+  align: options.align,
+  wrap: true,
+  maxLines: 2,
+  adjustMode: "shrink-to-fit",
+});
+
+const infoCard = (label: string, value: string): object => ({
+  type: "box",
+  layout: "vertical",
+  flex: 1,
+  backgroundColor: colors.greenPale,
+  borderColor: colors.border,
+  borderWidth: "light",
+  cornerRadius: "8px",
+  paddingAll: "10px",
+  spacing: "xs",
+  contents: [labelText(label), valueText(value)],
+});
+
+const metricCard = (label: string, value: string): object => ({
+  type: "box",
+  layout: "vertical",
+  flex: 1,
+  backgroundColor: colors.greenSoft,
+  cornerRadius: "8px",
+  paddingAll: "10px",
+  spacing: "xs",
+  contents: [labelText(label), valueText(value, { size: "md" })],
+});
+
+const detailCard = (
+  label: string,
+  value: string,
+  options: { color?: string; backgroundColor?: string } = {}
+): object => ({
+  type: "box",
+  layout: "vertical",
+  backgroundColor: options.backgroundColor ?? colors.greenPale,
+  borderColor: colors.border,
+  borderWidth: "light",
+  cornerRadius: "8px",
+  paddingAll: "10px",
+  spacing: "xs",
+  contents: [labelText(label), valueText(value, { color: options.color })],
+});
+
+const keyValueRow = (label: string, value: string): object => ({
+  type: "box",
+  layout: "horizontal",
+  spacing: "md",
+  contents: [
+    {
+      ...labelText(label),
+      flex: 4,
+    },
+    {
+      ...valueText(value, { align: "end" }),
+      flex: 3,
+    },
+  ],
+});
+
 export function buildTradingCard(
   data: HFMPerformanceData,
-  walletId: string
+  walletId: string,
+  conditions: ConditionCheck
 ): object {
-  const isActive = data.activity_status === "active";
+  const status = getStatusMeta(data.activity_status);
+  const accountStatus = getAccountStatusMeta(data.status);
+  const matchAllBadge = getMatchAllMeta(conditions.matchAll);
 
   return {
     type: "bubble",
-    size: "kilo",
+    size: "mega",
     styles: {
-      header: { backgroundColor: "#1DB954" },
-      footer: { backgroundColor: "#F5F5F5" },
+      header: { backgroundColor: colors.green },
+      footer: { backgroundColor: colors.footer },
     },
     header: {
       type: "box",
       layout: "vertical",
+      paddingAll: "16px",
+      spacing: "xs",
       contents: [
         {
           type: "text",
-          text: "\uD83D\uDCCA Trading Account Summary",
-          color: "#FFFFFF",
+          text: "Trading Account Summary",
+          color: colors.white,
           weight: "bold",
           size: "md",
+          wrap: true,
+          maxLines: 2,
+          adjustMode: "shrink-to-fit",
         },
         {
           type: "text",
           text: "Forex Customer Support",
           color: "#E8F5E9",
-          size: "sm",
+          size: "xs",
+          wrap: true,
+          maxLines: 1,
         },
       ],
     },
     body: {
       type: "box",
       layout: "vertical",
-      spacing: "md",
-      paddingAll: "16px",
+      spacing: "sm",
+      paddingAll: "14px",
       contents: [
         {
           type: "box",
           layout: "horizontal",
           spacing: "sm",
           contents: [
-            {
-              type: "box",
-              layout: "vertical",
-              flex: 1,
-              contents: [
-                {
-                  type: "text",
-                  text: "\uD83E\uDEAA Wallet ID",
-                  size: "xs",
-                  color: "#9E9E9E",
-                },
-                {
-                  type: "text",
-                  text: walletId,
-                  size: "sm",
-                  weight: "bold",
-                  color: "#1A1A1A",
-                },
-              ],
-            },
-            {
-              type: "box",
-              layout: "vertical",
-              flex: 1,
-              contents: [
-                {
-                  type: "text",
-                  text: "\uD83D\uDCCB Account ID",
-                  size: "xs",
-                  color: "#9E9E9E",
-                },
-                {
-                  type: "text",
-                  text: String(data.account_id),
-                  size: "sm",
-                  weight: "bold",
-                  color: "#1A1A1A",
-                },
-              ],
-            },
+            infoCard("Wallet ID", walletId),
+            infoCard("Account ID", String(data.account_id)),
           ],
         },
-        {
-          type: "box",
-          layout: "horizontal",
-          contents: [
-            {
-              type: "text",
-              text: "\uD83D\uDEE1\uFE0F Registration",
-              size: "sm",
-              color: "#9E9E9E",
-              flex: 3,
-            },
-            {
-              type: "text",
-              text: isActive ? "\u2713 Active" : data.activity_status,
-              size: "sm",
-              color: isActive ? "#1DB954" : "#9E9E9E",
-              weight: "bold",
-              align: "end",
-              flex: 2,
-            },
-          ],
-        },
-        { type: "separator" },
+        detailCard("Registration Date", fmtDate(data.account_regdate)),
+        detailCard("Account Status", accountStatus.label, {
+          color: accountStatus.color,
+          backgroundColor: accountStatus.backgroundColor,
+        }),
+        detailCard("Subaffiliate", String(data.subaffiliate)),
+        detailCard("Registration", status.label, {
+          color: status.color,
+          backgroundColor: status.backgroundColor,
+        }),
+        { type: "separator", color: colors.border },
+        detailCard("Condition", matchAllBadge.label, {
+          color: matchAllBadge.color,
+          backgroundColor: matchAllBadge.backgroundColor,
+        }),
+        { type: "separator", color: colors.border },
         {
           type: "box",
           layout: "horizontal",
           spacing: "sm",
           contents: [
-            {
-              type: "box",
-              layout: "vertical",
-              flex: 1,
-              backgroundColor: "#E8F5E9",
-              cornerRadius: "8px",
-              paddingAll: "10px",
-              contents: [
-                {
-                  type: "text",
-                  text: "Trades",
-                  size: "xs",
-                  color: "#9E9E9E",
-                  align: "center",
-                },
-                {
-                  type: "text",
-                  text: String(data.trades),
-                  size: "md",
-                  weight: "bold",
-                  color: "#1A1A1A",
-                  align: "center",
-                },
-              ],
-            },
-            {
-              type: "box",
-              layout: "vertical",
-              flex: 1,
-              backgroundColor: "#E8F5E9",
-              cornerRadius: "8px",
-              paddingAll: "10px",
-              contents: [
-                {
-                  type: "text",
-                  text: "Volume",
-                  size: "xs",
-                  color: "#9E9E9E",
-                  align: "center",
-                },
-                {
-                  type: "text",
-                  text: fmtVolume(data.volume),
-                  size: "md",
-                  weight: "bold",
-                  color: "#1A1A1A",
-                  align: "center",
-                },
-              ],
-            },
-            {
-              type: "box",
-              layout: "vertical",
-              flex: 1,
-              backgroundColor: "#E8F5E9",
-              cornerRadius: "8px",
-              paddingAll: "10px",
-              contents: [
-                {
-                  type: "text",
-                  text: "Type",
-                  size: "xs",
-                  color: "#9E9E9E",
-                  align: "center",
-                },
-                {
-                  type: "text",
-                  text: data.account_type,
-                  size: "md",
-                  weight: "bold",
-                  color: "#1A1A1A",
-                  align: "center",
-                },
-              ],
-            },
+            metricCard("Trades", String(data.trades)),
+            metricCard("Volume", fmtVolume(data.volume)),
           ],
         },
         {
@@ -214,76 +272,21 @@ export function buildTradingCard(
           layout: "horizontal",
           spacing: "sm",
           contents: [
-            {
-              type: "box",
-              layout: "vertical",
-              flex: 1,
-              backgroundColor: "#E8F5E9",
-              cornerRadius: "8px",
-              paddingAll: "10px",
-              contents: [
-                {
-                  type: "text",
-                  text: "Balance",
-                  size: "xs",
-                  color: "#9E9E9E",
-                },
-                {
-                  type: "text",
-                  text: fmtCurrency(data.deposits, data.account_currency),
-                  size: "md",
-                  weight: "bold",
-                  color: "#1A1A1A",
-                },
-              ],
-            },
-            {
-              type: "box",
-              layout: "vertical",
-              flex: 1,
-              backgroundColor: "#E8F5E9",
-              cornerRadius: "8px",
-              paddingAll: "10px",
-              contents: [
-                {
-                  type: "text",
-                  text: "Equity",
-                  size: "xs",
-                  color: "#9E9E9E",
-                },
-                {
-                  type: "text",
-                  text: fmtCurrency(data.equity, data.account_currency),
-                  size: "md",
-                  weight: "bold",
-                  color: "#1A1A1A",
-                },
-              ],
-            },
+            metricCard(
+              "Balance",
+              fmtCurrency(data.deposits, data.account_currency)
+            ),
+            metricCard(
+              "Equity",
+              fmtCurrency(data.equity, data.account_currency)
+            ),
           ],
         },
-        {
-          type: "box",
-          layout: "horizontal",
-          contents: [
-            {
-              type: "text",
-              text: "\uD83D\uDCB5 Acc. Currency",
-              size: "sm",
-              color: "#9E9E9E",
-              flex: 3,
-            },
-            {
-              type: "text",
-              text: displayCurrencyLabel(data.account_currency),
-              size: "sm",
-              weight: "bold",
-              color: "#1A1A1A",
-              align: "end",
-              flex: 2,
-            },
-          ],
-        },
+        detailCard("Account Type", data.account_type),
+        keyValueRow(
+          "Account Currency",
+          displayCurrencyLabel(data.account_currency)
+        ),
       ],
     },
     footer: {
@@ -293,9 +296,9 @@ export function buildTradingCard(
       contents: [
         {
           type: "text",
-          text: "\uD83C\uDFA7 For assistance, please contact support.",
+          text: "For assistance, please contact support.",
           size: "xs",
-          color: "#9E9E9E",
+          color: colors.muted,
           align: "center",
           wrap: true,
         },

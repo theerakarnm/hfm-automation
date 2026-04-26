@@ -285,7 +285,7 @@ The `buildTradingCard(data: HFMPerformanceData)` function returns this shape:
     "layout": "vertical",
     "contents": [
       { "type": "text", "text": "📊 Trading Account Summary", "color": "#FFFFFF", "weight": "bold", "size": "md" },
-      { "type": "text", "text": "Forex Customer Support", "color": "#E8F5E9", "size": "sm" }
+      { "type": "text", "text": "Customer Support", "color": "#E8F5E9", "size": "sm" }
     ]
   },
   "body": {

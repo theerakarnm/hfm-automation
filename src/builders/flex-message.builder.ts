@@ -219,7 +219,7 @@ export function buildTradingCard(
         },
         {
           type: "text",
-          text: "Forex Customer Support",
+          text: "Customer Support",
           color: "#E8F5E9",
           size: "xs",
           wrap: true,

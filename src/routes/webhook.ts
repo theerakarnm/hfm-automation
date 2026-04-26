@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { verifyLineSignature } from "../utils/signature";
 import { fetchPerformance, checkConditions } from "../services/hfm.service";
-import { pushText, pushFlex } from "../services/line.service";
+import { pushText, pushFlex, showLoading } from "../services/line.service";
 import { buildTradingCard } from "../builders/flex-message.builder";
 import { isTextMessageEvent } from "../types/line.types";
 import type { WebhookBody, TextMessageEvent } from "../types/line.types";
@@ -38,6 +38,10 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
   if (!userId) return;
 
   const walletId = event.message.text.trim();
+  showLoading(userId).catch((err) => {
+    console.warn("[line] failed to show loading indicator", err);
+  });
+
   const result = await fetchPerformance(walletId);
 
   if (result.ok) {

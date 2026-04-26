@@ -10,6 +10,19 @@ function computeSig(body: string, secret: string): string {
   return createHmac("sha256", secret).update(body).digest("base64");
 }
 
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs = 500
+): Promise<void> {
+  const startedAt = Date.now();
+  while (!predicate()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("Timed out waiting for webhook background work");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 function createWebhookApp() {
   process.env.LINE_CHANNEL_SECRET = SECRET;
   process.env.LINE_CHANNEL_ACCESS_TOKEN = "test_token";
@@ -104,7 +117,7 @@ describe("webhook", () => {
     expect(pushCalled).toBe(false);
   });
 
-  test("valid text message event returns 200 immediately", async () => {
+  test("valid text message event shows loading before fetching HFM", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
       destination: "U123",
@@ -121,11 +134,52 @@ describe("webhook", () => {
     });
     const sig = computeSig(body, SECRET);
 
-    globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ clients: [], totals: {} }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })) as unknown as typeof globalThis.fetch;
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      fetchCalls.push({
+        url,
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+
+      if (url.endsWith("/v2/bot/chat/loading/start")) {
+        return new Response("{}", { status: 202 });
+      }
+
+      if (url.includes("/api/performance/client-performance")) {
+        return new Response(
+          JSON.stringify({
+            clients: [
+              {
+                client_id: 45219,
+                account_id: 78451293,
+                activity_status: "active",
+                trades: 24,
+                volume: 3.42,
+                account_type: "Standard",
+                deposits: 12450.8,
+                account_currency: "USD",
+                equity: 12998.35,
+                archived: false,
+                subaffiliate: 0,
+                account_regdate: "2024-01-15T00:00:00Z",
+                status: "approved",
+              },
+            ],
+            totals: {},
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
       new Request("http://localhost/webhook", {
@@ -140,6 +194,19 @@ describe("webhook", () => {
     const response = await res;
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("OK");
+
+    await waitFor(() => fetchCalls.length >= 3);
+    expect(fetchCalls[0]?.url).toBe(
+      "https://api.line.me/v2/bot/chat/loading/start"
+    );
+    expect(JSON.parse(fetchCalls[0]?.body ?? "{}")).toEqual({
+      chatId: "Uabc123",
+      loadingSeconds: 20,
+    });
+    expect(fetchCalls[1]?.url).toContain(
+      "/api/performance/client-performance?wallets=98241376"
+    );
+    expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/push");
   });
 });
 

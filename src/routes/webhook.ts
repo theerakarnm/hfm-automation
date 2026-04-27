@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { verifyLineSignature } from "../utils/signature";
 import { fetchPerformance, checkConditions } from "../services/hfm.service";
 import { pushText, pushFlex, showLoading } from "../services/line.service";
@@ -6,43 +7,59 @@ import { buildTradingCard } from "../builders/flex-message.builder";
 import { isTextMessageEvent } from "../types/line.types";
 import { isWhitelisted } from "../utils/whitelist";
 import { logError } from "../utils/logger";
-import { getDatabase, initSqlite } from "../services/sqlite.service";
+import { getDatabase } from "../services/sqlite.service";
 import { recordLineUserRequest } from "../repositories/line-user.repository";
 import type { WebhookBody, TextMessageEvent } from "../types/line.types";
 
+const MAX_WEBHOOK_EVENTS = 20;
+
 const webhook = new Hono();
 
-webhook.post("/", async (c) => {
-  const rawBody = await c.req.text();
-  const sig = c.req.header("x-line-signature") ?? "";
+webhook.post(
+  "/",
+  bodyLimit({
+    maxSize: 256 * 1024,
+    onError: (c) => c.text("Payload Too Large", 413),
+  }),
+  async (c) => {
+    const rawBody = await c.req.text();
+    const sig = c.req.header("x-line-signature") ?? "";
 
-  if (
-    !verifyLineSignature(
-      rawBody,
-      sig,
-      process.env.LINE_CHANNEL_SECRET ?? ""
-    )
-  ) {
-    return c.text("Unauthorized", 400);
-  }
-
-  const body = JSON.parse(rawBody) as WebhookBody;
-
-  const db = getDatabase();
-  initSqlite(db);
-
-  for (const event of body.events ?? []) {
-    const uid = event.source?.userId;
-    if (uid) {
-      recordLineUserRequest(db, uid, event.type);
+    if (
+      !verifyLineSignature(
+        rawBody,
+        sig,
+        process.env.LINE_CHANNEL_SECRET ?? ""
+      )
+    ) {
+      return c.text("Unauthorized", 400);
     }
-    if (isTextMessageEvent(event)) {
-      processTextEvent(event).catch((err) => logError("webhook", err));
-    }
-  }
 
-  return c.text("OK", 200);
-});
+    let body: WebhookBody;
+    try {
+      body = JSON.parse(rawBody) as WebhookBody;
+    } catch {
+      return c.text("Bad Request", 400);
+    }
+
+    const events = body.events ?? [];
+    const db = getDatabase();
+
+    const eventsToProcess = events.slice(0, MAX_WEBHOOK_EVENTS);
+
+    for (const event of eventsToProcess) {
+      const uid = event.source?.userId;
+      if (uid) {
+        recordLineUserRequest(db, uid, event.type);
+      }
+      if (isTextMessageEvent(event)) {
+        processTextEvent(event).catch((err) => logError("webhook", err));
+      }
+    }
+
+    return c.text("OK", 200);
+  }
+);
 
 async function processTextEvent(event: TextMessageEvent): Promise<void> {
   const userId = event.source.userId;
@@ -51,7 +68,7 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
   if (!isWhitelisted(userId)) {
     await pushText(
       userId,
-      "❌ ขออภัย คุณไม่มีสิทธิ์ใช้งานบอทนี้ หากต้องการใช้งาน กรุณาติดต่อ Support"
+      "\u274C \u0E02\u0E2D\u0E2D\u0E20\u0E31\u0E22 \u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E1A\u0E2D\u0E17\u0E19\u0E35\u0E49 \u0E2B\u0E32\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D Support"
     );
     return;
   }
@@ -64,17 +81,18 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
   const result = await fetchPerformance(walletId);
 
   if (result.ok) {
-    const bubbles = result.data.map((clientData) => {
+    const clientsToShow = result.data.slice(0, 10);
+    const bubbles = clientsToShow.map((clientData) => {
       const conditions = checkConditions(clientData);
       return buildTradingCard(clientData, walletId, conditions);
     });
 
     if (bubbles.length === 1) {
-      await pushFlex(userId, `Trading Summary — ${walletId}`, bubbles[0]!);
+      await pushFlex(userId, `Trading Summary \u2014 ${walletId}`, bubbles[0]!);
     } else {
-      await pushFlex(userId, `Trading Summary — ${walletId}`, {
+      await pushFlex(userId, `Trading Summary \u2014 ${walletId}`, {
         type: "carousel",
-        contents: bubbles,
+        contents: bubbles.slice(0, 10),
       });
     }
     return;
@@ -82,10 +100,10 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
 
   const errMsg =
     result.reason === "not_found"
-      ? `❌ ไม่พบข้อมูล Wallet ID ${walletId} ในระบบ\nกรุณาตรวจสอบ Wallet ID และลองใหม่อีกครั้ง`
+      ? `\u274C \u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 Wallet ID ${walletId} \u0E43\u0E19\u0E23\u0E30\u0E1A\u0E1A\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E15\u0E23\u0E27\u0E08\u0E2A\u0E2D\u0E1A Wallet ID \u0E41\u0E25\u0E30\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07`
       : result.reason === "timeout"
-        ? "⚠️ การเชื่อมต่อหมดเวลา\nกรุณาลองใหม่อีกครั้ง"
-        : "⚠️ ระบบ HFM API ขัดข้องชั่วคราว\nกรุณาลองใหม่ในอีกสักครู่ หรือติดต่อ Support";
+        ? "\u26A0\uFE0F \u0E01\u0E32\u0E23\u0E40\u0E0A\u0E37\u0E48\u0E2D\u0E21\u0E15\u0E48\u0E2D\u0E2B\u0E21\u0E14\u0E40\u0E27\u0E25\u0E32\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07"
+        : "\u26A0\uFE0F \u0E23\u0E30\u0E1A\u0E1A HFM API \u0E02\u0E31\u0E14\u0E02\u0E49\u0E2D\u0E07\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E43\u0E19\u0E2D\u0E35\u0E01\u0E2A\u0E31\u0E01\u0E04\u0E23\u0E39\u0E48 \u0E2B\u0E23\u0E37\u0E2D\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D Support";
   await pushText(userId, errMsg);
 }
 

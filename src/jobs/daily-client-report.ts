@@ -1,60 +1,46 @@
 import type { Database } from "bun:sqlite";
-import type { SnapshotClient } from "../repositories/snapshot.repository";
+import type { SnapshotClient, DiffCounts } from "../repositories/snapshot.repository";
 import type { HFMClientsPerformanceResponse, HFMAllClientsResult } from "../types/hfm.types";
-import { getDatabase, initSqlite } from "../services/sqlite.service";
-import { countByDate, getByDate, insertMany, purgeOlderThan } from "../repositories/snapshot.repository";
+import { getDatabase, initSqlite, checkpointDatabase } from "../services/sqlite.service";
+import { countByDate, insertMany, purgeOlderThan, diffCounts, getAddedClients, getMissingClients } from "../repositories/snapshot.repository";
 import { seedFromEnv, getActiveUids } from "../repositories/recipient.repository";
 import { fetchAllClients } from "../services/hfm.service";
 import { pushToAll } from "../services/line.service";
 import { getIctDateString, getPreviousIctDateString } from "../utils/date";
 
 const LINE_SAFE_LIMIT = 4500;
-
-export function compareSnapshots(today: SnapshotClient[], yesterday: SnapshotClient[]) {
-  const todayKeys = new Set(today.map((c) => c.composite_key));
-  const yesterdayKeys = new Set(yesterday.map((c) => c.composite_key));
-
-  return {
-    added: today.filter((c) => !yesterdayKeys.has(c.composite_key)),
-    missing: yesterday.filter((c) => !todayKeys.has(c.composite_key)),
-  };
-}
+const DISPLAY_LIMIT_PER_SECTION = 50;
 
 export function buildDailyClientReportMessage(options: {
   date: string;
-  today: SnapshotClient[];
-  yesterday: SnapshotClient[];
   totals: HFMClientsPerformanceResponse["totals"];
+  counts: DiffCounts;
+  addedClients: SnapshotClient[];
+  missingClients: SnapshotClient[];
 }): string {
-  const { date, today, yesterday, totals } = options;
+  const { date, totals, counts, addedClients, missingClients } = options;
   const displayDate = formatDate(date);
   const totalClients = Number(totals.clients);
 
-  const header = `📅 Daily Client Report — ${displayDate}`;
+  const header = `\uD83D\uDCC5 Daily Client Report \u2014 ${displayDate}`;
 
-  if (yesterday.length === 0) {
-    return `${header}\n🔔 First run — baseline snapshot saved.\n📊 Total Clients Today: ${totalClients}`;
+  if (counts.added === 0 && counts.missing === 0) {
+    return `${header}\n\u2705 No changes detected.\n\uD83D\uDCCA Total Clients Today: ${totalClients}`;
   }
 
-  const diff = compareSnapshots(today, yesterday);
-
-  if (diff.added.length === 0 && diff.missing.length === 0) {
-    return `${header}\n✅ No changes detected.\n📊 Total Clients Today: ${totalClients}`;
-  }
-
-  const totalLine = `📊 Total Clients Today: ${totalClients}`;
+  const totalLine = `\uD83D\uDCCA Total Clients Today: ${totalClients}`;
 
   let message = `${header}\n\n`;
 
-  message += buildSection("✅ New Clients", diff.added);
-  message += buildSection("❌ Missing Clients", diff.missing);
+  message += buildSection("\u2705 New Clients", counts.added, addedClients);
+  message += buildSection("\u274C Missing Clients", counts.missing, missingClients);
   message += `\n${totalLine}`;
 
   if (message.length <= LINE_SAFE_LIMIT) {
     return message;
   }
 
-  return truncateReport(header, diff, totalLine);
+  return truncateReport(header, counts, addedClients, missingClients, totalLine);
 }
 
 function formatDate(dateStr: string): string {
@@ -62,9 +48,9 @@ function formatDate(dateStr: string): string {
   return `${day}/${month}/${year}`;
 }
 
-function buildSection(title: string, clients: SnapshotClient[]): string {
-  const sep = "━━━━━━━━━━━━━━━━━━━━";
-  let section = `${title} (${clients.length})\n${sep}\n`;
+function buildSection(title: string, totalCount: number, clients: SnapshotClient[]): string {
+  const sep = "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501";
+  let section = `${title} (${totalCount})\n${sep}\n`;
   for (const c of clients) {
     section += clientBlock(c);
   }
@@ -72,47 +58,50 @@ function buildSection(title: string, clients: SnapshotClient[]): string {
 }
 
 function clientBlock(c: SnapshotClient): string {
-  return `• ${c.full_name}\n  Client ID : ${c.client_id}\n  Account ID: ${c.account_id}\n\n`;
+  return `\u2022 ${c.full_name}\n  Client ID : ${c.client_id}\n  Account ID: ${c.account_id}\n\n`;
 }
 
 function truncateReport(
   header: string,
-  diff: { added: SnapshotClient[]; missing: SnapshotClient[] },
+  counts: DiffCounts,
+  addedClients: SnapshotClient[],
+  missingClients: SnapshotClient[],
   totalLine: string
 ): string {
-  const sep = "━━━━━━━━━━━━━━━━━━━━";
+  const sep = "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501";
   let message = `${header}\n\n`;
 
   const allClients: Array<{ client: SnapshotClient; section: "new" | "missing" }> = [
-    ...diff.added.map((c) => ({ client: c, section: "new" as const })),
-    ...diff.missing.map((c) => ({ client: c, section: "missing" as const })),
+    ...addedClients.map((c) => ({ client: c, section: "new" as const })),
+    ...missingClients.map((c) => ({ client: c, section: "missing" as const })),
   ];
 
   let addedNewHeader = false;
   let addedMissingHeader = false;
-  let remaining = 0;
+  let remaining = counts.added + counts.missing;
   let fitCount = 0;
 
   for (const item of allClients) {
     if (item.section === "new" && !addedNewHeader) {
-      message += `✅ New Clients (${diff.added.length})\n${sep}\n`;
+      message += `\u2705 New Clients (${counts.added})\n${sep}\n`;
       addedNewHeader = true;
     }
     if (item.section === "missing" && !addedMissingHeader) {
-      message += `\n❌ Missing Clients (${diff.missing.length})\n${sep}\n`;
+      message += `\n\u274C Missing Clients (${counts.missing})\n${sep}\n`;
       addedMissingHeader = true;
     }
 
     const block = clientBlock(item.client);
-    const truncationLine = `... and ${allClients.length - fitCount} more. Check full report.\n\n${totalLine}`;
+    remaining = counts.added + counts.missing - fitCount;
+    const truncationLine = `... and ${remaining} more. Check full report.\n\n${totalLine}`;
 
     if (message.length + block.length + truncationLine.length > LINE_SAFE_LIMIT) {
-      remaining = allClients.length - fitCount;
       break;
     }
 
     message += block;
     fitCount++;
+    remaining = counts.added + counts.missing - fitCount;
   }
 
   if (remaining > 0) {
@@ -144,10 +133,10 @@ function markDailyReportNotificationSent(db: Database, date: string): void {
   ).run({ date });
 }
 
-function totalsFromSnapshotRows(rows: SnapshotClient[]): HFMClientsPerformanceResponse["totals"] {
+function totalsFromCount(count: number): HFMClientsPerformanceResponse["totals"] {
   return {
-    clients: rows.length,
-    accounts: rows.length,
+    clients: count,
+    accounts: count,
     volume: 0,
     deposits: 0,
     withdrawals: 0,
@@ -168,7 +157,6 @@ export async function runDailyClientReport(options: RunDailyClientReportOptions 
   const yesterday = getPreviousIctDateString(now);
 
   const existingTodayCount = countByDate(db, today);
-  let todayRows: SnapshotClient[];
   let totals: HFMClientsPerformanceResponse["totals"];
 
   if (existingTodayCount > 0) {
@@ -176,23 +164,69 @@ export async function runDailyClientReport(options: RunDailyClientReportOptions 
       console.warn(`[cron] daily-client-report snapshot and notification already exist for ${today}; skipping`);
       return;
     }
-    todayRows = getByDate(db, today);
-    totals = totalsFromSnapshotRows(todayRows);
+    totals = totalsFromCount(existingTodayCount);
   } else {
     const result = await fetchAll();
     if (!result.ok) throw new Error(`HFM fetchAllClients failed: ${result.reason}`);
 
     insertMany(db, today, result.data.clients);
-    todayRows = getByDate(db, today);
     totals = result.data.totals;
   }
 
-  const yesterdayRows = getByDate(db, yesterday);
+  const yesterdayCount = countByDate(db, yesterday);
+
+  const isFirstRun = yesterdayCount === 0;
+
+  if (isFirstRun) {
+    const todayCount = countByDate(db, today);
+    const message = `\uD83D\uDCC5 Daily Client Report \u2014 ${today.split("-").reverse().join("/")}\n\uD83D\uDD14 First run \u2014 baseline snapshot saved.\n\uD83D\uDCCA Total Clients Today: ${Number(totals.clients)}`;
+
+    const uids = getActiveUids(db);
+    if (uids.length === 0) {
+      console.warn("[cron] daily-client-report has no active LINE recipients");
+    } else {
+      await pushAll(uids, message);
+      markDailyReportNotificationSent(db, today);
+    }
+
+    purgeOlderThan(db, 90, today);
+    checkpointDatabase();
+    return;
+  }
+
+  const counts = diffCounts(db, today, yesterday);
+
+  if (counts.added === 0 && counts.missing === 0) {
+    const message = buildDailyClientReportMessage({
+      date: today,
+      totals,
+      counts,
+      addedClients: [],
+      missingClients: [],
+    });
+
+    const uids = getActiveUids(db);
+    if (uids.length === 0) {
+      console.warn("[cron] daily-client-report has no active LINE recipients");
+    } else {
+      await pushAll(uids, message);
+      markDailyReportNotificationSent(db, today);
+    }
+
+    purgeOlderThan(db, 90, today);
+    checkpointDatabase();
+    return;
+  }
+
+  const addedClients = getAddedClients(db, today, yesterday, DISPLAY_LIMIT_PER_SECTION);
+  const missingClients = getMissingClients(db, today, yesterday, DISPLAY_LIMIT_PER_SECTION);
+
   const message = buildDailyClientReportMessage({
     date: today,
-    today: todayRows,
-    yesterday: yesterdayRows,
     totals,
+    counts,
+    addedClients,
+    missingClients,
   });
 
   const uids = getActiveUids(db);
@@ -204,4 +238,5 @@ export async function runDailyClientReport(options: RunDailyClientReportOptions 
   }
 
   purgeOlderThan(db, 90, today);
+  checkpointDatabase();
 }

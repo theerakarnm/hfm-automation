@@ -1,6 +1,7 @@
 import { test, expect, describe, afterEach, beforeEach } from "bun:test";
 import { Hono } from "hono";
 import { createHmac } from "node:crypto";
+import { resetDatabaseForTests, getDatabase, initSqlite } from "../src/services/sqlite.service";
 
 const ORIGINAL_FETCH = globalThis.fetch;
 
@@ -28,6 +29,10 @@ function createWebhookApp() {
   process.env.LINE_CHANNEL_ACCESS_TOKEN = "test_token";
   process.env.HFM_API_KEY = "test_hfm_key";
   process.env.HFM_API_BASE_URL = "https://api.hfaffiliates.com";
+  process.env.SQLITE_PATH = ":memory:";
+
+  const db = getDatabase();
+  initSqlite(db);
 
   const webhookMod = require("../src/routes/webhook");
   const app = new Hono();
@@ -38,12 +43,14 @@ function createWebhookApp() {
 describe("webhook", () => {
   beforeEach(() => {
     globalThis.fetch = ORIGINAL_FETCH;
+    process.env.SQLITE_PATH = ":memory:";
   });
 
   afterEach(() => {
     globalThis.fetch = ORIGINAL_FETCH;
     delete process.env.LINE_WHITELIST_UIDS;
     delete process.env.LINE_WHITELIST_ENABLED;
+    resetDatabaseForTests();
   });
 
   test("invalid signature returns 400", async () => {
@@ -272,6 +279,10 @@ async function importWebhook() {
   process.env.LINE_CHANNEL_ACCESS_TOKEN = "test_token";
   process.env.HFM_API_KEY = "test_hfm_key";
   process.env.HFM_API_BASE_URL = "https://api.hfaffiliates.com";
+  process.env.SQLITE_PATH = ":memory:";
+
+  const db = getDatabase();
+  initSqlite(db);
 
   const webhookMod = await import("../src/routes/webhook");
   const app = new Hono();

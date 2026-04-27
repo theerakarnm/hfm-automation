@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 
 const LOG_DIR = "logs";
+const MAX_LOG_READ_BYTES = 512 * 1024;
 
 const isTest = process.env.NODE_ENV === "test";
 
@@ -12,28 +13,7 @@ const options: pino.LoggerOptions = {
 
 export const logger = isTest
   ? pino(options)
-  : pino(
-      options,
-      pino.transport({
-        targets: [
-          {
-            target: "pino-pretty",
-            level: options.level,
-          },
-          {
-            target: "pino-roll",
-            level: options.level,
-            options: {
-              file: join(LOG_DIR, "log"),
-              frequency: "daily",
-              dateFormat: "ddMMyyyy",
-              mkdir: true,
-              extension: ".log",
-            },
-          },
-        ],
-      })
-    );
+  : pino(options);
 
 export function logError(context: string, error: unknown): void {
   const message =
@@ -43,14 +23,19 @@ export function logError(context: string, error: unknown): void {
   logger.error({ context }, message);
 }
 
-export function readLog(date: string): string | null {
+export function readLog(date: string, maxBytes = MAX_LOG_READ_BYTES): string | null {
+  if (!existsSync(LOG_DIR)) return null;
   const files = readdirSync(LOG_DIR).filter(
     (f) => f.startsWith(`log.${date}`) && f.endsWith(".log")
   );
   if (files.length === 0) return null;
   const path = join(LOG_DIR, files[files.length - 1]!);
   try {
-    return readFileSync(path, "utf-8");
+    const buf = readFileSync(path);
+    if (buf.byteLength > maxBytes) {
+      return buf.subarray(buf.byteLength - maxBytes).toString("utf-8");
+    }
+    return buf.toString("utf-8");
   } catch {
     return null;
   }
@@ -63,10 +48,10 @@ export interface LogEntry {
   message: string;
 }
 
-export function parseLog(content: string): LogEntry[] {
-  return content
-    .split("\n")
-    .filter((line) => line.trim())
+export function parseLog(content: string, maxEntries = 500): LogEntry[] {
+  const lines = content.split("\n").filter((line) => line.trim());
+  const sliced = lines.length > maxEntries ? lines.slice(-maxEntries) : lines;
+  return sliced
     .map((line) => {
       try {
         const obj = JSON.parse(line);

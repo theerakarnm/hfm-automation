@@ -5,6 +5,9 @@ import { listLineUsers } from "../repositories/line-user.repository";
 
 const internal = new Hono();
 
+const MAX_LOG_ENTRIES = 200;
+const MAX_LINE_UIDS = 500;
+
 internal.use("*", async (c, next) => {
   const key = c.req.query("key");
   if (!key || key !== process.env.INTERNAL_API_KEY) {
@@ -48,19 +51,25 @@ internal.get("/logs", async (c) => {
 
 internal.get("/logs/:date", async (c) => {
   const date = c.req.param("date");
+  const limitParam = c.req.query("limit");
+  const limit = Math.min(
+    Number(limitParam) || MAX_LOG_ENTRIES,
+    MAX_LOG_ENTRIES
+  );
   const content = readLog(date);
   if (!content) {
     return c.json({ error: "No logs found for this date" }, 404);
   }
-  const entries = parseLog(content);
+  const entries = parseLog(content, limit);
   return c.json({ date, entries });
 });
 
 internal.get("/line-uids", async (c) => {
   const db = getDatabase();
-  const users = listLineUsers(db);
+  const users = listLineUsers(db).slice(0, MAX_LINE_UIDS);
   return c.json({
     count: users.length,
+    truncated: listLineUsers(db).length > MAX_LINE_UIDS,
     uids: users.map((u) => u.line_uid),
     users,
   });

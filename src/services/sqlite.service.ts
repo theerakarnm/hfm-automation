@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS line_users (
 `;
 
 let _db: Database | null = null;
+let _initializedDb: Database | null = null;
 
 export function getDatabase(path?: string): Database {
   if (_db) return _db;
@@ -53,12 +54,35 @@ export function getDatabase(path?: string): Database {
   _db = new Database(dbPath, { strict: true });
   _db.run("PRAGMA journal_mode = WAL;");
   _db.run("PRAGMA busy_timeout = 5000;");
+  _db.run("PRAGMA wal_autocheckpoint = 1000;");
+  if (_initializedDb !== _db) {
+    _db.run(SCHEMA);
+    _initializedDb = _db;
+  }
   return _db;
 }
 
 export function initSqlite(db?: Database): void {
   const target = db ?? getDatabase();
+  if (_initializedDb === target) return;
   target.run(SCHEMA);
+  _initializedDb = target;
+}
+
+export function checkpointDatabase(): void {
+  if (!_db) return;
+  _db.run("PRAGMA wal_checkpoint(TRUNCATE);");
+}
+
+export function closeDatabase(): void {
+  if (_db) {
+    try {
+      _db.run("PRAGMA wal_checkpoint(TRUNCATE);");
+    } catch {}
+    _db.close();
+    _db = null;
+    _initializedDb = null;
+  }
 }
 
 export function resetDatabaseForTests(): void {
@@ -66,4 +90,5 @@ export function resetDatabaseForTests(): void {
     _db.close();
     _db = null;
   }
+  _initializedDb = null;
 }

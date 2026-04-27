@@ -17,7 +17,7 @@ const mockHfmResponse: HFMClientsPerformanceResponse = {
       account_currency: "USD",
       equity: 12998.35,
       archived: false,
-      subaffiliate: 0,
+      subaffiliate: 98241376,
       account_regdate: "2024-01-15T00:00:00Z",
       status: "approved",
     },

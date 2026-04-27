@@ -2,6 +2,7 @@ import { logError } from "../utils/logger";
 
 const LINE_PUSH_API = "https://api.line.me/v2/bot/message/push";
 const LINE_LOADING_API = "https://api.line.me/v2/bot/chat/loading/start";
+const LINE_TIMEOUT_MS = 10_000;
 
 async function pushMessage(
   userId: string,
@@ -14,6 +15,7 @@ async function pushMessage(
       Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
     },
     body: JSON.stringify({ to: userId, messages: [message] }),
+    signal: AbortSignal.timeout(LINE_TIMEOUT_MS),
   });
   if (!res.ok) {
     const errText = await res.text();
@@ -34,6 +36,7 @@ export async function showLoading(
       Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
     },
     body: JSON.stringify({ chatId, loadingSeconds }),
+    signal: AbortSignal.timeout(LINE_TIMEOUT_MS),
   });
 
   if (!res.ok) {

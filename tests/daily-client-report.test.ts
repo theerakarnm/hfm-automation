@@ -1,10 +1,10 @@
 import { expect, test, describe, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { initSqlite } from "../src/services/sqlite.service";
-import { insertMany, getByDate } from "../src/repositories/snapshot.repository";
-import { seedFromEnv, getActiveUids } from "../src/repositories/recipient.repository";
-import { compareSnapshots, buildDailyClientReportMessage, runDailyClientReport } from "../src/jobs/daily-client-report";
-import type { SnapshotClient } from "../src/repositories/snapshot.repository";
+import { insertMany, getByDate, diffCounts, getAddedClients, getMissingClients } from "../src/repositories/snapshot.repository";
+import { seedFromEnv } from "../src/repositories/recipient.repository";
+import { buildDailyClientReportMessage, runDailyClientReport } from "../src/jobs/daily-client-report";
+import type { SnapshotClient, DiffCounts } from "../src/repositories/snapshot.repository";
 import type { HFMPerformanceData, HFMClientsPerformanceResponse } from "../src/types/hfm.types";
 
 function snapshotClient(
@@ -30,110 +30,150 @@ const mockTotals: HFMClientsPerformanceResponse["totals"] = {
   commission: 0,
 };
 
-describe("compareSnapshots", () => {
-  test("detects added and missing clients", () => {
-    const today = [snapshotClient("78451293_10023"), snapshotClient("99001234_10024")];
-    const yesterday = [snapshotClient("78451293_10023"), snapshotClient("88123456_10031")];
-    const diff = compareSnapshots(today, yesterday);
-    expect(diff.added.map((c) => c.composite_key)).toEqual(["99001234_10024"]);
-    expect(diff.missing.map((c) => c.composite_key)).toEqual(["88123456_10031"]);
-  });
-
-  test("returns empty when identical", () => {
-    const rows = [snapshotClient("78451293_10023")];
-    const diff = compareSnapshots(rows, rows);
-    expect(diff.added).toHaveLength(0);
-    expect(diff.missing).toHaveLength(0);
-  });
-});
-
 describe("buildDailyClientReportMessage", () => {
-  test("handles first run", () => {
-    const message = buildDailyClientReportMessage({
-      date: "2026-04-26",
-      today: [snapshotClient("78451293_10023")],
-      yesterday: [],
-      totals: mockTotals,
-    });
-    expect(message).toContain("🔔 First run — baseline snapshot saved.");
-    expect(message).toContain("📊 Total Clients Today: 1");
-  });
-
   test("handles no changes with selected format", () => {
-    const rows = [snapshotClient("78451293_10023")];
+    const counts: DiffCounts = { added: 0, missing: 0 };
     const message = buildDailyClientReportMessage({
       date: "2026-04-26",
-      today: rows,
-      yesterday: rows,
       totals: mockTotals,
+      counts,
+      addedClients: [],
+      missingClients: [],
     });
-    expect(message).toBe("📅 Daily Client Report — 26/04/2026\n✅ No changes detected.\n📊 Total Clients Today: 1");
+    expect(message).toBe("\uD83D\uDCC5 Daily Client Report \u2014 26/04/2026\n\u2705 No changes detected.\n\uD83D\uDCCA Total Clients Today: 1");
   });
 
   test("handles added clients", () => {
+    const counts: DiffCounts = { added: 1, missing: 0 };
     const message = buildDailyClientReportMessage({
       date: "2026-04-26",
-      today: [
-        snapshotClient("78451293_10023", "Somchai Jaidee"),
-        snapshotClient("99001234_10024", "Malee Srisuk"),
-      ],
-      yesterday: [snapshotClient("78451293_10023", "Somchai Jaidee")],
       totals: { ...mockTotals, clients: 2 },
+      counts,
+      addedClients: [snapshotClient("99001234_10024", "Malee Srisuk")],
+      missingClients: [],
     });
-    expect(message).toContain("✅ New Clients (1)");
+    expect(message).toContain("\u2705 New Clients (1)");
     expect(message).toContain("Malee Srisuk");
-    expect(message).toContain("❌ Missing Clients (0)");
-    expect(message).toContain("📊 Total Clients Today: 2");
+    expect(message).toContain("\u274C Missing Clients (0)");
+    expect(message).toContain("\uD83D\uDCCA Total Clients Today: 2");
   });
 
   test("handles missing clients", () => {
+    const counts: DiffCounts = { added: 0, missing: 1 };
     const message = buildDailyClientReportMessage({
       date: "2026-04-26",
-      today: [snapshotClient("78451293_10023", "Somchai Jaidee")],
-      yesterday: [
-        snapshotClient("78451293_10023", "Somchai Jaidee"),
-        snapshotClient("99001234_10024", "Malee Srisuk"),
-      ],
       totals: mockTotals,
+      counts,
+      addedClients: [],
+      missingClients: [snapshotClient("99001234_10024", "Malee Srisuk")],
     });
-    expect(message).toContain("✅ New Clients (0)");
-    expect(message).toContain("❌ Missing Clients (1)");
+    expect(message).toContain("\u2705 New Clients (0)");
+    expect(message).toContain("\u274C Missing Clients (1)");
     expect(message).toContain("Malee Srisuk");
   });
 
   test("handles both added and missing", () => {
+    const counts: DiffCounts = { added: 1, missing: 1 };
     const message = buildDailyClientReportMessage({
       date: "2026-04-26",
-      today: [
-        snapshotClient("99001234_10024", "Malee Srisuk"),
-        snapshotClient("88123456_10031", "Preecha Wongsuk"),
-      ],
-      yesterday: [
-        snapshotClient("99001234_10024", "Malee Srisuk"),
-        snapshotClient("78451293_10023", "Somchai Jaidee"),
-      ],
       totals: { ...mockTotals, clients: 45 },
+      counts,
+      addedClients: [snapshotClient("88123456_10031", "Preecha Wongsuk")],
+      missingClients: [snapshotClient("78451293_10023", "Somchai Jaidee")],
     });
-    expect(message).toContain("✅ New Clients (1)");
+    expect(message).toContain("\u2705 New Clients (1)");
     expect(message).toContain("Preecha Wongsuk");
-    expect(message).toContain("❌ Missing Clients (1)");
+    expect(message).toContain("\u274C Missing Clients (1)");
     expect(message).toContain("Somchai Jaidee");
-    expect(message).toContain("📊 Total Clients Today: 45");
+    expect(message).toContain("\uD83D\uDCCA Total Clients Today: 45");
   });
 
-  test("build message truncates long reports under LINE limit", () => {
-    const yesterday = [snapshotClient("0001_1")];
-    const today = Array.from({ length: 500 }, (_, i) =>
+  test("truncates long reports under LINE limit", () => {
+    const manyClients = Array.from({ length: 500 }, (_, i) =>
       snapshotClient(`9000_${i}`, `Client Name ${i}`)
     );
+    const counts: DiffCounts = { added: 499, missing: 0 };
     const message = buildDailyClientReportMessage({
       date: "2026-04-26",
-      today,
-      yesterday,
       totals: { ...mockTotals, clients: 500 },
+      counts,
+      addedClients: manyClients.slice(1),
+      missingClients: [],
     });
     expect(message.length).toBeLessThanOrEqual(5000);
     expect(message).toContain("Check full report.");
+  });
+});
+
+describe("SQL-based diff", () => {
+  test("diffCounts, getAddedClients, getMissingClients work correctly", () => {
+    const db = new Database(":memory:", { strict: true });
+    initSqlite(db);
+
+    const clientA: HFMPerformanceData = {
+      client_id: 10023, account_id: 78451293, activity_status: "active",
+      trades: 0, volume: 0, account_type: "Standard", deposits: 0,
+      account_currency: "USD", equity: 0, archived: null, subaffiliate: 0,
+      account_regdate: "2024-01-15T00:00:00Z", status: "approved", full_name: "Alice",
+    };
+    const clientB: HFMPerformanceData = {
+      ...clientA, client_id: 10024, account_id: 99001234, full_name: "Bob",
+    };
+    const clientC: HFMPerformanceData = {
+      ...clientA, client_id: 10031, account_id: 88123456, full_name: "Charlie",
+    };
+
+    insertMany(db, "2026-04-25", [clientA, clientC]);
+    insertMany(db, "2026-04-26", [clientA, clientB]);
+
+    const counts = diffCounts(db, "2026-04-26", "2026-04-25");
+    expect(counts.added).toBe(1);
+    expect(counts.missing).toBe(1);
+
+    const added = getAddedClients(db, "2026-04-26", "2026-04-25", 10);
+    expect(added).toHaveLength(1);
+    expect(added[0]!.full_name).toBe("Bob");
+
+    const missing = getMissingClients(db, "2026-04-26", "2026-04-25", 10);
+    expect(missing).toHaveLength(1);
+    expect(missing[0]!.full_name).toBe("Charlie");
+  });
+
+  test("diffCounts returns zeros for identical snapshots", () => {
+    const db = new Database(":memory:", { strict: true });
+    initSqlite(db);
+
+    const client: HFMPerformanceData = {
+      client_id: 10023, account_id: 78451293, activity_status: "active",
+      trades: 0, volume: 0, account_type: "Standard", deposits: 0,
+      account_currency: "USD", equity: 0, archived: null, subaffiliate: 0,
+      account_regdate: "2024-01-15T00:00:00Z", status: "approved", full_name: "Alice",
+    };
+
+    insertMany(db, "2026-04-25", [client]);
+    insertMany(db, "2026-04-26", [client]);
+
+    const counts = diffCounts(db, "2026-04-26", "2026-04-25");
+    expect(counts.added).toBe(0);
+    expect(counts.missing).toBe(0);
+  });
+
+  test("diffCounts returns zeros when yesterday is empty", () => {
+    const db = new Database(":memory:", { strict: true });
+    initSqlite(db);
+
+    const client: HFMPerformanceData = {
+      client_id: 10023, account_id: 78451293, activity_status: "active",
+      trades: 0, volume: 0, account_type: "Standard", deposits: 0,
+      account_currency: "USD", equity: 0, archived: null, subaffiliate: 0,
+      account_regdate: "2024-01-15T00:00:00Z", status: "approved", full_name: "Alice",
+    };
+
+    insertMany(db, "2026-04-26", [client]);
+
+    const counts = diffCounts(db, "2026-04-26", "2026-04-25");
+    expect(counts.added).toBe(1);
+    expect(counts.missing).toBe(0);
   });
 });
 
@@ -213,14 +253,14 @@ describe("runDailyClientReport", () => {
       pushToAllFn: mockPushAll,
     });
 
-    expect(pushedMessage).toContain("🔔 First run — baseline snapshot saved.");
-    expect(pushedMessage).toContain("📊 Total Clients Today: 2");
+    expect(pushedMessage).toContain("\uD83D\uDD14 First run \u2014 baseline snapshot saved.");
+    expect(pushedMessage).toContain("\uD83D\uDCCA Total Clients Today: 2");
 
     const rows = getByDate(db, "2026-04-26");
     expect(rows).toHaveLength(2);
   });
 
-  test("idempotent — second run for same date skips insert", async () => {
+  test("idempotent \u2014 second run for same date skips insert", async () => {
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
     seedFromEnv(db, "Utest001");
@@ -283,7 +323,7 @@ describe("runDailyClientReport", () => {
     });
 
     expect(fetchCount).toBe(1);
-    expect(pushedMessage).toContain("🔔 First run — baseline snapshot saved.");
+    expect(pushedMessage).toContain("\uD83D\uDD14 First run \u2014 baseline snapshot saved.");
   });
 
   test("second day sends no-change message when clients unchanged", async () => {
@@ -301,8 +341,67 @@ describe("runDailyClientReport", () => {
     const day2 = new Date("2026-04-26T22:00:00.000Z");
     await runDailyClientReport({ now: day2, db, fetchAllClientsFn: mockFetchAll, pushToAllFn: mockPushAll });
 
-    expect(messages[1]).toContain("✅ No changes detected.");
-    expect(messages[1]).toContain("📊 Total Clients Today: 2");
+    expect(messages[1]).toContain("\u2705 No changes detected.");
+    expect(messages[1]).toContain("\uD83D\uDCCA Total Clients Today: 2");
+  });
+
+  test("second day detects added and missing clients via SQL diff", async () => {
+    const db = new Database(":memory:", { strict: true });
+    initSqlite(db);
+    seedFromEnv(db, "Utest001");
+
+    const day1Clients: HFMClientsPerformanceResponse = {
+      clients: [
+        { ...mockClientsResponse.clients[0]! },
+        { ...mockClientsResponse.clients[1]!, full_name: "To Be Removed" },
+      ],
+      totals: mockClientsResponse.totals,
+    };
+
+    const day2Clients: HFMClientsPerformanceResponse = {
+      clients: [
+        { ...mockClientsResponse.clients[0]!, full_name: "Still Here" },
+        {
+          client_id: 99999,
+          account_id: 11111,
+          activity_status: "active",
+          trades: 0,
+          volume: 0,
+          account_type: "Standard",
+          deposits: 300,
+          account_currency: "USD",
+          equity: 300,
+          archived: null,
+          subaffiliate: 0,
+          account_regdate: "2026-04-26T00:00:00Z",
+          status: "approved",
+          full_name: "Brand New Client",
+        },
+      ],
+      totals: mockClientsResponse.totals,
+    };
+
+    const messages: string[] = [];
+    const mockPushAll = async (_uids: string[], text: string) => { messages.push(text); };
+
+    await runDailyClientReport({
+      now: new Date("2026-04-25T22:00:00.000Z"),
+      db,
+      fetchAllClientsFn: async () => ({ ok: true as const, data: day1Clients }),
+      pushToAllFn: mockPushAll,
+    });
+
+    await runDailyClientReport({
+      now: new Date("2026-04-26T22:00:00.000Z"),
+      db,
+      fetchAllClientsFn: async () => ({ ok: true as const, data: day2Clients }),
+      pushToAllFn: mockPushAll,
+    });
+
+    expect(messages[1]).toContain("\u2705 New Clients (1)");
+    expect(messages[1]).toContain("Brand New Client");
+    expect(messages[1]).toContain("\u274C Missing Clients (1)");
+    expect(messages[1]).toContain("To Be Removed");
   });
 
   test("purges old snapshots after insert", async () => {

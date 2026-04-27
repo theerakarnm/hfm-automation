@@ -7,6 +7,8 @@ import type {
   HFMPerformanceData,
 } from "../types/hfm.types";
 
+const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
+
 export function extractWalletNumber(walletId: string): number | null {
   const numericPart = walletId.replace(/^WL-/i, "");
   const num = Number(numericPart);
@@ -32,16 +34,15 @@ export function checkConditions(
 
   const matchAll = underTargetWallet && depositThresholdMet;
 
-  console.log({
-    targetWallet,
-    walletNum,
-    underTargetWallet,
-    depositThreshold,
-    depositThresholdMet,
-    matchAll
-  });
-
   return { underTargetWallet, depositThresholdMet, matchAll };
+}
+
+async function readJsonResponse<T>(res: Response): Promise<T> {
+  const contentLength = res.headers.get("content-length");
+  if (contentLength && Number(contentLength) > MAX_RESPONSE_BYTES) {
+    throw new Error(`Response too large: ${contentLength} bytes`);
+  }
+  return res.json() as Promise<T>;
 }
 
 export async function fetchPerformance(
@@ -79,7 +80,7 @@ export async function fetchPerformance(
       return { ok: false, reason: "server_error" };
     }
 
-    const body = (await res.json()) as HFMClientsPerformanceResponse;
+    const body = await readJsonResponse<HFMClientsPerformanceResponse>(res);
     const clients = body?.clients;
     if (!Array.isArray(clients) || clients.length === 0) {
       return { ok: false, reason: "not_found" };
@@ -119,7 +120,7 @@ export async function fetchAllClients(timeoutMs = 10_000): Promise<HFMAllClients
       return { ok: false, reason: "server_error" };
     }
 
-    const body = (await res.json()) as HFMClientsPerformanceResponse;
+    const body = await readJsonResponse<HFMClientsPerformanceResponse>(res);
     if (!Array.isArray(body.clients) || body.totals == null) {
       return { ok: false, reason: "server_error" };
     }

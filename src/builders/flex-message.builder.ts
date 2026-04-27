@@ -101,6 +101,19 @@ const getMatchAllMeta = (
   };
 };
 
+const getFailedConditionsText = (
+  conditions: ConditionCheck
+): string[] => {
+  const failed: string[] = [];
+  if (!conditions.underTargetWallet) {
+    failed.push("Wallet does not match target");
+  }
+  if (!conditions.depositThresholdMet) {
+    failed.push("Deposit below threshold");
+  }
+  return failed;
+};
+
 const labelText = (text: string): object => ({
   type: "text",
   text,
@@ -251,6 +264,25 @@ export function buildTradingCard(
           color: matchAllBadge.color,
           backgroundColor: matchAllBadge.backgroundColor,
         }),
+        ...(!conditions.matchAll
+          ? [
+              {
+                type: "box",
+                layout: "vertical" as const,
+                spacing: "xs" as const,
+                backgroundColor: "#FEF2F2",
+                cornerRadius: "8px",
+                paddingAll: "10px",
+                contents: getFailedConditionsText(conditions).map((msg) => ({
+                  type: "text",
+                  text: `\u2022 ${msg}`,
+                  size: "xs",
+                  color: "#DC2626",
+                  wrap: true,
+                })),
+              } as object,
+            ]
+          : []),
         { type: "separator", color: colors.border },
         {
           type: "box",

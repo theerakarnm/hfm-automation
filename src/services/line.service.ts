@@ -52,3 +52,12 @@ export const pushFlex = (
   altText: string,
   contents: object
 ) => pushMessage(userId, { type: "flex", altText, contents });
+
+export async function pushToAll(uids: string[], text: string): Promise<void> {
+  for (let i = 0; i < uids.length; i++) {
+    await pushText(uids[i]!, text);
+    if (i < uids.length - 1) {
+      await Bun.sleep(200);
+    }
+  }
+}

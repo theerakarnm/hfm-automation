@@ -16,6 +16,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "croner": "^10.0.1",
     "dayjs": "^1.11.20",
     "hono": "^4.12.15"
   }

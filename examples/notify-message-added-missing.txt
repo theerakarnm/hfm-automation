@@ -1,0 +1,19 @@
+📅 Daily Client Report — 26/04/2026
+
+✅ New Clients (2)
+━━━━━━━━━━━━━━━━━━━━
+• Malee Srisuk
+  Client ID : 10024
+  Account ID: 99001234
+
+• Preecha Wongsuk
+  Client ID : 10031
+  Account ID: 88123456
+
+❌ Missing Clients (1)
+━━━━━━━━━━━━━━━━━━━━
+• Somchai Jaidee
+  Client ID : 10023
+  Account ID: 78451293
+
+📊 Total Clients Today: 45

@@ -1,5 +1,5 @@
 import { test, expect, describe, afterEach } from "bun:test";
-import { fetchPerformance, extractWalletNumber, checkConditions } from "../src/services/hfm.service";
+import { fetchPerformance, extractWalletNumber, checkConditions, fetchAllClients } from "../src/services/hfm.service";
 import type { HFMClientsPerformanceResponse } from "../src/types/hfm.types";
 
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -191,5 +191,68 @@ describe("checkConditions", () => {
     const result = checkConditions(baseData, "WL-98241376");
     expect(result.underTargetWallet).toBe(false);
     expect(result.matchAll).toBe(false);
+  });
+});
+
+describe("fetchAllClients", () => {
+  afterEach(() => {
+    globalThis.fetch = ORIGINAL_FETCH;
+  });
+
+  test("fetchAllClients calls client-performance with no query params", async () => {
+    let calledUrl = "";
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      calledUrl = String(url);
+      return new Response(JSON.stringify(mockHfmResponse), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof globalThis.fetch;
+
+    const result = await fetchAllClients();
+    expect(result.ok).toBe(true);
+    expect(calledUrl).toBe("https://api.hfaffiliates.com/api/performance/client-performance");
+    expect(calledUrl.includes("?")).toBe(false);
+  });
+
+  test("fetchAllClients returns data with clients and totals", async () => {
+    globalThis.fetch = mockFetch(200, mockHfmResponse);
+    const result = await fetchAllClients();
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.clients).toHaveLength(1);
+      expect(result.data.totals).toBeDefined();
+    }
+  });
+
+  test("fetchAllClients timeout returns timeout", async () => {
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+      await new Promise((_resolve, reject) => {
+        (init as RequestInit)?.signal?.addEventListener("abort", () => {
+          const err = new Error("aborted");
+          err.name = "AbortError";
+          reject(err);
+        });
+      });
+      throw new Error("unreachable");
+    }) as unknown as typeof globalThis.fetch;
+
+    const result = await fetchAllClients(5);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("timeout");
+  });
+
+  test("fetchAllClients server error returns server_error", async () => {
+    globalThis.fetch = mockFetch(500, { detail: "Internal error" });
+    const result = await fetchAllClients();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("server_error");
+  });
+
+  test("fetchAllClients invalid body returns server_error", async () => {
+    globalThis.fetch = mockFetch(200, { not_clients: true });
+    const result = await fetchAllClients();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("server_error");
   });
 });

@@ -48,3 +48,67 @@ describe("isWhitelisted", () => {
     process.env.LINE_WHITELIST_UIDS = original;
   });
 });
+
+describe("LINE_WHITELIST_ENABLED feature flag", () => {
+  test("flag=false bypasses whitelist and allows any UID", () => {
+    const origFlag = process.env.LINE_WHITELIST_ENABLED;
+    const origUids = process.env.LINE_WHITELIST_UIDS;
+    process.env.LINE_WHITELIST_ENABLED = "false";
+    process.env.LINE_WHITELIST_UIDS = "Uallowed1,Uallowed2";
+    expect(isWhitelisted("Ustranger")).toBe(true);
+    process.env.LINE_WHITELIST_ENABLED = origFlag;
+    process.env.LINE_WHITELIST_UIDS = origUids;
+  });
+
+  test("flag=0 bypasses whitelist", () => {
+    const origFlag = process.env.LINE_WHITELIST_ENABLED;
+    const origUids = process.env.LINE_WHITELIST_UIDS;
+    process.env.LINE_WHITELIST_ENABLED = "0";
+    process.env.LINE_WHITELIST_UIDS = "Uallowed1";
+    expect(isWhitelisted("Ustranger")).toBe(true);
+    process.env.LINE_WHITELIST_ENABLED = origFlag;
+    process.env.LINE_WHITELIST_UIDS = origUids;
+  });
+
+  test("flag=off bypasses whitelist", () => {
+    const origFlag = process.env.LINE_WHITELIST_ENABLED;
+    const origUids = process.env.LINE_WHITELIST_UIDS;
+    process.env.LINE_WHITELIST_ENABLED = "off";
+    process.env.LINE_WHITELIST_UIDS = "Uallowed1";
+    expect(isWhitelisted("Ustranger")).toBe(true);
+    process.env.LINE_WHITELIST_ENABLED = origFlag;
+    process.env.LINE_WHITELIST_UIDS = origUids;
+  });
+
+  test("flag=no bypasses whitelist", () => {
+    const origFlag = process.env.LINE_WHITELIST_ENABLED;
+    const origUids = process.env.LINE_WHITELIST_UIDS;
+    process.env.LINE_WHITELIST_ENABLED = "no";
+    process.env.LINE_WHITELIST_UIDS = "Uallowed1";
+    expect(isWhitelisted("Ustranger")).toBe(true);
+    process.env.LINE_WHITELIST_ENABLED = origFlag;
+    process.env.LINE_WHITELIST_UIDS = origUids;
+  });
+
+  test("flag=true still enforces whitelist", () => {
+    const origFlag = process.env.LINE_WHITELIST_ENABLED;
+    const origUids = process.env.LINE_WHITELIST_UIDS;
+    process.env.LINE_WHITELIST_ENABLED = "true";
+    process.env.LINE_WHITELIST_UIDS = "Uallowed1,Uallowed2";
+    expect(isWhitelisted("Uallowed1")).toBe(true);
+    expect(isWhitelisted("Ustranger")).toBe(false);
+    process.env.LINE_WHITELIST_ENABLED = origFlag;
+    process.env.LINE_WHITELIST_UIDS = origUids;
+  });
+
+  test("flag unset still enforces whitelist", () => {
+    const origFlag = process.env.LINE_WHITELIST_ENABLED;
+    const origUids = process.env.LINE_WHITELIST_UIDS;
+    delete process.env.LINE_WHITELIST_ENABLED;
+    process.env.LINE_WHITELIST_UIDS = "Uallowed1";
+    expect(isWhitelisted("Uallowed1")).toBe(true);
+    expect(isWhitelisted("Ustranger")).toBe(false);
+    process.env.LINE_WHITELIST_ENABLED = origFlag;
+    process.env.LINE_WHITELIST_UIDS = origUids;
+  });
+});

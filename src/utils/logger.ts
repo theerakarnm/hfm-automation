@@ -1,35 +1,54 @@
-import dayjs from "dayjs";
-import { mkdirSync, appendFileSync, readdirSync, readFileSync, existsSync } from "node:fs";
+import pino from "pino";
 import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 
 const LOG_DIR = "logs";
 
-function ensureLogDir(): void {
-  mkdirSync(LOG_DIR, { recursive: true });
-}
+const isTest = process.env.NODE_ENV === "test";
 
-function logFilePath(date: string): string {
-  return join(LOG_DIR, `${date}.log`);
-}
+const options: pino.LoggerOptions = {
+  level: process.env.LOG_LEVEL ?? "info",
+};
+
+export const logger = isTest
+  ? pino(options)
+  : pino(
+      options,
+      pino.transport({
+        targets: [
+          {
+            target: "pino-pretty",
+            level: options.level,
+          },
+          {
+            target: "pino-roll",
+            level: options.level,
+            options: {
+              file: join(LOG_DIR, "log"),
+              frequency: "daily",
+              dateFormat: "ddMMyyyy",
+              mkdir: true,
+              extension: ".log",
+            },
+          },
+        ],
+      })
+    );
 
 export function logError(context: string, error: unknown): void {
-  ensureLogDir();
-  const now = dayjs();
-  const date = now.format("DDMMYYYY");
-  const timestamp = now.format("YYYY-MM-DD HH:mm:ss");
-
   const message =
     error instanceof Error
       ? `${error.message} | ${error.stack ?? ""}`
       : String(error);
-
-  const line = `[${timestamp}] [ERROR] [${context}] ${message}\n`;
-  appendFileSync(logFilePath(date), line);
+  logger.error({ context }, message);
 }
 
 export function readLog(date: string): string | null {
-  const path = logFilePath(date);
-  if (!existsSync(path)) return null;
+  const files = readdirSync(LOG_DIR).filter(
+    (f) => f.startsWith(`log.${date}`) && f.endsWith(".log")
+  );
+  if (files.length === 0) return null;
+  const path = join(LOG_DIR, files[files.length - 1]!);
   try {
     return readFileSync(path, "utf-8");
   } catch {
@@ -49,28 +68,43 @@ export function parseLog(content: string): LogEntry[] {
     .split("\n")
     .filter((line) => line.trim())
     .map((line) => {
-      const match = line.match(
-        /^\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+(.+)$/
-      );
-      if (!match) return null;
-      return {
-        timestamp: match[1]!,
-        level: match[2]!,
-        context: match[3]!,
-        message: match[4]!,
-      };
+      try {
+        const obj = JSON.parse(line);
+        return {
+          timestamp: new Date(obj.time).toISOString().replace("T", " ").replace("Z", ""),
+          level: Object.keys(pino.levels.labels).includes(String(obj.level))
+            ? pino.levels.labels[obj.level as keyof typeof pino.levels.labels]!
+            : String(obj.level),
+          context: obj.context ?? "",
+          message: obj.msg ?? "",
+        };
+      } catch {
+        const match = line.match(
+          /^\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+(.+)$/
+        );
+        if (!match) return null;
+        return {
+          timestamp: match[1]!,
+          level: match[2]!,
+          context: match[3]!,
+          message: match[4]!,
+        };
+      }
     })
     .filter((e): e is LogEntry => e !== null);
 }
 
 export function listLogDates(): string[] {
-  ensureLogDir();
+  if (!existsSync(LOG_DIR)) return [];
   try {
-    return readdirSync(LOG_DIR)
-      .filter((f) => f.endsWith(".log"))
-      .map((f) => f.replace(".log", ""))
-      .sort()
-      .reverse();
+    const dates = new Set<string>();
+    readdirSync(LOG_DIR)
+      .filter((f) => f.startsWith("log.") && f.endsWith(".log"))
+      .forEach((f) => {
+        const match = f.match(/^log\.(\d{8})\./);
+        if (match) dates.add(match[1]!);
+      });
+    return [...dates].sort().reverse();
   } catch {
     return [];
   }

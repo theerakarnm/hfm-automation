@@ -32,6 +32,14 @@ CREATE TABLE IF NOT EXISTS daily_report_notifications (
   snapshot_date TEXT PRIMARY KEY,
   sent_at       TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS line_users (
+  line_uid        TEXT PRIMARY KEY,
+  first_seen_at   TEXT DEFAULT (datetime('now')),
+  last_seen_at    TEXT DEFAULT (datetime('now')),
+  request_count   INTEGER DEFAULT 1,
+  last_event_type TEXT
+);
 `;
 
 let _db: Database | null = null;

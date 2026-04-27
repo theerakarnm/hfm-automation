@@ -352,12 +352,17 @@ describe("runDailyClientReport", () => {
     let pushCalled = false;
     const mockPushAll = async () => { pushCalled = true; };
 
+    const originalNotifyUids = process.env.LINE_NOTIFY_UIDS;
+    process.env.LINE_NOTIFY_UIDS = "";
+
     await runDailyClientReport({
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchAllClientsFn: mockFetchAll,
       pushToAllFn: mockPushAll,
     });
+
+    process.env.LINE_NOTIFY_UIDS = originalNotifyUids;
 
     expect(pushCalled).toBe(false);
     const rows = getByDate(db, "2026-04-26");

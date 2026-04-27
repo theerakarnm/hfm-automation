@@ -6,6 +6,8 @@ import { buildTradingCard } from "../builders/flex-message.builder";
 import { isTextMessageEvent } from "../types/line.types";
 import { isWhitelisted } from "../utils/whitelist";
 import { logError } from "../utils/logger";
+import { getDatabase, initSqlite } from "../services/sqlite.service";
+import { recordLineUserRequest } from "../repositories/line-user.repository";
 import type { WebhookBody, TextMessageEvent } from "../types/line.types";
 
 const webhook = new Hono();
@@ -26,7 +28,14 @@ webhook.post("/", async (c) => {
 
   const body = JSON.parse(rawBody) as WebhookBody;
 
+  const db = getDatabase();
+  initSqlite(db);
+
   for (const event of body.events ?? []) {
+    const uid = event.source?.userId;
+    if (uid) {
+      recordLineUserRequest(db, uid, event.type);
+    }
     if (isTextMessageEvent(event)) {
       processTextEvent(event).catch((err) => logError("webhook", err));
     }

@@ -17,6 +17,7 @@ test("initSqlite creates both tables and indexes", () => {
   expect(tableNames).toContain("client_snapshots");
   expect(tableNames).toContain("notify_recipients");
   expect(tableNames).toContain("daily_report_notifications");
+  expect(tableNames).toContain("line_users");
 
   const indexes = db
     .query("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%' ORDER BY name")

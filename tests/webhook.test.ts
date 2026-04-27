@@ -42,6 +42,8 @@ describe("webhook", () => {
 
   afterEach(() => {
     globalThis.fetch = ORIGINAL_FETCH;
+    delete process.env.LINE_WHITELIST_UIDS;
+    delete process.env.LINE_WHITELIST_ENABLED;
   });
 
   test("invalid signature returns 400", async () => {

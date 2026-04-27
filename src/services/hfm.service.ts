@@ -15,10 +15,15 @@ export function extractWalletNumber(walletId: string): number | null {
 
 export function checkConditions(
   data: HFMPerformanceData,
-  walletId: string
 ): ConditionCheck {
   const targetWallet = Number(process.env.TARGET_WALLET);
-  const walletNum = extractWalletNumber(walletId);
+
+  if (!data.subaffiliate) {
+    logError("hfm-service", `No subaffiliate found for client ${data.client_id}`);
+    return { underTargetWallet: false, depositThresholdMet: false, matchAll: false };
+  }
+
+  const walletNum = extractWalletNumber(data.subaffiliate.toString());
   const underTargetWallet =
     !Number.isNaN(targetWallet) && walletNum === targetWallet;
 
@@ -26,6 +31,15 @@ export function checkConditions(
   const depositThresholdMet = data.deposits >= depositThreshold;
 
   const matchAll = underTargetWallet && depositThresholdMet;
+
+  console.log({
+    targetWallet,
+    walletNum,
+    underTargetWallet,
+    depositThreshold,
+    depositThresholdMet,
+    matchAll
+  });
 
   return { underTargetWallet, depositThresholdMet, matchAll };
 }

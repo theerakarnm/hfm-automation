@@ -152,7 +152,7 @@ describe("checkConditions", () => {
 
   test("match all when wallet matches target and deposits >= 200 USD", () => {
     process.env.TARGET_WALLET = "98241376";
-    const result = checkConditions(baseData, "WL-98241376");
+    const result = checkConditions(baseData);
     expect(result.underTargetWallet).toBe(true);
     expect(result.depositThresholdMet).toBe(true);
     expect(result.matchAll).toBe(true);
@@ -160,7 +160,7 @@ describe("checkConditions", () => {
 
   test("not match when wallet does not match target", () => {
     process.env.TARGET_WALLET = "30506525";
-    const result = checkConditions(baseData, "WL-98241376");
+    const result = checkConditions(baseData);
     expect(result.underTargetWallet).toBe(false);
     expect(result.matchAll).toBe(false);
   });
@@ -168,7 +168,7 @@ describe("checkConditions", () => {
   test("not match when deposits below 200 USD", () => {
     process.env.TARGET_WALLET = "98241376";
     const lowDeposit = { ...baseData, deposits: 150 };
-    const result = checkConditions(lowDeposit, "WL-98241376");
+    const result = checkConditions(lowDeposit);
     expect(result.depositThresholdMet).toBe(false);
     expect(result.matchAll).toBe(false);
   });
@@ -176,19 +176,19 @@ describe("checkConditions", () => {
   test("USC deposits normalized by dividing by 100", () => {
     process.env.TARGET_WALLET = "98241376";
     const uscData = { ...baseData, deposits: 200_00, account_currency: "USC" };
-    const result = checkConditions(uscData, "WL-98241376");
+    const result = checkConditions(uscData);
     expect(result.depositThresholdMet).toBe(true);
   });
 
   test("USC deposits below threshold after normalization", () => {
     process.env.TARGET_WALLET = "98241376";
     const uscData = { ...baseData, deposits: 199_99, account_currency: "USC" };
-    const result = checkConditions(uscData, "WL-98241376");
+    const result = checkConditions(uscData);
     expect(result.depositThresholdMet).toBe(false);
   });
 
   test("not match when TARGET_WALLET is not set", () => {
-    const result = checkConditions(baseData, "WL-98241376");
+    const result = checkConditions(baseData);
     expect(result.underTargetWallet).toBe(false);
     expect(result.matchAll).toBe(false);
   });

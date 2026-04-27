@@ -65,7 +65,7 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
 
   if (result.ok) {
     const bubbles = result.data.map((clientData) => {
-      const conditions = checkConditions(clientData, walletId);
+      const conditions = checkConditions(clientData);
       return buildTradingCard(clientData, walletId, conditions);
     });
 

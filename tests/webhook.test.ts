@@ -272,6 +272,136 @@ describe("webhook", () => {
     );
     expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/push");
   });
+
+  test("account lookup sends accounts= query param", async () => {
+    const { app } = await importWebhook();
+    const body = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "message",
+          message: { type: "text", id: "456", text: "accounts=123456789" },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "token456",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ],
+    });
+    const sig = computeSig(body, SECRET);
+
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      fetchCalls.push({
+        url,
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+
+      if (url.endsWith("/v2/bot/chat/loading/start")) {
+        return new Response("{}", { status: 202 });
+      }
+
+      if (url.includes("/api/performance/client-performance")) {
+        return new Response(
+          JSON.stringify({
+            clients: [
+              {
+                client_id: 45219,
+                account_id: 123456789,
+                activity_status: "active",
+                trades: 10,
+                volume: 1.5,
+                account_type: "Standard",
+                balance: 5000,
+                account_currency: "USD",
+                equity: 5100,
+                archived: false,
+                subaffiliate: 98241376,
+                account_regdate: "2024-06-01T00:00:00Z",
+                status: "approved",
+              },
+            ],
+            totals: {},
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const res = app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-line-signature": sig,
+        },
+        body,
+      })
+    );
+    const response = await res;
+    expect(response.status).toBe(200);
+
+    await waitFor(() => fetchCalls.length >= 3);
+    expect(fetchCalls[1]?.url).toContain("accounts=123456789");
+    expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/push");
+    const pushBody = JSON.parse(fetchCalls[2]?.body ?? "{}");
+    expect(pushBody.messages[0].altText).toContain("Account 123456789");
+  });
+
+  test("invalid input returns format error message", async () => {
+    const { app } = await importWebhook();
+    const body = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "message",
+          message: { type: "text", id: "789", text: "hello" },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "token789",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ],
+    });
+    const sig = computeSig(body, SECRET);
+
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      fetchCalls.push({
+        url,
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const res = app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-line-signature": sig,
+        },
+        body,
+      })
+    );
+    const response = await res;
+    expect(response.status).toBe(200);
+
+    await waitFor(() => fetchCalls.length >= 1);
+    expect(fetchCalls[0]?.url).toBe("https://api.line.me/v2/bot/message/push");
+    const pushBody = JSON.parse(fetchCalls[0]?.body ?? "{}");
+    expect(pushBody.messages[0].text).toContain("Wallet ID 8");
+  });
 });
 
 async function importWebhook() {

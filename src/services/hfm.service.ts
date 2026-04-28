@@ -21,17 +21,17 @@ export function parsePerformanceLookup(input: string): PerformanceLookup | null 
 
   const accountsMatch = trimmed.match(/^accounts=(\d+)$/i);
   if (accountsMatch) {
-    return { kind: "account", id: Number(accountsMatch[1]), label: accountsMatch[1] };
+    return { kind: "account", id: Number(accountsMatch[1]!), label: accountsMatch[1]! };
   }
 
   const accPrefixMatch = trimmed.match(/^ACC-(\d+)$/i);
   if (accPrefixMatch) {
-    return { kind: "account", id: Number(accPrefixMatch[1]), label: accPrefixMatch[1] };
+    return { kind: "account", id: Number(accPrefixMatch[1]!), label: accPrefixMatch[1]! };
   }
 
   const wlPrefixMatch = trimmed.match(/^WL-(\d+)$/i);
   if (wlPrefixMatch) {
-    return { kind: "wallet", id: Number(wlPrefixMatch[1]), label: `WL-${wlPrefixMatch[1]}` };
+    return { kind: "wallet", id: Number(wlPrefixMatch[1]!), label: `WL-${wlPrefixMatch[1]!}` };
   }
 
   if (/^\d+$/.test(trimmed)) {

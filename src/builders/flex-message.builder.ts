@@ -200,6 +200,8 @@ export function buildTradingCard(
   const accountStatus = getAccountStatusMeta(data.status);
   const matchAllBadge = getMatchAllMeta(conditions.matchAll);
   const searchLabel = lookup.kind === "wallet" ? "Wallet ID" : "Account ID";
+  const secondLabel = lookup.kind === "wallet" ? "Account ID" : "Wallet ID";
+  const secondValue = lookup.kind === "wallet" ? String(data.account_id) : String(data.client_id);
 
   return {
     type: "bubble",
@@ -246,7 +248,7 @@ export function buildTradingCard(
           spacing: "sm",
           contents: [
             infoCard(searchLabel, lookup.label),
-            infoCard("Account ID", String(data.account_id)),
+            infoCard(secondLabel, secondValue),
           ],
         },
         detailCard("Registration Date", fmtDate(data.account_regdate)),

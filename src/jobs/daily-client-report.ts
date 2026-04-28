@@ -58,7 +58,7 @@ function buildSection(title: string, totalCount: number, clients: SnapshotClient
 }
 
 function clientBlock(c: SnapshotClient): string {
-  return `\u2022 ${c.full_name}\n  Client ID : ${c.client_id}\n  Account ID: ${c.account_id}\n\n`;
+  return `\u2022 ${c.full_name}\n  Wallet ID : ${c.client_id}\n  Account ID: ${c.account_id}\n\n`;
 }
 
 function truncateReport(

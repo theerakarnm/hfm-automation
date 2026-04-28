@@ -5,6 +5,7 @@ import type {
   HFMAllClientsResult,
   HFMClientsPerformanceResponse,
   HFMPerformanceData,
+  PerformanceLookup,
 } from "../types/hfm.types";
 
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
@@ -13,6 +14,37 @@ export function extractWalletNumber(walletId: string): number | null {
   const numericPart = walletId.replace(/^WL-/i, "");
   const num = Number(numericPart);
   return Number.isNaN(num) ? null : num;
+}
+
+export function parsePerformanceLookup(input: string): PerformanceLookup | null {
+  const trimmed = input.trim();
+
+  const accountsMatch = trimmed.match(/^accounts=(\d+)$/i);
+  if (accountsMatch) {
+    return { kind: "account", id: Number(accountsMatch[1]), label: accountsMatch[1] };
+  }
+
+  const accPrefixMatch = trimmed.match(/^ACC-(\d+)$/i);
+  if (accPrefixMatch) {
+    return { kind: "account", id: Number(accPrefixMatch[1]), label: accPrefixMatch[1] };
+  }
+
+  const wlPrefixMatch = trimmed.match(/^WL-(\d+)$/i);
+  if (wlPrefixMatch) {
+    return { kind: "wallet", id: Number(wlPrefixMatch[1]), label: `WL-${wlPrefixMatch[1]}` };
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    if (trimmed.length === 8) {
+      return { kind: "wallet", id: Number(trimmed), label: trimmed };
+    }
+    if (trimmed.length === 9) {
+      return { kind: "account", id: Number(trimmed), label: trimmed };
+    }
+    return null;
+  }
+
+  return null;
 }
 
 export function checkConditions(
@@ -46,25 +78,23 @@ async function readJsonResponse<T>(res: Response): Promise<T> {
 }
 
 export async function fetchPerformance(
-  walletId: string
+  lookup: PerformanceLookup
 ): Promise<HFMApiResult> {
-  const walletNum = extractWalletNumber(walletId);
-  if (walletNum === null) {
-    return { ok: false, reason: "not_found" };
-  }
+  const paramKey = lookup.kind === "wallet" ? "wallets" : "accounts";
+  const paramValue = lookup.id;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
   try {
     const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
-    const url = `${baseUrl}/api/performance/client-performance?wallets=${walletNum}`;
+    const url = `${baseUrl}/api/performance/client-performance?${paramKey}=${paramValue}`;
     const res = await fetch(url, {
       signal: controller.signal,
       headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
     });
 
     if (res.status === 404) {
-      logError("hfm-service", `Wallet not found: ${walletNum} (status 404)`);
+      logError("hfm-service", `${lookup.kind} not found: ${lookup.id} (status 404)`);
       return { ok: false, reason: "not_found" };
     }
     if (res.status >= 500) {
@@ -94,7 +124,7 @@ export async function fetchPerformance(
     return { ok: true, data };
   } catch (e: unknown) {
     if (e instanceof Error && e.name === "AbortError") {
-      logError("hfm-service", `Request timeout for wallet ${walletNum}`);
+      logError("hfm-service", `Request timeout for ${lookup.kind} ${lookup.id}`);
       return { ok: false, reason: "timeout" };
     }
     logError("hfm-service", e);

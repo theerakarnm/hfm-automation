@@ -1,5 +1,5 @@
 import { test, expect, describe, afterEach } from "bun:test";
-import { fetchPerformance, extractWalletNumber, checkConditions, fetchAllClients } from "../src/services/hfm.service";
+import { fetchPerformance, extractWalletNumber, checkConditions, fetchAllClients, parsePerformanceLookup } from "../src/services/hfm.service";
 import type { HFMClientsPerformanceResponse } from "../src/types/hfm.types";
 
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -68,7 +68,7 @@ describe("fetchPerformance", () => {
 
   test("successful response returns ok true with data array", async () => {
     globalThis.fetch = mockFetch(200, mockHfmResponse);
-    const result = await fetchPerformance("WL-98241376");
+    const result = await fetchPerformance({ kind: "wallet", id: 98241376, label: "WL-98241376" });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(Array.isArray(result.data)).toBe(true);
@@ -81,7 +81,7 @@ describe("fetchPerformance", () => {
 
   test("404 response returns not_found", async () => {
     globalThis.fetch = mockFetch(404, { detail: "Not found" });
-    const result = await fetchPerformance("WL-00000000");
+    const result = await fetchPerformance({ kind: "wallet", id: 0, label: "WL-00000000" });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("not_found");
@@ -90,7 +90,7 @@ describe("fetchPerformance", () => {
 
   test("500 response returns server_error", async () => {
     globalThis.fetch = mockFetch(500, { detail: "Internal error" });
-    const result = await fetchPerformance("WL-98241376");
+    const result = await fetchPerformance({ kind: "wallet", id: 98241376, label: "WL-98241376" });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("server_error");
@@ -99,15 +99,7 @@ describe("fetchPerformance", () => {
 
   test("empty clients array returns not_found", async () => {
     globalThis.fetch = mockFetch(200, { clients: [], totals: {} });
-    const result = await fetchPerformance("WL-00000000");
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.reason).toBe("not_found");
-    }
-  });
-
-  test("invalid wallet ID returns not_found", async () => {
-    const result = await fetchPerformance("NOT-A-WALLET");
+    const result = await fetchPerformance({ kind: "wallet", id: 0, label: "WL-00000000" });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("not_found");
@@ -116,7 +108,7 @@ describe("fetchPerformance", () => {
 
   test("401 response returns server_error", async () => {
     globalThis.fetch = mockFetch(401, { detail: "Unauthorized" });
-    const result = await fetchPerformance("WL-98241376");
+    const result = await fetchPerformance({ kind: "wallet", id: 98241376, label: "WL-98241376" });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("server_error");
@@ -133,13 +125,28 @@ describe("fetchPerformance", () => {
       totals: mockHfmResponse.totals,
     };
     globalThis.fetch = mockFetch(200, multiResponse);
-    const result = await fetchPerformance("WL-98241376");
+    const result = await fetchPerformance({ kind: "wallet", id: 98241376, label: "WL-98241376" });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.length).toBe(2);
       expect(result.data[0]!.client_id).toBe(1);
       expect(result.data[1]!.client_id).toBe(2);
     }
+  });
+
+  test("account lookup uses accounts= query param", async () => {
+    let calledUrl = "";
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      calledUrl = String(url);
+      return new Response(JSON.stringify(mockHfmResponse), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof globalThis.fetch;
+    const result = await fetchPerformance({ kind: "account", id: 123456789, label: "123456789" });
+    expect(result.ok).toBe(true);
+    expect(calledUrl).toContain("accounts=123456789");
+    expect(calledUrl).not.toContain("wallets=");
   });
 });
 
@@ -254,5 +261,58 @@ describe("fetchAllClients", () => {
     const result = await fetchAllClients();
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("server_error");
+  });
+});
+
+describe("parsePerformanceLookup", () => {
+  test("WL- prefix returns wallet lookup", () => {
+    const result = parsePerformanceLookup("WL-98241376");
+    expect(result).toEqual({ kind: "wallet", id: 98241376, label: "WL-98241376" });
+  });
+
+  test("8-digit number returns wallet lookup", () => {
+    const result = parsePerformanceLookup("98241376");
+    expect(result).toEqual({ kind: "wallet", id: 98241376, label: "98241376" });
+  });
+
+  test("9-digit number returns account lookup", () => {
+    const result = parsePerformanceLookup("123456789");
+    expect(result).toEqual({ kind: "account", id: 123456789, label: "123456789" });
+  });
+
+  test("accounts= prefix returns account lookup", () => {
+    const result = parsePerformanceLookup("accounts=123456789");
+    expect(result).toEqual({ kind: "account", id: 123456789, label: "123456789" });
+  });
+
+  test("ACC- prefix returns account lookup", () => {
+    const result = parsePerformanceLookup("ACC-123456789");
+    expect(result).toEqual({ kind: "account", id: 123456789, label: "123456789" });
+  });
+
+  test("non-numeric input returns null", () => {
+    expect(parsePerformanceLookup("abc")).toBeNull();
+  });
+
+  test("7-digit number returns null", () => {
+    expect(parsePerformanceLookup("1234567")).toBeNull();
+  });
+
+  test("10-digit number returns null", () => {
+    expect(parsePerformanceLookup("1234567890")).toBeNull();
+  });
+
+  test("empty string returns null", () => {
+    expect(parsePerformanceLookup("")).toBeNull();
+  });
+
+  test("whitespace is trimmed", () => {
+    const result = parsePerformanceLookup("  98241376  ");
+    expect(result).toEqual({ kind: "wallet", id: 98241376, label: "98241376" });
+  });
+
+  test("case-insensitive accounts= prefix", () => {
+    const result = parsePerformanceLookup("ACCOUNTS=99887766");
+    expect(result).toEqual({ kind: "account", id: 99887766, label: "99887766" });
   });
 });

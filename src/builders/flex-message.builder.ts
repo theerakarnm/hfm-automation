@@ -1,5 +1,4 @@
-import type { HFMPerformanceData } from "../types/hfm.types";
-import type { ConditionCheck } from "../types/hfm.types";
+import type { HFMPerformanceData, ConditionCheck, PerformanceLookup } from "../types/hfm.types";
 
 const fmtCurrency = (n: number, currency: string): string => {
   if (currency === "USC") {
@@ -194,12 +193,13 @@ const keyValueRow = (label: string, value: string): object => ({
 
 export function buildTradingCard(
   data: HFMPerformanceData,
-  walletId: string,
+  lookup: PerformanceLookup,
   conditions: ConditionCheck
 ): object {
   const status = getStatusMeta(data.activity_status);
   const accountStatus = getAccountStatusMeta(data.status);
   const matchAllBadge = getMatchAllMeta(conditions.matchAll);
+  const searchLabel = lookup.kind === "wallet" ? "Wallet ID" : "Account ID";
 
   return {
     type: "bubble",
@@ -245,7 +245,7 @@ export function buildTradingCard(
           layout: "horizontal",
           spacing: "sm",
           contents: [
-            infoCard("Wallet ID", walletId),
+            infoCard(searchLabel, lookup.label),
             infoCard("Account ID", String(data.account_id)),
           ],
         },

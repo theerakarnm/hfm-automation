@@ -55,3 +55,9 @@ export type HFMApiResult =
 export type HFMAllClientsResult =
   | { ok: true; data: HFMClientsPerformanceResponse }
   | { ok: false; reason: "server_error" | "timeout" };
+
+export interface PerformanceLookup {
+  kind: "wallet" | "account";
+  id: number;
+  label: string;
+}

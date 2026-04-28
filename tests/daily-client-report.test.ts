@@ -25,7 +25,7 @@ const mockTotals: HFMClientsPerformanceResponse["totals"] = {
   clients: 1,
   accounts: 1,
   volume: 0,
-  deposits: 0,
+  balance: 0,
   withdrawals: 0,
   commission: 0,
 };
@@ -112,7 +112,7 @@ describe("SQL-based diff", () => {
 
     const clientA: HFMPerformanceData = {
       client_id: 10023, account_id: 78451293, activity_status: "active",
-      trades: 0, volume: 0, account_type: "Standard", deposits: 0,
+      trades: 0, volume: 0, account_type: "Standard", balance: 0,
       account_currency: "USD", equity: 0, archived: null, subaffiliate: 0,
       account_regdate: "2024-01-15T00:00:00Z", status: "approved", full_name: "Alice",
     };
@@ -145,7 +145,7 @@ describe("SQL-based diff", () => {
 
     const client: HFMPerformanceData = {
       client_id: 10023, account_id: 78451293, activity_status: "active",
-      trades: 0, volume: 0, account_type: "Standard", deposits: 0,
+      trades: 0, volume: 0, account_type: "Standard", balance: 0,
       account_currency: "USD", equity: 0, archived: null, subaffiliate: 0,
       account_regdate: "2024-01-15T00:00:00Z", status: "approved", full_name: "Alice",
     };
@@ -164,7 +164,7 @@ describe("SQL-based diff", () => {
 
     const client: HFMPerformanceData = {
       client_id: 10023, account_id: 78451293, activity_status: "active",
-      trades: 0, volume: 0, account_type: "Standard", deposits: 0,
+      trades: 0, volume: 0, account_type: "Standard", balance: 0,
       account_currency: "USD", equity: 0, archived: null, subaffiliate: 0,
       account_regdate: "2024-01-15T00:00:00Z", status: "approved", full_name: "Alice",
     };
@@ -193,7 +193,7 @@ describe("runDailyClientReport", () => {
         trades: 24,
         volume: 3.42,
         account_type: "Standard",
-        deposits: 12450.8,
+        balance: 12450.8,
         account_currency: "USD",
         equity: 12998.35,
         archived: null,
@@ -209,7 +209,7 @@ describe("runDailyClientReport", () => {
         trades: 0,
         volume: 0,
         account_type: "Standard",
-        deposits: 500,
+        balance: 500,
         account_currency: "USD",
         equity: 500,
         archived: null,
@@ -223,7 +223,7 @@ describe("runDailyClientReport", () => {
       clients: 2,
       accounts: 2,
       volume: 3.42,
-      deposits: 12950.8,
+      balance: 12950.8,
       withdrawals: 0,
       commission: 34.2,
     },
@@ -368,7 +368,7 @@ describe("runDailyClientReport", () => {
           trades: 0,
           volume: 0,
           account_type: "Standard",
-          deposits: 300,
+          balance: 300,
           account_currency: "USD",
           equity: 300,
           archived: null,
@@ -410,7 +410,7 @@ describe("runDailyClientReport", () => {
     seedFromEnv(db, "Utest001");
 
     const mockFetchAll = async () => ({ ok: true as const, data: mockClientsResponse });
-    const mockPushAll = async () => {};
+    const mockPushAll = async () => { };
 
     const oldDate = new Date("2026-01-01T22:00:00.000Z");
     await runDailyClientReport({ now: oldDate, db, fetchAllClientsFn: mockFetchAll, pushToAllFn: mockPushAll });
@@ -431,7 +431,7 @@ describe("runDailyClientReport", () => {
     seedFromEnv(db, "Utest001");
 
     const mockFetchAll = async () => ({ ok: false as const, reason: "server_error" as const });
-    const mockPushAll = async () => {};
+    const mockPushAll = async () => { };
 
     await expect(
       runDailyClientReport({

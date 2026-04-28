@@ -6,7 +6,7 @@ export interface HFMPerformanceData {
   trades: number;
   volume: number;
   account_type: string;
-  deposits: number;
+  deposits?: number;
   withdrawals?: number;
   account_currency: string;
   equity: number;
@@ -27,6 +27,7 @@ export interface HFMPerformanceData {
   paid_rebates?: number;
   rejected_rebates?: number;
   tier?: number;
+  balance: number;
 }
 
 export interface ConditionCheck {
@@ -41,7 +42,7 @@ export interface HFMClientsPerformanceResponse {
     clients: number | string;
     accounts: number | string;
     volume: number | string;
-    deposits: number | string;
+    balance: number | string;
     withdrawals: number | string;
     commission: number | string;
   };

@@ -9,7 +9,7 @@ const mockData: HFMPerformanceData = {
   trades: 24,
   volume: 3.42,
   account_type: "Standard",
-  deposits: 12450.8,
+  balance: 12450.8,
   account_currency: "USD",
   equity: 12998.35,
   archived: false,
@@ -119,7 +119,7 @@ describe("buildTradingCard", () => {
   test("THB currency formatting", () => {
     const thbData: HFMPerformanceData = {
       ...mockData,
-      deposits: 450000,
+      balance: 450000,
       equity: 450500,
       account_currency: "THB",
     };
@@ -133,7 +133,7 @@ describe("buildTradingCard", () => {
   test("USC currency shows raw value with USC label", () => {
     const uscData: HFMPerformanceData = {
       ...mockData,
-      deposits: 1245080,
+      balance: 1245080,
       equity: 1299835,
       account_currency: "USC",
     };

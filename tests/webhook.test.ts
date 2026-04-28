@@ -224,7 +224,7 @@ describe("webhook", () => {
                 trades: 24,
                 volume: 3.42,
                 account_type: "Standard",
-                deposits: 12450.8,
+                balance: 12450.8,
                 account_currency: "USD",
                 equity: 12998.35,
                 archived: false,

@@ -30,7 +30,7 @@ export function checkConditions(
     !Number.isNaN(targetWallet) && walletNum === targetWallet;
 
   const depositThreshold = data.account_currency === "USC" ? 200_00 : 200;
-  const depositThresholdMet = data.deposits >= depositThreshold;
+  const depositThresholdMet = data.balance >= depositThreshold;
 
   const matchAll = underTargetWallet && depositThresholdMet;
 

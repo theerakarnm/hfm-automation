@@ -266,22 +266,22 @@ export function buildTradingCard(
         }),
         ...(!conditions.matchAll
           ? [
-              {
-                type: "box",
-                layout: "vertical" as const,
-                spacing: "xs" as const,
-                backgroundColor: "#FEF2F2",
-                cornerRadius: "8px",
-                paddingAll: "10px",
-                contents: getFailedConditionsText(conditions).map((msg) => ({
-                  type: "text",
-                  text: `\u2022 ${msg}`,
-                  size: "xs",
-                  color: "#DC2626",
-                  wrap: true,
-                })),
-              } as object,
-            ]
+            {
+              type: "box",
+              layout: "vertical" as const,
+              spacing: "xs" as const,
+              backgroundColor: "#FEF2F2",
+              cornerRadius: "8px",
+              paddingAll: "10px",
+              contents: getFailedConditionsText(conditions).map((msg) => ({
+                type: "text",
+                text: `\u2022 ${msg}`,
+                size: "xs",
+                color: "#DC2626",
+                wrap: true,
+              })),
+            } as object,
+          ]
           : []),
         { type: "separator", color: colors.border },
         {
@@ -300,7 +300,7 @@ export function buildTradingCard(
           contents: [
             metricCard(
               "Balance",
-              fmtCurrency(data.deposits, data.account_currency)
+              fmtCurrency(data.balance, data.account_currency)
             ),
             metricCard(
               "Equity",

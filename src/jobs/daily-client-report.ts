@@ -138,7 +138,7 @@ function totalsFromCount(count: number): HFMClientsPerformanceResponse["totals"]
     clients: count,
     accounts: count,
     volume: 0,
-    deposits: 0,
+    balance: 0,
     withdrawals: 0,
     commission: 0,
   };

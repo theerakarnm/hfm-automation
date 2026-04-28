@@ -13,7 +13,7 @@ const mockHfmResponse: HFMClientsPerformanceResponse = {
       trades: 24,
       volume: 3.42,
       account_type: "Standard",
-      deposits: 12450.8,
+      balance: 12450.8,
       account_currency: "USD",
       equity: 12998.35,
       archived: false,
@@ -26,7 +26,7 @@ const mockHfmResponse: HFMClientsPerformanceResponse = {
     clients: 1,
     accounts: 1,
     volume: 3.42,
-    deposits: 12450.8,
+    balance: 12450.8,
     withdrawals: 0,
     commission: 34.2,
   },
@@ -150,7 +150,7 @@ describe("checkConditions", () => {
     delete process.env.TARGET_WALLET;
   });
 
-  test("match all when wallet matches target and deposits >= 200 USD", () => {
+  test("match all when wallet matches target and balance >= 200 USD", () => {
     process.env.TARGET_WALLET = "98241376";
     const result = checkConditions(baseData);
     expect(result.underTargetWallet).toBe(true);
@@ -165,24 +165,24 @@ describe("checkConditions", () => {
     expect(result.matchAll).toBe(false);
   });
 
-  test("not match when deposits below 200 USD", () => {
+  test("not match when balance below 200 USD", () => {
     process.env.TARGET_WALLET = "98241376";
-    const lowDeposit = { ...baseData, deposits: 150 };
+    const lowDeposit = { ...baseData, balance: 150 };
     const result = checkConditions(lowDeposit);
     expect(result.depositThresholdMet).toBe(false);
     expect(result.matchAll).toBe(false);
   });
 
-  test("USC deposits normalized by dividing by 100", () => {
+  test("USC balance normalized by dividing by 100", () => {
     process.env.TARGET_WALLET = "98241376";
-    const uscData = { ...baseData, deposits: 200_00, account_currency: "USC" };
+    const uscData = { ...baseData, balance: 200_00, account_currency: "USC" };
     const result = checkConditions(uscData);
     expect(result.depositThresholdMet).toBe(true);
   });
 
-  test("USC deposits below threshold after normalization", () => {
+  test("USC balance below threshold after normalization", () => {
     process.env.TARGET_WALLET = "98241376";
-    const uscData = { ...baseData, deposits: 199_99, account_currency: "USC" };
+    const uscData = { ...baseData, balance: 199_99, account_currency: "USC" };
     const result = checkConditions(uscData);
     expect(result.depositThresholdMet).toBe(false);
   });

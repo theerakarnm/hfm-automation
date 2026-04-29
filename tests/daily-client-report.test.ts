@@ -3,105 +3,76 @@ import { Database } from "bun:sqlite";
 import { initSqlite } from "../src/services/sqlite.service";
 import { insertMany, getByDate, diffCounts, getAddedClients, getMissingClients } from "../src/repositories/snapshot.repository";
 import { seedFromEnv } from "../src/repositories/recipient.repository";
-import { buildDailyClientReportMessage, runDailyClientReport } from "../src/jobs/daily-client-report";
-import type { SnapshotClient, DiffCounts } from "../src/repositories/snapshot.repository";
+import { buildWeeklyReportMessage, generateReportForUser, runDailyClientReport } from "../src/jobs/daily-client-report";
 import type { HFMPerformanceData, HFMClientsPerformanceResponse } from "../src/types/hfm.types";
 
-function snapshotClient(
-  compositeKey: string,
-  fullName = "Test Client"
-): SnapshotClient {
-  const [accountIdStr, clientIdStr] = compositeKey.split("_");
-  return {
-    composite_key: compositeKey,
-    account_id: Number(accountIdStr),
-    client_id: Number(clientIdStr),
-    full_name: fullName,
-    raw: {} as HFMPerformanceData,
-  };
-}
-
-const mockTotals: HFMClientsPerformanceResponse["totals"] = {
-  clients: 1,
-  accounts: 1,
-  volume: 0,
-  balance: 0,
-  withdrawals: 0,
-  commission: 0,
-};
-
-describe("buildDailyClientReportMessage", () => {
-  test("handles no changes with selected format", () => {
-    const counts: DiffCounts = { added: 0, missing: 0 };
-    const message = buildDailyClientReportMessage({
-      date: "2026-04-26",
-      totals: mockTotals,
-      counts,
-      addedClients: [],
-      missingClients: [],
+describe("buildWeeklyReportMessage", () => {
+  test("formats weekly summary with missing wallets", () => {
+    const dates = ["2026-04-26", "2026-04-27"];
+    const dateCounts = new Map<string, number>([
+      ["2026-04-26", 1125],
+      ["2026-04-27", 1120],
+    ]);
+    const message = buildWeeklyReportMessage({
+      dates,
+      dateCounts,
+      targetWalletLabel: "30506525",
+      missingWalletIds: [6503256, 6520562],
     });
-    expect(message).toBe("\uD83D\uDCC5 Daily Client Report \u2014 26/04/2026\n\u2705 No changes detected.\n\uD83D\uDCCA Total Clients Today: 1");
-  });
-
-  test("handles added clients", () => {
-    const counts: DiffCounts = { added: 1, missing: 0 };
-    const message = buildDailyClientReportMessage({
-      date: "2026-04-26",
-      totals: { ...mockTotals, clients: 2 },
-      counts,
-      addedClients: [snapshotClient("99001234_10024", "Malee Srisuk")],
-      missingClients: [],
-    });
-    expect(message).toContain("\u2705 New Clients (1)");
-    expect(message).toContain("Malee Srisuk");
-    expect(message).toContain("\u274C Missing Clients (0)");
-    expect(message).toContain("\uD83D\uDCCA Total Clients Today: 2");
-  });
-
-  test("handles missing clients", () => {
-    const counts: DiffCounts = { added: 0, missing: 1 };
-    const message = buildDailyClientReportMessage({
-      date: "2026-04-26",
-      totals: mockTotals,
-      counts,
-      addedClients: [],
-      missingClients: [snapshotClient("99001234_10024", "Malee Srisuk")],
-    });
-    expect(message).toContain("\u2705 New Clients (0)");
-    expect(message).toContain("\u274C Missing Clients (1)");
-    expect(message).toContain("Malee Srisuk");
-  });
-
-  test("handles both added and missing", () => {
-    const counts: DiffCounts = { added: 1, missing: 1 };
-    const message = buildDailyClientReportMessage({
-      date: "2026-04-26",
-      totals: { ...mockTotals, clients: 45 },
-      counts,
-      addedClients: [snapshotClient("88123456_10031", "Preecha Wongsuk")],
-      missingClients: [snapshotClient("78451293_10023", "Somchai Jaidee")],
-    });
-    expect(message).toContain("\u2705 New Clients (1)");
-    expect(message).toContain("Preecha Wongsuk");
-    expect(message).toContain("\u274C Missing Clients (1)");
-    expect(message).toContain("Somchai Jaidee");
-    expect(message).toContain("\uD83D\uDCCA Total Clients Today: 45");
-  });
-
-  test("truncates long reports under LINE limit", () => {
-    const manyClients = Array.from({ length: 500 }, (_, i) =>
-      snapshotClient(`9000_${i}`, `Client Name ${i}`)
+    expect(message).toBe(
+      "26/04/26 : Total Wallet under 30506525 : 1125 Wallets\n" +
+      "27/04/26 : Total Wallet under 30506525 : 1120 Wallets\n" +
+      "2 Missing Wallet today\n" +
+      "-6503256\n" +
+      "-6520562"
     );
-    const counts: DiffCounts = { added: 499, missing: 0 };
-    const message = buildDailyClientReportMessage({
-      date: "2026-04-26",
-      totals: { ...mockTotals, clients: 500 },
-      counts,
-      addedClients: manyClients.slice(1),
-      missingClients: [],
+  });
+
+  test("formats zero missing wallets", () => {
+    const dates = ["2026-04-26"];
+    const dateCounts = new Map<string, number>([["2026-04-26", 500]]);
+    const message = buildWeeklyReportMessage({
+      dates,
+      dateCounts,
+      targetWalletLabel: "30506525",
+      missingWalletIds: [],
     });
-    expect(message.length).toBeLessThanOrEqual(5000);
-    expect(message).toContain("Check full report.");
+    expect(message).toBe(
+      "26/04/26 : Total Wallet under 30506525 : 500 Wallets\n" +
+      "0 Missing Wallet today"
+    );
+  });
+
+  test("formats single date report", () => {
+    const dates = ["2026-04-26"];
+    const dateCounts = new Map<string, number>([["2026-04-26", 42]]);
+    const message = buildWeeklyReportMessage({
+      dates,
+      dateCounts,
+      targetWalletLabel: "N/A",
+      missingWalletIds: [12345],
+    });
+    expect(message).toBe(
+      "26/04/26 : Total Wallet under N/A : 42 Wallets\n" +
+      "1 Missing Wallet today\n" +
+      "-12345"
+    );
+  });
+
+  test("handles dates with zero count", () => {
+    const dates = ["2026-04-25", "2026-04-26"];
+    const dateCounts = new Map<string, number>([["2026-04-26", 100]]);
+    const message = buildWeeklyReportMessage({
+      dates,
+      dateCounts,
+      targetWalletLabel: "30506525",
+      missingWalletIds: [],
+    });
+    expect(message).toBe(
+      "25/04/26 : Total Wallet under 30506525 : 0 Wallets\n" +
+      "26/04/26 : Total Wallet under 30506525 : 100 Wallets\n" +
+      "0 Missing Wallet today"
+    );
   });
 });
 
@@ -177,72 +148,66 @@ describe("SQL-based diff", () => {
   });
 });
 
+const mockClientsResponse: HFMClientsPerformanceResponse = {
+  clients: [
+    {
+      client_id: 10023,
+      account_id: 78451293,
+      activity_status: "active",
+      trades: 24,
+      volume: 3.42,
+      account_type: "Standard",
+      balance: 12450.8,
+      account_currency: "USD",
+      equity: 12998.35,
+      archived: null,
+      subaffiliate: 30506525,
+      account_regdate: "2024-01-15T00:00:00Z",
+      status: "approved",
+      full_name: "Somchai Jaidee",
+    },
+    {
+      client_id: 10024,
+      account_id: 99001234,
+      activity_status: "active",
+      trades: 0,
+      volume: 0,
+      account_type: "Standard",
+      balance: 500,
+      account_currency: "USD",
+      equity: 500,
+      archived: null,
+      subaffiliate: 30506525,
+      account_regdate: "2024-03-20T00:00:00Z",
+      status: "approved",
+      full_name: "Malee Srisuk",
+    },
+  ],
+  totals: {
+    clients: 2,
+    accounts: 2,
+    volume: 3.42,
+    balance: 12950.8,
+    withdrawals: 0,
+    commission: 34.2,
+  },
+};
+
 describe("runDailyClientReport", () => {
   const ORIGINAL_FETCH = globalThis.fetch;
 
   afterEach(() => {
     globalThis.fetch = ORIGINAL_FETCH;
+    delete process.env.TARGET_WALLET;
   });
 
-  const mockClientsResponse: HFMClientsPerformanceResponse = {
-    clients: [
-      {
-        client_id: 10023,
-        account_id: 78451293,
-        activity_status: "active",
-        trades: 24,
-        volume: 3.42,
-        account_type: "Standard",
-        balance: 12450.8,
-        account_currency: "USD",
-        equity: 12998.35,
-        archived: null,
-        subaffiliate: 0,
-        account_regdate: "2024-01-15T00:00:00Z",
-        status: "approved",
-        full_name: "Somchai Jaidee",
-      },
-      {
-        client_id: 10024,
-        account_id: 99001234,
-        activity_status: "active",
-        trades: 0,
-        volume: 0,
-        account_type: "Standard",
-        balance: 500,
-        account_currency: "USD",
-        equity: 500,
-        archived: null,
-        subaffiliate: 0,
-        account_regdate: "2024-03-20T00:00:00Z",
-        status: "approved",
-        full_name: "Malee Srisuk",
-      },
-    ],
-    totals: {
-      clients: 2,
-      accounts: 2,
-      volume: 3.42,
-      balance: 12950.8,
-      withdrawals: 0,
-      commission: 34.2,
-    },
-  };
-
-  test("first run stores baseline and sends first-run message", async () => {
+  test("first run stores snapshot and sends weekly report", async () => {
+    process.env.TARGET_WALLET = "30506525";
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
     seedFromEnv(db, "Utest001");
 
     let pushedMessage = "";
-    globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
-      const body = JSON.parse((init as RequestInit)?.body as string);
-      if (body.messages) {
-        pushedMessage = body.messages[0].text;
-      }
-      return new Response("{}", { status: 200 });
-    }) as unknown as typeof globalThis.fetch;
-
     const mockFetchAll = async () => ({ ok: true as const, data: mockClientsResponse });
     const mockPushAll = async (_uids: string[], text: string) => { pushedMessage = text; };
 
@@ -253,14 +218,15 @@ describe("runDailyClientReport", () => {
       pushToAllFn: mockPushAll,
     });
 
-    expect(pushedMessage).toContain("\uD83D\uDD14 First run \u2014 baseline snapshot saved.");
-    expect(pushedMessage).toContain("\uD83D\uDCCA Total Clients Today: 2");
+    expect(pushedMessage).toContain("Total Wallet under 30506525 : 2 Wallets");
+    expect(pushedMessage).toContain("0 Missing Wallet today");
 
     const rows = getByDate(db, "2026-04-26");
     expect(rows).toHaveLength(2);
   });
 
-  test("idempotent \u2014 second run for same date skips insert", async () => {
+  test("idempotent — second run for same date skips", async () => {
+    process.env.TARGET_WALLET = "30506525";
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
     seedFromEnv(db, "Utest001");
@@ -289,6 +255,7 @@ describe("runDailyClientReport", () => {
   });
 
   test("retries notification when snapshot exists but previous push failed", async () => {
+    process.env.TARGET_WALLET = "30506525";
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
     seedFromEnv(db, "Utest001");
@@ -317,35 +284,15 @@ describe("runDailyClientReport", () => {
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchAllClientsFn: mockFetchAll,
-      pushToAllFn: async (_uids: string[], text: string) => {
-        pushedMessage = text;
-      },
+      pushToAllFn: async (_uids: string[], text: string) => { pushedMessage = text; },
     });
 
     expect(fetchCount).toBe(1);
-    expect(pushedMessage).toContain("\uD83D\uDD14 First run \u2014 baseline snapshot saved.");
+    expect(pushedMessage).toContain("Total Wallet under 30506525");
   });
 
-  test("second day sends no-change message when clients unchanged", async () => {
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
-    seedFromEnv(db, "Utest001");
-
-    const mockFetchAll = async () => ({ ok: true as const, data: mockClientsResponse });
-    const messages: string[] = [];
-    const mockPushAll = async (_uids: string[], text: string) => { messages.push(text); };
-
-    const day1 = new Date("2026-04-25T22:00:00.000Z");
-    await runDailyClientReport({ now: day1, db, fetchAllClientsFn: mockFetchAll, pushToAllFn: mockPushAll });
-
-    const day2 = new Date("2026-04-26T22:00:00.000Z");
-    await runDailyClientReport({ now: day2, db, fetchAllClientsFn: mockFetchAll, pushToAllFn: mockPushAll });
-
-    expect(messages[1]).toContain("\u2705 No changes detected.");
-    expect(messages[1]).toContain("\uD83D\uDCCA Total Clients Today: 2");
-  });
-
-  test("second day detects added and missing clients via SQL diff", async () => {
+  test("second day shows missing wallet IDs in weekly format", async () => {
+    process.env.TARGET_WALLET = "30506525";
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
     seedFromEnv(db, "Utest001");
@@ -372,7 +319,7 @@ describe("runDailyClientReport", () => {
           account_currency: "USD",
           equity: 300,
           archived: null,
-          subaffiliate: 0,
+          subaffiliate: 30506525,
           account_regdate: "2026-04-26T00:00:00Z",
           status: "approved",
           full_name: "Brand New Client",
@@ -398,13 +345,13 @@ describe("runDailyClientReport", () => {
       pushToAllFn: mockPushAll,
     });
 
-    expect(messages[1]).toContain("\u2705 New Clients (1)");
-    expect(messages[1]).toContain("Brand New Client");
-    expect(messages[1]).toContain("\u274C Missing Clients (1)");
-    expect(messages[1]).toContain("To Be Removed");
+    expect(messages[1]).toContain("Total Wallet under 30506525");
+    expect(messages[1]).toContain("1 Missing Wallet today");
+    expect(messages[1]).toContain("-10024");
   });
 
   test("purges old snapshots after insert", async () => {
+    process.env.TARGET_WALLET = "30506525";
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
     seedFromEnv(db, "Utest001");
@@ -412,11 +359,19 @@ describe("runDailyClientReport", () => {
     const mockFetchAll = async () => ({ ok: true as const, data: mockClientsResponse });
     const mockPushAll = async () => { };
 
-    const oldDate = new Date("2026-01-01T22:00:00.000Z");
-    await runDailyClientReport({ now: oldDate, db, fetchAllClientsFn: mockFetchAll, pushToAllFn: mockPushAll });
+    await runDailyClientReport({
+      now: new Date("2026-01-01T22:00:00.000Z"),
+      db,
+      fetchAllClientsFn: mockFetchAll,
+      pushToAllFn: mockPushAll,
+    });
 
-    const today = new Date("2026-04-25T22:00:00.000Z");
-    await runDailyClientReport({ now: today, db, fetchAllClientsFn: mockFetchAll, pushToAllFn: mockPushAll });
+    await runDailyClientReport({
+      now: new Date("2026-04-25T22:00:00.000Z"),
+      db,
+      fetchAllClientsFn: mockFetchAll,
+      pushToAllFn: mockPushAll,
+    });
 
     const oldRows = getByDate(db, "2026-01-02");
     expect(oldRows).toHaveLength(0);
@@ -426,6 +381,7 @@ describe("runDailyClientReport", () => {
   });
 
   test("throws when HFM fetch fails", async () => {
+    process.env.TARGET_WALLET = "30506525";
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
     seedFromEnv(db, "Utest001");
@@ -444,6 +400,7 @@ describe("runDailyClientReport", () => {
   });
 
   test("warns but does not throw when no active recipients", async () => {
+    process.env.TARGET_WALLET = "30506525";
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
 
@@ -466,5 +423,97 @@ describe("runDailyClientReport", () => {
     expect(pushCalled).toBe(false);
     const rows = getByDate(db, "2026-04-26");
     expect(rows).toHaveLength(2);
+  });
+});
+
+describe("generateReportForUser", () => {
+  afterEach(() => {
+    delete process.env.TARGET_WALLET;
+  });
+
+  test("generates report without marking notification sent", async () => {
+    process.env.TARGET_WALLET = "30506525";
+    const db = new Database(":memory:", { strict: true });
+    initSqlite(db);
+
+    const mockFetchAll = async () => ({ ok: true as const, data: mockClientsResponse });
+
+    const message = await generateReportForUser({
+      now: new Date("2026-04-25T22:00:00.000Z"),
+      db,
+      fetchAllClientsFn: mockFetchAll,
+    });
+
+    expect(message).toContain("Total Wallet under 30506525 : 2 Wallets");
+    expect(message).toContain("0 Missing Wallet today");
+
+    const rows = getByDate(db, "2026-04-26");
+    expect(rows).toHaveLength(2);
+
+    const sent = db
+      .query("SELECT COUNT(*) as count FROM daily_report_notifications WHERE snapshot_date = $date")
+      .get({ date: "2026-04-26" }) as { count: number };
+    expect(sent.count).toBe(0);
+  });
+
+  test("generates report from existing snapshot without refetching", async () => {
+    process.env.TARGET_WALLET = "30506525";
+    const db = new Database(":memory:", { strict: true });
+    initSqlite(db);
+
+    let fetchCount = 0;
+    const mockFetchAll = async () => {
+      fetchCount++;
+      return { ok: true as const, data: mockClientsResponse };
+    };
+
+    await generateReportForUser({
+      now: new Date("2026-04-25T22:00:00.000Z"),
+      db,
+      fetchAllClientsFn: mockFetchAll,
+    });
+
+    const message = await generateReportForUser({
+      now: new Date("2026-04-25T22:00:00.000Z"),
+      db,
+      fetchAllClientsFn: mockFetchAll,
+    });
+
+    expect(fetchCount).toBe(1);
+    expect(message).toContain("Total Wallet under 30506525 : 2 Wallets");
+  });
+
+  test("shows missing wallet IDs when yesterday snapshot exists", async () => {
+    process.env.TARGET_WALLET = "30506525";
+    const db = new Database(":memory:", { strict: true });
+    initSqlite(db);
+
+    const twoClients: HFMPerformanceData[] = [
+      {
+        client_id: 10023, account_id: 78451293, activity_status: "active",
+        trades: 24, volume: 3.42, account_type: "Standard", balance: 12450.8,
+        account_currency: "USD", equity: 12998.35, archived: null,
+        subaffiliate: 30506525, account_regdate: "2024-01-15T00:00:00Z",
+        status: "approved", full_name: "Client A",
+      },
+      {
+        client_id: 10024, account_id: 99001234, activity_status: "active",
+        trades: 0, volume: 0, account_type: "Standard", balance: 500,
+        account_currency: "USD", equity: 500, archived: null,
+        subaffiliate: 30506525, account_regdate: "2024-03-20T00:00:00Z",
+        status: "approved", full_name: "Client B",
+      },
+    ];
+
+    insertMany(db, "2026-04-25", twoClients);
+    insertMany(db, "2026-04-26", [twoClients[0]!]);
+
+    const message = await generateReportForUser({
+      now: new Date("2026-04-25T22:00:00.000Z"),
+      db,
+    });
+
+    expect(message).toContain("1 Missing Wallet today");
+    expect(message).toContain("-10024");
   });
 });

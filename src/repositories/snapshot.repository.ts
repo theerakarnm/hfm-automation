@@ -159,3 +159,42 @@ export function purgeOlderThan(db: Database, days: number, referenceDate: string
     "DELETE FROM client_snapshots WHERE date(snapshot_date) < date($referenceDate, '-' || $days || ' days')"
   ).run({ referenceDate, days });
 }
+
+export function getRecentSnapshotDates(db: Database, upToDate: string, limit: number): string[] {
+  const rows = db.prepare(
+    "SELECT DISTINCT snapshot_date FROM client_snapshots WHERE snapshot_date <= $upToDate ORDER BY snapshot_date DESC LIMIT $limit"
+  ).all({ upToDate, limit }) as Array<{ snapshot_date: string }>;
+  return rows.map((r) => r.snapshot_date).reverse();
+}
+
+export function countWalletsByDate(db: Database, date: string, targetWallet: number): number {
+  const row = db.prepare(
+    targetWallet
+      ? `SELECT COUNT(DISTINCT client_id) as count FROM client_snapshots WHERE snapshot_date = $date AND json_extract(raw_json, '$.subaffiliate') = $targetWallet`
+      : "SELECT COUNT(DISTINCT client_id) as count FROM client_snapshots WHERE snapshot_date = $date"
+  ).get({ date, targetWallet }) as { count: number } | null;
+  return row?.count ?? 0;
+}
+
+export function getMissingWalletIds(db: Database, today: string, yesterday: string, targetWallet: number): number[] {
+  const rows = db.prepare(
+    targetWallet
+      ? `SELECT DISTINCT yest.client_id FROM client_snapshots yest
+         WHERE yest.snapshot_date = $yesterday
+         AND json_extract(yest.raw_json, '$.subaffiliate') = $targetWallet
+         AND yest.client_id NOT IN (
+           SELECT DISTINCT today.client_id FROM client_snapshots today
+           WHERE today.snapshot_date = $today
+           AND json_extract(today.raw_json, '$.subaffiliate') = $targetWallet
+         )
+         ORDER BY yest.client_id`
+      : `SELECT DISTINCT yest.client_id FROM client_snapshots yest
+         WHERE yest.snapshot_date = $yesterday
+         AND yest.client_id NOT IN (
+           SELECT DISTINCT today.client_id FROM client_snapshots today
+           WHERE today.snapshot_date = $today
+         )
+         ORDER BY yest.client_id`
+  ).all({ today, yesterday, targetWallet }) as Array<{ client_id: number }>;
+  return rows.map((r) => r.client_id);
+}

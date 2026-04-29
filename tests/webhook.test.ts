@@ -172,9 +172,9 @@ describe("webhook", () => {
 
     await waitFor(() => fetchCalls.length >= 1);
     expect(fetchCalls.length).toBe(1);
-    expect(fetchCalls[0]?.url).toBe("https://api.line.me/v2/bot/message/push");
+    expect(fetchCalls[0]?.url).toBe("https://api.line.me/v2/bot/message/reply");
     const pushBody = JSON.parse(fetchCalls[0]?.body ?? "{}");
-    expect(pushBody.to).toBe("Ustranger");
+    expect(pushBody.replyToken).toBe("token123");
     expect(pushBody.messages[0].type).toBe("text");
     expect(pushBody.messages[0].text).toContain("\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C");
 
@@ -270,7 +270,7 @@ describe("webhook", () => {
     expect(fetchCalls[1]?.url).toContain(
       "/api/performance/client-performance?wallets=98241376"
     );
-    expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/push");
+    expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/reply");
   });
 
   test("account lookup sends accounts= query param", async () => {
@@ -349,7 +349,7 @@ describe("webhook", () => {
 
     await waitFor(() => fetchCalls.length >= 3);
     expect(fetchCalls[1]?.url).toContain("accounts=123456789");
-    expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/push");
+    expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/reply");
     const pushBody = JSON.parse(fetchCalls[2]?.body ?? "{}");
     expect(pushBody.messages[0].altText).toContain("Account 123456789");
   });
@@ -398,9 +398,157 @@ describe("webhook", () => {
     expect(response.status).toBe(200);
 
     await waitFor(() => fetchCalls.length >= 1);
-    expect(fetchCalls[0]?.url).toBe("https://api.line.me/v2/bot/message/push");
+    expect(fetchCalls[0]?.url).toBe("https://api.line.me/v2/bot/message/reply");
     const pushBody = JSON.parse(fetchCalls[0]?.body ?? "{}");
     expect(pushBody.messages[0].text).toContain("Wallet ID 8");
+  });
+
+  test("report command generates report and replies to user", async () => {
+    process.env.TARGET_WALLET = "30506525";
+    const { app } = await importWebhook();
+    const body = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "message",
+          message: { type: "text", id: "rpt", text: "report" },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "tokenRpt",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ],
+    });
+    const sig = computeSig(body, SECRET);
+
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      fetchCalls.push({
+        url,
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+
+      if (url.endsWith("/v2/bot/chat/loading/start")) {
+        return new Response("{}", { status: 202 });
+      }
+
+      if (url.includes("/api/performance/client-performance") && !url.includes("?")) {
+        return new Response(
+          JSON.stringify({
+            clients: [
+              {
+                client_id: 6503256,
+                account_id: 11111,
+                activity_status: "active",
+                trades: 10,
+                volume: 1.0,
+                account_type: "Standard",
+                balance: 500,
+                account_currency: "USD",
+                equity: 600,
+                archived: null,
+                subaffiliate: 30506525,
+                account_regdate: "2026-04-20T00:00:00Z",
+                status: "approved",
+                full_name: "Wallet Owner",
+              },
+            ],
+            totals: { clients: 1, accounts: 1, volume: 1.0, balance: 500, withdrawals: 0, commission: 10 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const res = app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-line-signature": sig,
+        },
+        body,
+      })
+    );
+    const response = await res;
+    expect(response.status).toBe(200);
+
+    await waitFor(() => fetchCalls.length >= 3);
+
+    expect(fetchCalls[0]?.url).toBe("https://api.line.me/v2/bot/chat/loading/start");
+
+    expect(fetchCalls[1]?.url).toBe("https://api.hfaffiliates.com/api/performance/client-performance");
+
+    expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/reply");
+    const replyBody = JSON.parse(fetchCalls[2]?.body ?? "{}");
+    expect(replyBody.replyToken).toBe("tokenRpt");
+    expect(replyBody.messages[0].type).toBe("text");
+    expect(replyBody.messages[0].text).toContain("Total Wallet under 30506525");
+    expect(replyBody.messages[0].text).toContain("0 Missing Wallet today");
+  });
+
+  test("report command is case-insensitive", async () => {
+    process.env.TARGET_WALLET = "30506525";
+    const { app } = await importWebhook();
+    const body = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "message",
+          message: { type: "text", id: "rpt2", text: "Report" },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "tokenRpt2",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ],
+    });
+    const sig = computeSig(body, SECRET);
+
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      fetchCalls.push({ url, body: typeof init?.body === "string" ? init.body : undefined });
+
+      if (url.endsWith("/v2/bot/chat/loading/start")) {
+        return new Response("{}", { status: 202 });
+      }
+
+      if (url.includes("/api/performance/client-performance") && !url.includes("?")) {
+        return new Response(
+          JSON.stringify({
+            clients: [],
+            totals: { clients: 0, accounts: 0, volume: 0, balance: 0, withdrawals: 0, commission: 0 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const res = app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-line-signature": sig },
+        body,
+      })
+    );
+    const response = await res;
+    expect(response.status).toBe(200);
+
+    await waitFor(() => fetchCalls.length >= 3);
+    expect(fetchCalls[1]?.url).toBe("https://api.hfaffiliates.com/api/performance/client-performance");
+    expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/reply");
   });
 });
 

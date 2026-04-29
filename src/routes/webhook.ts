@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { verifyLineSignature } from "../utils/signature";
 import { fetchPerformance, checkConditions, parsePerformanceLookup } from "../services/hfm.service";
-import { pushText, pushFlex, replyText, replyFlex, showLoading } from "../services/line.service";
+import { replyText, replyFlex, showLoading } from "../services/line.service";
 import { buildTradingCard } from "../builders/flex-message.builder";
 import { generateReportForUser } from "../jobs/daily-client-report";
 import { isTextMessageEvent } from "../types/line.types";

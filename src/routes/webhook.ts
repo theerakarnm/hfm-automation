@@ -100,9 +100,9 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
 
     const altLabel = lookup.kind === "wallet" ? `Wallet ${lookup.label}` : `Account ${lookup.label}`;
     if (bubbles.length === 1) {
-      await pushFlex(userId, `Trading Summary \u2014 ${altLabel}`, bubbles[0]!);
+      await replyFlex(replyToken, `Trading Summary \u2014 ${altLabel}`, bubbles[0]!);
     } else {
-      await pushFlex(userId, `Trading Summary \u2014 ${altLabel}`, {
+      await replyFlex(replyToken, `Trading Summary \u2014 ${altLabel}`, {
         type: "carousel",
         contents: bubbles.slice(0, 10),
       });

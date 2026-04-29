@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { verifyLineSignature } from "../utils/signature";
 import { fetchPerformance, checkConditions, parsePerformanceLookup } from "../services/hfm.service";
-import { pushText, pushFlex, showLoading } from "../services/line.service";
+import { pushText, pushFlex, replyText, replyFlex, showLoading } from "../services/line.service";
 import { buildTradingCard } from "../builders/flex-message.builder";
 import { isTextMessageEvent } from "../types/line.types";
 import { isWhitelisted } from "../utils/whitelist";
@@ -63,11 +63,12 @@ webhook.post(
 
 async function processTextEvent(event: TextMessageEvent): Promise<void> {
   const userId = event.source.userId;
+  const replyToken = event.replyToken;
   if (!userId) return;
 
   if (!isWhitelisted(userId)) {
-    await pushText(
-      userId,
+    await replyText(
+      replyToken,
       "\u274C \u0E02\u0E2D\u0E2D\u0E20\u0E31\u0E22 \u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E1A\u0E2D\u0E17\u0E19\u0E35\u0E49 \u0E2B\u0E32\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D Support"
     );
     return;
@@ -77,8 +78,8 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
   const lookup = parsePerformanceLookup(inputText);
 
   if (!lookup) {
-    await pushText(
-      userId,
+    await replyText(
+      replyToken,
       "\u274C \u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E2A\u0E48\u0E07 Wallet ID 8 \u0E2B\u0E25\u0E31\u0E01 \u0E2B\u0E23\u0E37\u0E2D Trading Account ID 9 \u0E2B\u0E25\u0E31\u0E01\n\u0E40\u0E0A\u0E48\u0E19 98241376, WL-98241376, accounts=123456789"
     );
     return;

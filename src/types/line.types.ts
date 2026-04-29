@@ -23,6 +23,7 @@ export interface WebhookEvent {
 
 export interface TextMessageEvent extends WebhookEvent {
   type: "message";
+  replyToken: string;
   message: { type: "text"; id: string; text: string };
   source: { type: "user"; userId: string };
 }

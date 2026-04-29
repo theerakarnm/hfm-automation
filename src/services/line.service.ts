@@ -1,6 +1,7 @@
 import { logError } from "../utils/logger";
 
 const LINE_PUSH_API = "https://api.line.me/v2/bot/message/push";
+const LINE_REPLY_API = "https://api.line.me/v2/bot/message/reply";
 const LINE_LOADING_API = "https://api.line.me/v2/bot/chat/loading/start";
 const LINE_TIMEOUT_MS = 10_000;
 
@@ -20,6 +21,27 @@ async function pushMessage(
   if (!res.ok) {
     const errText = await res.text();
     const err = new Error(`LINE push failed ${res.status}: ${errText}`);
+    logError("line-service", err);
+    throw err;
+  }
+}
+
+async function replyMessage(
+  replyToken: string,
+  message: object
+): Promise<void> {
+  const res = await fetch(LINE_REPLY_API, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+    },
+    body: JSON.stringify({ replyToken, messages: [message] }),
+    signal: AbortSignal.timeout(LINE_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    const err = new Error(`LINE reply failed ${res.status}: ${errText}`);
     logError("line-service", err);
     throw err;
   }
@@ -55,6 +77,15 @@ export const pushFlex = (
   altText: string,
   contents: object
 ) => pushMessage(userId, { type: "flex", altText, contents });
+
+export const replyText = (replyToken: string, text: string) =>
+  replyMessage(replyToken, { type: "text", text });
+
+export const replyFlex = (
+  replyToken: string,
+  altText: string,
+  contents: object
+) => replyMessage(replyToken, { type: "flex", altText, contents });
 
 export async function pushToAll(uids: string[], text: string): Promise<void> {
   for (let i = 0; i < uids.length; i++) {

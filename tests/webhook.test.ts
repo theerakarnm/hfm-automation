@@ -491,6 +491,7 @@ describe("webhook", () => {
     expect(replyBody.messages[0].type).toBe("text");
     expect(replyBody.messages[0].text).toContain("Total Wallet under 30506525");
     expect(replyBody.messages[0].text).toContain("0 Missing Wallet today");
+    expect(replyBody.messages[0].text).toContain("0 New Wallets today");
   });
 
   test("report command is case-insensitive", async () => {

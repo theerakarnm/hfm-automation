@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { HFMClientsPerformanceResponse, HFMAllClientsResult } from "../types/hfm.types";
 import { getDatabase, initSqlite, checkpointDatabase } from "../services/sqlite.service";
-import { countByDate, insertMany, purgeOlderThan, getRecentSnapshotDates, countWalletsByDate, getMissingWalletIds } from "../repositories/snapshot.repository";
+import { countByDate, insertMany, purgeOlderThan, getRecentSnapshotDates, countWalletsByDate, getMissingWalletIds, getNewWalletIds } from "../repositories/snapshot.repository";
 import { seedFromEnv, getActiveUids } from "../repositories/recipient.repository";
 import { fetchAllClients } from "../services/hfm.service";
 import { pushToAll } from "../services/line.service";
@@ -28,8 +28,9 @@ export function buildWeeklyReportMessage(options: {
   dateCounts: Map<string, number>;
   targetWalletLabel: string;
   missingWalletIds: number[];
+  newWalletCount: number;
 }): string {
-  const { dates, dateCounts, targetWalletLabel, missingWalletIds } = options;
+  const { dates, dateCounts, targetWalletLabel, missingWalletIds, newWalletCount } = options;
 
   let message = "";
   for (const date of dates) {
@@ -42,6 +43,8 @@ export function buildWeeklyReportMessage(options: {
   for (const id of missingWalletIds) {
     message += `-${id}\n`;
   }
+
+  message += `${newWalletCount} New Wallets today`;
 
   return message.trimEnd();
 }
@@ -114,11 +117,16 @@ async function buildReportData(
     ? getMissingWalletIds(db, today, yesterday, targetWallet)
     : [];
 
+  const newWalletCount = yesterdayExists
+    ? getNewWalletIds(db, today, yesterday, targetWallet).length
+    : 0;
+
   return buildWeeklyReportMessage({
     dates,
     dateCounts,
     targetWalletLabel: targetLabel,
     missingWalletIds,
+    newWalletCount,
   });
 }
 

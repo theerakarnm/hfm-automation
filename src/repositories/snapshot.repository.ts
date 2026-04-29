@@ -198,3 +198,26 @@ export function getMissingWalletIds(db: Database, today: string, yesterday: stri
   ).all({ today, yesterday, targetWallet }) as Array<{ client_id: number }>;
   return rows.map((r) => r.client_id);
 }
+
+export function getNewWalletIds(db: Database, today: string, yesterday: string, targetWallet: number): number[] {
+  const rows = db.prepare(
+    targetWallet
+      ? `SELECT DISTINCT today.client_id FROM client_snapshots today
+         WHERE today.snapshot_date = $today
+         AND json_extract(today.raw_json, '$.subaffiliate') = $targetWallet
+         AND today.client_id NOT IN (
+           SELECT DISTINCT yest.client_id FROM client_snapshots yest
+           WHERE yest.snapshot_date = $yesterday
+           AND json_extract(yest.raw_json, '$.subaffiliate') = $targetWallet
+         )
+         ORDER BY today.client_id`
+      : `SELECT DISTINCT today.client_id FROM client_snapshots today
+         WHERE today.snapshot_date = $today
+         AND today.client_id NOT IN (
+           SELECT DISTINCT yest.client_id FROM client_snapshots yest
+           WHERE yest.snapshot_date = $yesterday
+         )
+         ORDER BY today.client_id`
+  ).all({ today, yesterday, targetWallet }) as Array<{ client_id: number }>;
+  return rows.map((r) => r.client_id);
+}

@@ -18,13 +18,15 @@ describe("buildWeeklyReportMessage", () => {
       dateCounts,
       targetWalletLabel: "30506525",
       missingWalletIds: [6503256, 6520562],
+      newWalletCount: 3,
     });
     expect(message).toBe(
       "26/04/26 : Total Wallet under 30506525 : 1125 Wallets\n" +
       "27/04/26 : Total Wallet under 30506525 : 1120 Wallets\n" +
       "2 Missing Wallet today\n" +
       "-6503256\n" +
-      "-6520562"
+      "-6520562\n" +
+      "3 New Wallets today"
     );
   });
 
@@ -36,10 +38,12 @@ describe("buildWeeklyReportMessage", () => {
       dateCounts,
       targetWalletLabel: "30506525",
       missingWalletIds: [],
+      newWalletCount: 0,
     });
     expect(message).toBe(
       "26/04/26 : Total Wallet under 30506525 : 500 Wallets\n" +
-      "0 Missing Wallet today"
+      "0 Missing Wallet today\n" +
+      "0 New Wallets today"
     );
   });
 
@@ -51,11 +55,13 @@ describe("buildWeeklyReportMessage", () => {
       dateCounts,
       targetWalletLabel: "N/A",
       missingWalletIds: [12345],
+      newWalletCount: 0,
     });
     expect(message).toBe(
       "26/04/26 : Total Wallet under N/A : 42 Wallets\n" +
       "1 Missing Wallet today\n" +
-      "-12345"
+      "-12345\n" +
+      "0 New Wallets today"
     );
   });
 
@@ -67,11 +73,13 @@ describe("buildWeeklyReportMessage", () => {
       dateCounts,
       targetWalletLabel: "30506525",
       missingWalletIds: [],
+      newWalletCount: 0,
     });
     expect(message).toBe(
       "25/04/26 : Total Wallet under 30506525 : 0 Wallets\n" +
       "26/04/26 : Total Wallet under 30506525 : 100 Wallets\n" +
-      "0 Missing Wallet today"
+      "0 Missing Wallet today\n" +
+      "0 New Wallets today"
     );
   });
 });
@@ -220,6 +228,7 @@ describe("runDailyClientReport", () => {
 
     expect(pushedMessage).toContain("Total Wallet under 30506525 : 2 Wallets");
     expect(pushedMessage).toContain("0 Missing Wallet today");
+    expect(pushedMessage).toContain("0 New Wallets today");
 
     const rows = getByDate(db, "2026-04-26");
     expect(rows).toHaveLength(2);
@@ -348,6 +357,7 @@ describe("runDailyClientReport", () => {
     expect(messages[1]).toContain("Total Wallet under 30506525");
     expect(messages[1]).toContain("1 Missing Wallet today");
     expect(messages[1]).toContain("-10024");
+    expect(messages[1]).toContain("1 New Wallets today");
   });
 
   test("purges old snapshots after insert", async () => {
@@ -446,6 +456,7 @@ describe("generateReportForUser", () => {
 
     expect(message).toContain("Total Wallet under 30506525 : 2 Wallets");
     expect(message).toContain("0 Missing Wallet today");
+    expect(message).toContain("0 New Wallets today");
 
     const rows = getByDate(db, "2026-04-26");
     expect(rows).toHaveLength(2);
@@ -515,5 +526,6 @@ describe("generateReportForUser", () => {
 
     expect(message).toContain("1 Missing Wallet today");
     expect(message).toContain("-10024");
+    expect(message).toContain("0 New Wallets today");
   });
 });

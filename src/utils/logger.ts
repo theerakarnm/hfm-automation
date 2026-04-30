@@ -1,6 +1,7 @@
 import pino from "pino";
 import { join } from "node:path";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dayjs } from "./dayjs";
 
 const LOG_DIR = "logs";
 const MAX_LOG_READ_BYTES = 512 * 1024;
@@ -56,7 +57,7 @@ export function parseLog(content: string, maxEntries = 500): LogEntry[] {
       try {
         const obj = JSON.parse(line);
         return {
-          timestamp: new Date(obj.time).toISOString().replace("T", " ").replace("Z", ""),
+          timestamp: dayjs(obj.time).utc().format("YYYY-MM-DD HH:mm:ss.SSS"),
           level: Object.keys(pino.levels.labels).includes(String(obj.level))
             ? pino.levels.labels[obj.level as keyof typeof pino.levels.labels]!
             : String(obj.level),

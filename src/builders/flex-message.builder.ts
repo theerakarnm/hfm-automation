@@ -1,4 +1,5 @@
 import type { HFMPerformanceData, ConditionCheck, PerformanceLookup } from "../types/hfm.types";
+import { dayjs } from "../utils/dayjs";
 
 const fmtCurrency = (n: number, currency: string): string => {
   if (currency === "USC") {
@@ -14,15 +15,7 @@ const fmtCurrency = (n: number, currency: string): string => {
 const fmtVolume = (n: number): string => `${n.toFixed(2)} lots`;
 
 const fmtDate = (iso: string): string => {
-  const d = new Date(iso);
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  const months = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ];
-  const month = months[d.getUTCMonth()] ?? "";
-  const year = d.getUTCFullYear();
-  return `${day} ${month} ${year}`;
+  return dayjs.utc(iso).format("DD MMM YYYY");
 };
 
 const displayCurrencyLabel = (raw: string): string => raw;

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { getIctDateString, getPreviousIctDateString, formatIctDisplayDate, getThisWeekRange, getLastWeekRange, getThisMonthRange, getLastMonthRange } from "../src/utils/date";
+import { getIctDateString, getPreviousIctDateString, formatIctDisplayDate, formatShortDate, getThisWeekRange, getLastWeekRange, getThisMonthRange, getLastMonthRange } from "../src/utils/date";
 
 test("ICT date uses Asia/Bangkok instead of UTC", () => {
   const utcPreviousDay = new Date("2026-04-25T22:00:00.000Z");
@@ -73,4 +73,16 @@ test("this month range on first day of month", () => {
   const range = getThisMonthRange(now);
   expect(range.from).toBe("2026-04-01");
   expect(range.to).toBe("2026-04-02");
+});
+
+test("formatShortDate formats as DD/MM/YY", () => {
+  expect(formatShortDate("2026-04-26")).toBe("26/04/26");
+});
+
+test("formatShortDate returns input on invalid date", () => {
+  expect(formatShortDate("not-a-date")).toBe("not-a-date");
+});
+
+test("formatIctDisplayDate throws on invalid input", () => {
+  expect(() => formatIctDisplayDate("invalid")).toThrow();
 });

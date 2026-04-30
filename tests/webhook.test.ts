@@ -273,7 +273,7 @@ describe("webhook", () => {
     expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/reply");
   });
 
-  test("T-prefix account lookup resolves wallet and returns all linked accounts", async () => {
+  test("T-prefix account lookup resolves wallet via client_id and returns all linked accounts", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
       destination: "U123",
@@ -331,7 +331,7 @@ describe("webhook", () => {
         );
       }
 
-      if (url.includes("wallets=98241376")) {
+      if (url.includes("wallets=45219")) {
         return new Response(
           JSON.stringify({
             clients: [
@@ -351,7 +351,7 @@ describe("webhook", () => {
                 status: "approved",
               },
               {
-                client_id: 45220,
+                client_id: 45219,
                 account_id: 987654321,
                 activity_status: "active",
                 trades: 5,
@@ -390,10 +390,10 @@ describe("webhook", () => {
 
     await waitFor(() => fetchCalls.length >= 4);
     expect(fetchCalls[1]?.url).toContain("accounts=123456789");
-    expect(fetchCalls[2]?.url).toContain("wallets=98241376");
+    expect(fetchCalls[2]?.url).toContain("wallets=45219");
     expect(fetchCalls[3]?.url).toBe("https://api.line.me/v2/bot/message/reply");
     const pushBody = JSON.parse(fetchCalls[3]?.body ?? "{}");
-    expect(pushBody.messages[0].altText).toContain("Wallet 98241376");
+    expect(pushBody.messages[0].altText).toContain("Wallet 123456789");
     const contents = pushBody.messages[0].contents;
     expect(contents.type).toBe("carousel");
     expect(contents.contents).toHaveLength(2);

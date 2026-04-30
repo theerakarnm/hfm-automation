@@ -314,7 +314,7 @@ describe("resolveLinkedAccounts", () => {
     globalThis.fetch = ORIGINAL_FETCH;
   });
 
-  test("resolves account to wallet and returns all linked accounts", async () => {
+  test("resolves account to wallet via client_id and returns all linked accounts", async () => {
     const callLog: string[] = [];
     globalThis.fetch = (async (url: string | URL | Request) => {
       const urlStr = String(url);
@@ -323,25 +323,20 @@ describe("resolveLinkedAccounts", () => {
         return new Response(
           JSON.stringify({
             clients: [
-              {
-                ...mockHfmResponse.clients[0]!,
-                client_id: 100,
-                account_id: 111,
-                subaffiliate: 98241376,
-              },
+              { ...mockHfmResponse.clients[0]!, client_id: 45219, account_id: 111 },
             ],
             totals: mockHfmResponse.totals,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
-      if (urlStr.includes("wallets=98241376")) {
+      if (urlStr.includes("wallets=45219")) {
         return new Response(
           JSON.stringify({
             clients: [
-              { ...mockHfmResponse.clients[0]!, client_id: 100, account_id: 111, subaffiliate: 98241376 },
-              { ...mockHfmResponse.clients[0]!, client_id: 200, account_id: 222, subaffiliate: 98241376 },
-              { ...mockHfmResponse.clients[0]!, client_id: 300, account_id: 333, subaffiliate: 98241376 },
+              { ...mockHfmResponse.clients[0]!, client_id: 45219, account_id: 111 },
+              { ...mockHfmResponse.clients[0]!, client_id: 45219, account_id: 222 },
+              { ...mockHfmResponse.clients[0]!, client_id: 45219, account_id: 333 },
             ],
             totals: mockHfmResponse.totals,
           }),
@@ -359,52 +354,16 @@ describe("resolveLinkedAccounts", () => {
       expect(accountIds).toEqual([111, 222, 333]);
     }
     expect(callLog[0]).toContain("accounts=111");
-    expect(callLog[1]).toContain("wallets=98241376");
+    expect(callLog[1]).toContain("wallets=45219");
   });
 
-  test("deduplicates accounts by account_id", async () => {
+  test("returns no_wallet when client_id is 0", async () => {
     globalThis.fetch = (async (url: string | URL | Request) => {
       const urlStr = String(url);
       if (urlStr.includes("accounts=111")) {
         return new Response(
           JSON.stringify({
-            clients: [{ ...mockHfmResponse.clients[0]!, client_id: 100, account_id: 111, subaffiliate: 98241376 }],
-            totals: mockHfmResponse.totals,
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        );
-      }
-      if (urlStr.includes("wallets=98241376")) {
-        return new Response(
-          JSON.stringify({
-            clients: [
-              { ...mockHfmResponse.clients[0]!, client_id: 100, account_id: 111, subaffiliate: 98241376 },
-              { ...mockHfmResponse.clients[0]!, client_id: 100, account_id: 111, subaffiliate: 98241376 },
-              { ...mockHfmResponse.clients[0]!, client_id: 200, account_id: 222, subaffiliate: 98241376 },
-            ],
-            totals: mockHfmResponse.totals,
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        );
-      }
-      return new Response("{}", { status: 200 });
-    }) as unknown as typeof globalThis.fetch;
-
-    const result = await resolveLinkedAccounts(111);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.length).toBe(2);
-      expect(result.data.map((d) => d.account_id)).toEqual([111, 222]);
-    }
-  });
-
-  test("returns no_wallet when subaffiliate is 0", async () => {
-    globalThis.fetch = (async (url: string | URL | Request) => {
-      const urlStr = String(url);
-      if (urlStr.includes("accounts=111")) {
-        return new Response(
-          JSON.stringify({
-            clients: [{ ...mockHfmResponse.clients[0]!, client_id: 100, account_id: 111, subaffiliate: 0 }],
+            clients: [{ ...mockHfmResponse.clients[0]!, client_id: 0, account_id: 111 }],
             totals: mockHfmResponse.totals,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
@@ -421,7 +380,7 @@ describe("resolveLinkedAccounts", () => {
   });
 
   test("returns not_found when account does not exist", async () => {
-    globalThis.fetch = (async (url: string | URL | Request) => {
+    globalThis.fetch = (async () => {
       return new Response("{}", { status: 404 });
     }) as unknown as typeof globalThis.fetch;
 
@@ -438,16 +397,16 @@ describe("resolveLinkedAccounts", () => {
       if (urlStr.includes("accounts=111")) {
         return new Response(
           JSON.stringify({
-            clients: [{ ...mockHfmResponse.clients[0]!, client_id: 100, account_id: 111, subaffiliate: 98241376 }],
+            clients: [{ ...mockHfmResponse.clients[0]!, client_id: 45219, account_id: 111 }],
             totals: mockHfmResponse.totals,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
-      if (urlStr.includes("wallets=98241376")) {
+      if (urlStr.includes("wallets=45219")) {
         return new Response(
           JSON.stringify({
-            clients: [{ ...mockHfmResponse.clients[0]!, client_id: 100, account_id: 111, subaffiliate: 98241376 }],
+            clients: [{ ...mockHfmResponse.clients[0]!, client_id: 45219, account_id: 111 }],
             totals: mockHfmResponse.totals,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }

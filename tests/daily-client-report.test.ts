@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { initSqlite } from "../src/services/sqlite.service";
 import { insertMany, getByDate, diffCounts, getAddedClients, getMissingClients } from "../src/repositories/snapshot.repository";
 import { seedFromEnv } from "../src/repositories/recipient.repository";
-import { buildWeeklyReportMessage, generateReportForUser, runDailyClientReport } from "../src/jobs/daily-client-report";
+import { buildWeeklyReportMessage, generateReportForUser, runDailyClientReport, type ReportPeriod } from "../src/jobs/daily-client-report";
 import type { HFMPerformanceData, HFMClientsPerformanceResponse } from "../src/types/hfm.types";
 
 describe("buildWeeklyReportMessage", () => {
@@ -527,5 +527,104 @@ describe("generateReportForUser", () => {
     expect(message).toContain("1 Missing Wallet today");
     expect(message).toContain("-10024");
     expect(message).toContain("0 New Wallets today");
+  });
+});
+
+describe("report period selection", () => {
+  const baseClient: HFMPerformanceData = {
+    client_id: 10023, account_id: 78451293, activity_status: "active",
+    trades: 0, volume: 0, account_type: "Standard", balance: 500,
+    account_currency: "USD", equity: 500, archived: null,
+    subaffiliate: 30506525, account_regdate: "2024-01-15T00:00:00Z",
+    status: "approved", full_name: "Test Client",
+  };
+
+  afterEach(() => {
+    delete process.env.TARGET_WALLET;
+  });
+
+  test("day period returns only today snapshot", async () => {
+    process.env.TARGET_WALLET = "30506525";
+    const db = new Database(":memory:", { strict: true });
+    initSqlite(db);
+
+    insertMany(db, "2026-04-20", [baseClient]);
+    insertMany(db, "2026-04-25", [baseClient]);
+    insertMany(db, "2026-04-26", [baseClient]);
+
+    const message = await generateReportForUser({
+      now: new Date("2026-04-25T22:00:00.000Z"),
+      db,
+      reportPeriod: "day",
+    });
+
+    expect(message).not.toContain("20/04/26");
+    expect(message).not.toContain("25/04/26");
+    expect(message).toContain("26/04/26");
+  });
+
+  test("week period returns up to 7 snapshot dates", async () => {
+    process.env.TARGET_WALLET = "30506525";
+    const db = new Database(":memory:", { strict: true });
+    initSqlite(db);
+
+    for (let i = 0; i < 9; i++) {
+      const d = new Date(Date.UTC(2026, 3, 18 + i));
+      const dateStr = d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+      insertMany(db, dateStr, [{ ...baseClient, client_id: 10023 + i }]);
+    }
+
+    const mockFetchAll = async () => ({ ok: true as const, data: { clients: [], totals: { clients: 0, accounts: 0, volume: 0, balance: 0, withdrawals: 0, commission: 0 } } });
+
+    const message = await generateReportForUser({
+      now: new Date("2026-04-25T22:00:00.000Z"),
+      db,
+      reportPeriod: "week",
+      fetchAllClientsFn: mockFetchAll,
+    });
+
+    const lines = message.split("\n").filter((l) => l.includes("Total Wallet"));
+    expect(lines.length).toBe(7);
+  });
+
+  test("month period returns up to 30 snapshot dates", async () => {
+    process.env.TARGET_WALLET = "30506525";
+    const db = new Database(":memory:", { strict: true });
+    initSqlite(db);
+
+    for (let i = 0; i < 32; i++) {
+      const d = new Date(Date.UTC(2026, 2, 26 + i));
+      const dateStr = d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+      insertMany(db, dateStr, [{ ...baseClient, client_id: 10023 + i }]);
+    }
+
+    const mockFetchAll = async () => ({ ok: true as const, data: { clients: [], totals: { clients: 0, accounts: 0, volume: 0, balance: 0, withdrawals: 0, commission: 0 } } });
+
+    const message = await generateReportForUser({
+      now: new Date("2026-04-25T22:00:00.000Z"),
+      db,
+      reportPeriod: "month",
+      fetchAllClientsFn: mockFetchAll,
+    });
+
+    const lines = message.split("\n").filter((l) => l.includes("Total Wallet"));
+    expect(lines.length).toBe(30);
+  });
+
+  test("default period is day when reportPeriod is omitted", async () => {
+    process.env.TARGET_WALLET = "30506525";
+    const db = new Database(":memory:", { strict: true });
+    initSqlite(db);
+
+    insertMany(db, "2026-04-20", [baseClient]);
+    insertMany(db, "2026-04-26", [baseClient]);
+
+    const message = await generateReportForUser({
+      now: new Date("2026-04-25T22:00:00.000Z"),
+      db,
+    });
+
+    expect(message).not.toContain("20/04/26");
+    expect(message).toContain("26/04/26");
   });
 });

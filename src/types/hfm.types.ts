@@ -50,7 +50,7 @@ export interface HFMClientsPerformanceResponse {
 
 export type HFMApiResult =
   | { ok: true; data: HFMPerformanceData[] }
-  | { ok: false; reason: "not_found" | "server_error" | "timeout" };
+  | { ok: false; reason: "not_found" | "server_error" | "timeout" | "no_wallet" };
 
 export type HFMAllClientsResult =
   | { ok: true; data: HFMClientsPerformanceResponse }

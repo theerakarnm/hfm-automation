@@ -7,7 +7,13 @@ import { fetchAllClients } from "../services/hfm.service";
 import { pushToAll } from "../services/line.service";
 import { getIctDateString, getPreviousIctDateString } from "../utils/date";
 
-const REPORT_WEEK_DAYS = 7;
+export type ReportPeriod = "day" | "week" | "month";
+
+const REPORT_PERIOD_DAYS: Record<ReportPeriod, number> = {
+  day: 1,
+  week: 7,
+  month: 30,
+};
 
 function formatDate(dateStr: string): string {
   const [year, month, day] = dateStr.split("-");
@@ -54,6 +60,7 @@ export interface RunDailyClientReportOptions {
   db?: Database;
   fetchAllClientsFn?: () => Promise<HFMAllClientsResult>;
   pushToAllFn?: (uids: string[], text: string) => Promise<void>;
+  reportPeriod?: ReportPeriod;
 }
 
 function hasDailyReportNotificationSent(db: Database, date: string): boolean {
@@ -99,13 +106,15 @@ async function buildReportData(
   now: Date,
   today: string,
   fetchAll: () => Promise<HFMAllClientsResult>,
+  period: ReportPeriod = "week",
 ) {
   await ensureTodaySnapshot(db, today, fetchAll);
 
   const { wallet: targetWallet, label: targetLabel } = getTargetWallet();
   const yesterday = getPreviousIctDateString(now);
 
-  const dates = getRecentSnapshotDates(db, today, REPORT_WEEK_DAYS);
+  const days = REPORT_PERIOD_DAYS[period];
+  const dates = getRecentSnapshotDates(db, today, days);
 
   const dateCounts = new Map<string, number>();
   for (const d of dates) {
@@ -134,10 +143,11 @@ export async function generateReportForUser(options: RunDailyClientReportOptions
   const now = options.now ?? new Date();
   const db = options.db ?? getDatabase();
   const fetchAll = options.fetchAllClientsFn ?? fetchAllClients;
+  const period = options.reportPeriod ?? "day";
 
   initSqlite(db);
   const today = getIctDateString(now);
-  return await buildReportData(db, now, today, fetchAll);
+  return await buildReportData(db, now, today, fetchAll, period);
 }
 
 export async function runDailyClientReport(options: RunDailyClientReportOptions = {}): Promise<void> {
@@ -156,7 +166,7 @@ export async function runDailyClientReport(options: RunDailyClientReportOptions 
     return;
   }
 
-  const message = await buildReportData(db, now, today, fetchAll);
+  const message = await buildReportData(db, now, today, fetchAll, "week");
 
   const uids = getActiveUids(db);
   if (uids.length === 0) {

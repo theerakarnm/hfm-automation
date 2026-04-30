@@ -1,5 +1,5 @@
 import { test, expect, describe, afterEach } from "bun:test";
-import { fetchPerformance, extractWalletNumber, checkConditions, fetchAllClients, parsePerformanceLookup } from "../src/services/hfm.service";
+import { fetchPerformance, extractWalletNumber, checkConditions, fetchAllClients, parsePerformanceLookup, resolveLinkedAccounts } from "../src/services/hfm.service";
 import type { HFMClientsPerformanceResponse } from "../src/types/hfm.types";
 
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -275,31 +275,28 @@ describe("parsePerformanceLookup", () => {
     expect(result).toEqual({ kind: "wallet", id: 98241376, label: "98241376" });
   });
 
-  test("9-digit number returns account lookup", () => {
+  test("9-digit number returns wallet lookup", () => {
     const result = parsePerformanceLookup("123456789");
-    expect(result).toEqual({ kind: "account", id: 123456789, label: "123456789" });
+    expect(result).toEqual({ kind: "wallet", id: 123456789, label: "123456789" });
   });
 
-  test("accounts= prefix returns account lookup", () => {
-    const result = parsePerformanceLookup("accounts=123456789");
-    expect(result).toEqual({ kind: "account", id: 123456789, label: "123456789" });
+  test("T prefix returns account lookup", () => {
+    const result = parsePerformanceLookup("T1928491038");
+    expect(result).toEqual({ kind: "account", id: 1928491038, label: "1928491038" });
   });
 
-  test("ACC- prefix returns account lookup", () => {
-    const result = parsePerformanceLookup("ACC-123456789");
-    expect(result).toEqual({ kind: "account", id: 123456789, label: "123456789" });
+  test("T prefix case-insensitive", () => {
+    const result = parsePerformanceLookup("t91839384");
+    expect(result).toEqual({ kind: "account", id: 91839384, label: "91839384" });
   });
 
   test("non-numeric input returns null", () => {
     expect(parsePerformanceLookup("abc")).toBeNull();
   });
 
-  test("7-digit number returns null", () => {
-    expect(parsePerformanceLookup("1234567")).toBeNull();
-  });
-
-  test("10-digit number returns null", () => {
-    expect(parsePerformanceLookup("1234567890")).toBeNull();
+  test("10-digit number returns wallet lookup", () => {
+    const result = parsePerformanceLookup("1234567890");
+    expect(result).toEqual({ kind: "wallet", id: 1234567890, label: "1234567890" });
   });
 
   test("empty string returns null", () => {
@@ -310,9 +307,160 @@ describe("parsePerformanceLookup", () => {
     const result = parsePerformanceLookup("  98241376  ");
     expect(result).toEqual({ kind: "wallet", id: 98241376, label: "98241376" });
   });
+});
 
-  test("case-insensitive accounts= prefix", () => {
-    const result = parsePerformanceLookup("ACCOUNTS=99887766");
-    expect(result).toEqual({ kind: "account", id: 99887766, label: "99887766" });
+describe("resolveLinkedAccounts", () => {
+  afterEach(() => {
+    globalThis.fetch = ORIGINAL_FETCH;
+  });
+
+  test("resolves account to wallet and returns all linked accounts", async () => {
+    const callLog: string[] = [];
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const urlStr = String(url);
+      callLog.push(urlStr);
+      if (urlStr.includes("accounts=111")) {
+        return new Response(
+          JSON.stringify({
+            clients: [
+              {
+                ...mockHfmResponse.clients[0]!,
+                client_id: 100,
+                account_id: 111,
+                subaffiliate: 98241376,
+              },
+            ],
+            totals: mockHfmResponse.totals,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (urlStr.includes("wallets=98241376")) {
+        return new Response(
+          JSON.stringify({
+            clients: [
+              { ...mockHfmResponse.clients[0]!, client_id: 100, account_id: 111, subaffiliate: 98241376 },
+              { ...mockHfmResponse.clients[0]!, client_id: 200, account_id: 222, subaffiliate: 98241376 },
+              { ...mockHfmResponse.clients[0]!, client_id: 300, account_id: 333, subaffiliate: 98241376 },
+            ],
+            totals: mockHfmResponse.totals,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const result = await resolveLinkedAccounts(111);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.length).toBe(3);
+      const accountIds = result.data.map((d) => d.account_id);
+      expect(accountIds).toEqual([111, 222, 333]);
+    }
+    expect(callLog[0]).toContain("accounts=111");
+    expect(callLog[1]).toContain("wallets=98241376");
+  });
+
+  test("deduplicates accounts by account_id", async () => {
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const urlStr = String(url);
+      if (urlStr.includes("accounts=111")) {
+        return new Response(
+          JSON.stringify({
+            clients: [{ ...mockHfmResponse.clients[0]!, client_id: 100, account_id: 111, subaffiliate: 98241376 }],
+            totals: mockHfmResponse.totals,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (urlStr.includes("wallets=98241376")) {
+        return new Response(
+          JSON.stringify({
+            clients: [
+              { ...mockHfmResponse.clients[0]!, client_id: 100, account_id: 111, subaffiliate: 98241376 },
+              { ...mockHfmResponse.clients[0]!, client_id: 100, account_id: 111, subaffiliate: 98241376 },
+              { ...mockHfmResponse.clients[0]!, client_id: 200, account_id: 222, subaffiliate: 98241376 },
+            ],
+            totals: mockHfmResponse.totals,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const result = await resolveLinkedAccounts(111);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.length).toBe(2);
+      expect(result.data.map((d) => d.account_id)).toEqual([111, 222]);
+    }
+  });
+
+  test("returns no_wallet when subaffiliate is 0", async () => {
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const urlStr = String(url);
+      if (urlStr.includes("accounts=111")) {
+        return new Response(
+          JSON.stringify({
+            clients: [{ ...mockHfmResponse.clients[0]!, client_id: 100, account_id: 111, subaffiliate: 0 }],
+            totals: mockHfmResponse.totals,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const result = await resolveLinkedAccounts(111);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("no_wallet");
+    }
+  });
+
+  test("returns not_found when account does not exist", async () => {
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      return new Response("{}", { status: 404 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const result = await resolveLinkedAccounts(999);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("not_found");
+    }
+  });
+
+  test("wallet with single account returns array of 1", async () => {
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const urlStr = String(url);
+      if (urlStr.includes("accounts=111")) {
+        return new Response(
+          JSON.stringify({
+            clients: [{ ...mockHfmResponse.clients[0]!, client_id: 100, account_id: 111, subaffiliate: 98241376 }],
+            totals: mockHfmResponse.totals,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (urlStr.includes("wallets=98241376")) {
+        return new Response(
+          JSON.stringify({
+            clients: [{ ...mockHfmResponse.clients[0]!, client_id: 100, account_id: 111, subaffiliate: 98241376 }],
+            totals: mockHfmResponse.totals,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const result = await resolveLinkedAccounts(111);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]!.account_id).toBe(111);
+    }
   });
 });

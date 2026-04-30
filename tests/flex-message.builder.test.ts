@@ -247,15 +247,16 @@ describe("buildTradingCard", () => {
     expect(texts.some((t) => t === "15 Jan 2024")).toBe(true);
   });
 
-  test("account lookup shows Wallet ID instead of duplicate Account ID", () => {
-    const accountLookup: PerformanceLookup = { kind: "account", id: 78451293, label: "78451293" };
-    const card = buildTradingCard(mockData, accountLookup, matchAllConditions);
+  test("wallet lookup with resolved wallet shows Wallet ID and Account ID", () => {
+    const resolvedWalletLookup: PerformanceLookup = { kind: "wallet", id: 98241376, label: "98241376" };
+    const dataWithWallet = { ...mockData, subaffiliate: 98241376 };
+    const card = buildTradingCard(dataWithWallet, resolvedWalletLookup, matchAllConditions);
     const texts = extractTexts(card);
 
+    expect(texts.some((t) => t === "Wallet ID")).toBe(true);
+    expect(texts.some((t) => t.includes("98241376"))).toBe(true);
     expect(texts.some((t) => t === "Account ID")).toBe(true);
     expect(texts.some((t) => t.includes("78451293"))).toBe(true);
-    expect(texts.some((t) => t === "Wallet ID")).toBe(true);
-    expect(texts.some((t) => t.includes("45219"))).toBe(true);
   });
 
   test("wallet lookup shows Account ID from data.account_id", () => {

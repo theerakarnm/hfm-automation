@@ -19,14 +19,10 @@ export function extractWalletNumber(walletId: string): number | null {
 export function parsePerformanceLookup(input: string): PerformanceLookup | null {
   const trimmed = input.trim();
 
-  const accountsMatch = trimmed.match(/^accounts=(\d+)$/i);
-  if (accountsMatch) {
-    return { kind: "account", id: Number(accountsMatch[1]!), label: accountsMatch[1]! };
-  }
-
-  const accPrefixMatch = trimmed.match(/^ACC-(\d+)$/i);
-  if (accPrefixMatch) {
-    return { kind: "account", id: Number(accPrefixMatch[1]!), label: accPrefixMatch[1]! };
+  const tPrefixMatch = trimmed.match(/^T(\d+)$/i);
+  if (tPrefixMatch) {
+    const digits = tPrefixMatch[1]!;
+    return { kind: "account", id: Number(digits), label: digits };
   }
 
   const wlPrefixMatch = trimmed.match(/^WL-(\d+)$/i);
@@ -35,13 +31,7 @@ export function parsePerformanceLookup(input: string): PerformanceLookup | null 
   }
 
   if (/^\d+$/.test(trimmed)) {
-    if (trimmed.length === 8) {
-      return { kind: "wallet", id: Number(trimmed), label: trimmed };
-    }
-    if (trimmed.length === 9) {
-      return { kind: "account", id: Number(trimmed), label: trimmed };
-    }
-    return null;
+    return { kind: "wallet", id: Number(trimmed), label: trimmed };
   }
 
   return null;
@@ -132,6 +122,31 @@ export async function fetchPerformance(
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function resolveLinkedAccounts(
+  accountId: number
+): Promise<HFMApiResult> {
+  const accountResult = await fetchPerformance({
+    kind: "account",
+    id: accountId,
+    label: String(accountId),
+  });
+
+  if (!accountResult.ok) return accountResult;
+
+  const firstClient = accountResult.data[0]!;
+  const walletId = firstClient.client_id;
+
+  if (!walletId || walletId === 0) {
+    return { ok: false, reason: "no_wallet" };
+  }
+
+  return fetchPerformance({
+    kind: "wallet",
+    id: walletId,
+    label: String(walletId),
+  });
 }
 
 export async function fetchAllClients(timeoutMs = 10_000): Promise<HFMAllClientsResult> {

@@ -3,7 +3,8 @@ import { Database } from "bun:sqlite";
 import { initSqlite } from "../src/services/sqlite.service";
 import { insertMany, getByDate, diffCounts, getAddedClients, getMissingClients } from "../src/repositories/snapshot.repository";
 import { seedFromEnv } from "../src/repositories/recipient.repository";
-import { buildWeeklyReportMessage, generateReportForUser, runDailyClientReport, type ReportPeriod } from "../src/jobs/daily-client-report";
+import { buildWeeklyReportMessage, buildComparisonReportMessage, generateReportForUser, runDailyClientReport, type ReportPeriod } from "../src/jobs/daily-client-report";
+import { getThisWeekRange, getLastWeekRange, getThisMonthRange, getLastMonthRange } from "../src/utils/date";
 import type { HFMPerformanceData, HFMClientsPerformanceResponse } from "../src/types/hfm.types";
 
 describe("buildWeeklyReportMessage", () => {
@@ -81,6 +82,70 @@ describe("buildWeeklyReportMessage", () => {
       "0 Missing Wallet today\n" +
       "0 New Wallets today"
     );
+  });
+});
+
+describe("buildComparisonReportMessage", () => {
+  test("formats week comparison with change", () => {
+    const msg = buildComparisonReportMessage({
+      title: "Week-over-week Wallet Report",
+      prevLabel: "Last week",
+      prevFrom: "2026-04-20",
+      prevTo: "2026-04-26",
+      prevCount: 100,
+      currLabel: "This week",
+      currFrom: "2026-04-27",
+      currTo: "2026-04-30",
+      currCount: 120,
+      targetWalletLabel: "30506525",
+      missingIds: [12345],
+      newIds: [99999, 88888],
+    });
+    expect(msg).toContain("Week-over-week Wallet Report");
+    expect(msg).toContain("Last week (20/04/26 - 26/04/26): 100 Wallets");
+    expect(msg).toContain("This week (27/04/26 - 30/04/26): 120 Wallets");
+    expect(msg).toContain("Change: +20 Wallets (+20.00%)");
+    expect(msg).toContain("1 Missing Wallets since Last week");
+    expect(msg).toContain("-12345");
+    expect(msg).toContain("2 New Wallets in This week");
+  });
+
+  test("shows zero change", () => {
+    const msg = buildComparisonReportMessage({
+      title: "Month-over-month Wallet Report",
+      prevLabel: "Last month",
+      prevFrom: "2026-03-01",
+      prevTo: "2026-03-31",
+      prevCount: 50,
+      currLabel: "This month",
+      currFrom: "2026-04-01",
+      currTo: "2026-04-30",
+      currCount: 50,
+      targetWalletLabel: "30506525",
+      missingIds: [],
+      newIds: [],
+    });
+    expect(msg).toContain("Change: 0 Wallets (0.00%)");
+    expect(msg).toContain("0 Missing Wallets since Last month");
+    expect(msg).toContain("0 New Wallets in This month");
+  });
+
+  test("handles negative change", () => {
+    const msg = buildComparisonReportMessage({
+      title: "Week-over-week Wallet Report",
+      prevLabel: "Last week",
+      prevFrom: "2026-04-20",
+      prevTo: "2026-04-26",
+      prevCount: 100,
+      currLabel: "This week",
+      currFrom: "2026-04-27",
+      currTo: "2026-04-30",
+      currCount: 90,
+      targetWalletLabel: "30506525",
+      missingIds: [],
+      newIds: [],
+    });
+    expect(msg).toContain("Change: -10 Wallets (-10.00%)");
   });
 });
 
@@ -201,6 +266,20 @@ const mockClientsResponse: HFMClientsPerformanceResponse = {
   },
 };
 
+function makeRangeResponse(clients: HFMPerformanceData[]): HFMClientsPerformanceResponse {
+  return {
+    clients,
+    totals: {
+      clients: clients.length,
+      accounts: clients.length,
+      volume: 0,
+      balance: 0,
+      withdrawals: 0,
+      commission: 0,
+    },
+  };
+}
+
 describe("runDailyClientReport", () => {
   const ORIGINAL_FETCH = globalThis.fetch;
 
@@ -209,7 +288,7 @@ describe("runDailyClientReport", () => {
     delete process.env.TARGET_WALLET;
   });
 
-  test("first run stores snapshot and sends weekly report", async () => {
+  test("first run stores snapshot and sends daily report", async () => {
     process.env.TARGET_WALLET = "30506525";
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
@@ -218,12 +297,14 @@ describe("runDailyClientReport", () => {
     let pushedMessage = "";
     const mockFetchAll = async () => ({ ok: true as const, data: mockClientsResponse });
     const mockPushAll = async (_uids: string[], text: string) => { pushedMessage = text; };
+    const mockFetchByRange = async () => ({ ok: true as const, data: makeRangeResponse(mockClientsResponse.clients) });
 
     await runDailyClientReport({
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchAllClientsFn: mockFetchAll,
       pushToAllFn: mockPushAll,
+      fetchByRangeFn: mockFetchByRange,
     });
 
     expect(pushedMessage).toContain("Total Wallet under 30506525 : 2 Wallets");
@@ -241,6 +322,7 @@ describe("runDailyClientReport", () => {
     seedFromEnv(db, "Utest001");
 
     const mockFetchAll = async () => ({ ok: true as const, data: mockClientsResponse });
+    const mockFetchByRange = async () => ({ ok: true as const, data: makeRangeResponse(mockClientsResponse.clients) });
     let pushCount = 0;
     const mockPushAll = async () => { pushCount++; };
 
@@ -249,6 +331,7 @@ describe("runDailyClientReport", () => {
       db,
       fetchAllClientsFn: mockFetchAll,
       pushToAllFn: mockPushAll,
+      fetchByRangeFn: mockFetchByRange,
     });
 
     await runDailyClientReport({
@@ -256,6 +339,7 @@ describe("runDailyClientReport", () => {
       db,
       fetchAllClientsFn: mockFetchAll,
       pushToAllFn: mockPushAll,
+      fetchByRangeFn: mockFetchByRange,
     });
 
     expect(pushCount).toBe(1);
@@ -274,6 +358,7 @@ describe("runDailyClientReport", () => {
       fetchCount++;
       return { ok: true as const, data: mockClientsResponse };
     };
+    const mockFetchByRange = async () => ({ ok: true as const, data: makeRangeResponse(mockClientsResponse.clients) });
 
     await expect(
       runDailyClientReport({
@@ -283,6 +368,7 @@ describe("runDailyClientReport", () => {
         pushToAllFn: async () => {
           throw new Error("LINE unavailable");
         },
+        fetchByRangeFn: mockFetchByRange,
       })
     ).rejects.toThrow("LINE unavailable");
 
@@ -294,13 +380,14 @@ describe("runDailyClientReport", () => {
       db,
       fetchAllClientsFn: mockFetchAll,
       pushToAllFn: async (_uids: string[], text: string) => { pushedMessage = text; },
+      fetchByRangeFn: mockFetchByRange,
     });
 
     expect(fetchCount).toBe(1);
     expect(pushedMessage).toContain("Total Wallet under 30506525");
   });
 
-  test("second day shows missing wallet IDs in weekly format", async () => {
+  test("second day shows missing wallet IDs in daily format", async () => {
     process.env.TARGET_WALLET = "30506525";
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
@@ -339,12 +426,14 @@ describe("runDailyClientReport", () => {
 
     const messages: string[] = [];
     const mockPushAll = async (_uids: string[], text: string) => { messages.push(text); };
+    const mockFetchByRange = async () => ({ ok: true as const, data: makeRangeResponse(mockClientsResponse.clients) });
 
     await runDailyClientReport({
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchAllClientsFn: async () => ({ ok: true as const, data: day1Clients }),
       pushToAllFn: mockPushAll,
+      fetchByRangeFn: mockFetchByRange,
     });
 
     await runDailyClientReport({
@@ -352,6 +441,7 @@ describe("runDailyClientReport", () => {
       db,
       fetchAllClientsFn: async () => ({ ok: true as const, data: day2Clients }),
       pushToAllFn: mockPushAll,
+      fetchByRangeFn: mockFetchByRange,
     });
 
     expect(messages[1]).toContain("Total Wallet under 30506525");
@@ -368,12 +458,14 @@ describe("runDailyClientReport", () => {
 
     const mockFetchAll = async () => ({ ok: true as const, data: mockClientsResponse });
     const mockPushAll = async () => { };
+    const mockFetchByRange = async () => ({ ok: true as const, data: makeRangeResponse(mockClientsResponse.clients) });
 
     await runDailyClientReport({
       now: new Date("2026-01-01T22:00:00.000Z"),
       db,
       fetchAllClientsFn: mockFetchAll,
       pushToAllFn: mockPushAll,
+      fetchByRangeFn: mockFetchByRange,
     });
 
     await runDailyClientReport({
@@ -381,6 +473,7 @@ describe("runDailyClientReport", () => {
       db,
       fetchAllClientsFn: mockFetchAll,
       pushToAllFn: mockPushAll,
+      fetchByRangeFn: mockFetchByRange,
     });
 
     const oldRows = getByDate(db, "2026-01-02");
@@ -417,6 +510,7 @@ describe("runDailyClientReport", () => {
     const mockFetchAll = async () => ({ ok: true as const, data: mockClientsResponse });
     let pushCalled = false;
     const mockPushAll = async () => { pushCalled = true; };
+    const mockFetchByRange = async () => ({ ok: true as const, data: makeRangeResponse(mockClientsResponse.clients) });
 
     const originalNotifyUids = process.env.LINE_NOTIFY_UIDS;
     process.env.LINE_NOTIFY_UIDS = "";
@@ -426,6 +520,7 @@ describe("runDailyClientReport", () => {
       db,
       fetchAllClientsFn: mockFetchAll,
       pushToAllFn: mockPushAll,
+      fetchByRangeFn: mockFetchByRange,
     });
 
     process.env.LINE_NOTIFY_UIDS = originalNotifyUids;
@@ -441,17 +536,19 @@ describe("generateReportForUser", () => {
     delete process.env.TARGET_WALLET;
   });
 
-  test("generates report without marking notification sent", async () => {
+  test("generates day report without marking notification sent", async () => {
     process.env.TARGET_WALLET = "30506525";
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
 
     const mockFetchAll = async () => ({ ok: true as const, data: mockClientsResponse });
+    const mockFetchByRange = async () => ({ ok: true as const, data: makeRangeResponse(mockClientsResponse.clients) });
 
     const message = await generateReportForUser({
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchAllClientsFn: mockFetchAll,
+      fetchByRangeFn: mockFetchByRange,
     });
 
     expect(message).toContain("Total Wallet under 30506525 : 2 Wallets");
@@ -467,7 +564,7 @@ describe("generateReportForUser", () => {
     expect(sent.count).toBe(0);
   });
 
-  test("generates report from existing snapshot without refetching", async () => {
+  test("generates day report from existing snapshot without refetching", async () => {
     process.env.TARGET_WALLET = "30506525";
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
@@ -477,17 +574,20 @@ describe("generateReportForUser", () => {
       fetchCount++;
       return { ok: true as const, data: mockClientsResponse };
     };
+    const mockFetchByRange = async () => ({ ok: true as const, data: makeRangeResponse(mockClientsResponse.clients) });
 
     await generateReportForUser({
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchAllClientsFn: mockFetchAll,
+      fetchByRangeFn: mockFetchByRange,
     });
 
     const message = await generateReportForUser({
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchAllClientsFn: mockFetchAll,
+      fetchByRangeFn: mockFetchByRange,
     });
 
     expect(fetchCount).toBe(1);
@@ -563,52 +663,85 @@ describe("report period selection", () => {
     expect(message).toContain("26/04/26");
   });
 
-  test("week period returns up to 7 snapshot dates", async () => {
+  test("week period returns comparison report", async () => {
     process.env.TARGET_WALLET = "30506525";
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
 
-    for (let i = 0; i < 9; i++) {
-      const d = new Date(Date.UTC(2026, 3, 18 + i));
-      const dateStr = d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
-      insertMany(db, dateStr, [{ ...baseClient, client_id: 10023 + i }]);
-    }
+    const now = new Date("2026-04-29T22:00:00.000Z");
+    const lastWeek = getLastWeekRange(now);
+    const thisWeek = getThisWeekRange(now);
 
-    const mockFetchAll = async () => ({ ok: true as const, data: { clients: [], totals: { clients: 0, accounts: 0, volume: 0, balance: 0, withdrawals: 0, commission: 0 } } });
+    const prevClients: HFMPerformanceData[] = [
+      { ...baseClient, client_id: 10023 },
+      { ...baseClient, client_id: 10024 },
+    ];
+    const currClients: HFMPerformanceData[] = [
+      { ...baseClient, client_id: 10023 },
+      { ...baseClient, client_id: 10025 },
+    ];
+
+    const rangeCalls: Array<{ from: string; to: string }> = [];
+    const mockFetchByRange = async (fromDate: string, toDate: string) => {
+      rangeCalls.push({ from: fromDate, to: toDate });
+      if (fromDate === lastWeek.from && toDate === lastWeek.to) {
+        return { ok: true as const, data: makeRangeResponse(prevClients) };
+      }
+      return { ok: true as const, data: makeRangeResponse(currClients) };
+    };
 
     const message = await generateReportForUser({
-      now: new Date("2026-04-25T22:00:00.000Z"),
+      now,
       db,
       reportPeriod: "week",
-      fetchAllClientsFn: mockFetchAll,
+      fetchByRangeFn: mockFetchByRange,
     });
 
-    const lines = message.split("\n").filter((l) => l.includes("Total Wallet"));
-    expect(lines.length).toBe(7);
+    expect(message).toContain("Week-over-week Wallet Report");
+    expect(message).toContain("Last week");
+    expect(message).toContain("This week");
+    expect(message).toContain("2 Wallets");
+    expect(rangeCalls).toHaveLength(2);
   });
 
-  test("month period returns up to 30 snapshot dates", async () => {
+  test("month period returns comparison report", async () => {
     process.env.TARGET_WALLET = "30506525";
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
 
-    for (let i = 0; i < 32; i++) {
-      const d = new Date(Date.UTC(2026, 2, 26 + i));
-      const dateStr = d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
-      insertMany(db, dateStr, [{ ...baseClient, client_id: 10023 + i }]);
-    }
+    const now = new Date("2026-04-29T22:00:00.000Z");
+    const lastMonth = getLastMonthRange(now);
+    const thisMonth = getThisMonthRange(now);
 
-    const mockFetchAll = async () => ({ ok: true as const, data: { clients: [], totals: { clients: 0, accounts: 0, volume: 0, balance: 0, withdrawals: 0, commission: 0 } } });
+    const prevClients: HFMPerformanceData[] = [
+      { ...baseClient, client_id: 10023 },
+    ];
+    const currClients: HFMPerformanceData[] = [
+      { ...baseClient, client_id: 10023 },
+      { ...baseClient, client_id: 10024 },
+      { ...baseClient, client_id: 10025 },
+    ];
+
+    const mockFetchByRange = async (fromDate: string, toDate: string) => {
+      if (fromDate === lastMonth.from && toDate === lastMonth.to) {
+        return { ok: true as const, data: makeRangeResponse(prevClients) };
+      }
+      return { ok: true as const, data: makeRangeResponse(currClients) };
+    };
 
     const message = await generateReportForUser({
-      now: new Date("2026-04-25T22:00:00.000Z"),
+      now,
       db,
       reportPeriod: "month",
-      fetchAllClientsFn: mockFetchAll,
+      fetchByRangeFn: mockFetchByRange,
     });
 
-    const lines = message.split("\n").filter((l) => l.includes("Total Wallet"));
-    expect(lines.length).toBe(30);
+    expect(message).toContain("Month-over-month Wallet Report");
+    expect(message).toContain("Last month");
+    expect(message).toContain("This month");
+    expect(message).toContain("1 Wallets");
+    expect(message).toContain("3 Wallets");
+    expect(message).toContain("Change: +2 Wallets");
   });
 
   test("default period is day when reportPeriod is omitted", async () => {
@@ -626,5 +759,69 @@ describe("report period selection", () => {
 
     expect(message).not.toContain("20/04/26");
     expect(message).toContain("26/04/26");
+  });
+
+  test("week report uses cache on second call", async () => {
+    process.env.TARGET_WALLET = "30506525";
+    const db = new Database(":memory:", { strict: true });
+    initSqlite(db);
+
+    const now = new Date("2026-04-29T22:00:00.000Z");
+    let rangeCallCount = 0;
+    const mockFetchByRange = async () => {
+      rangeCallCount++;
+      return { ok: true as const, data: makeRangeResponse([baseClient]) };
+    };
+
+    await generateReportForUser({
+      now,
+      db,
+      reportPeriod: "week",
+      fetchByRangeFn: mockFetchByRange,
+    });
+
+    expect(rangeCallCount).toBe(2);
+
+    const msg2 = await generateReportForUser({
+      now,
+      db,
+      reportPeriod: "week",
+      fetchByRangeFn: mockFetchByRange,
+    });
+
+    expect(rangeCallCount).toBe(2);
+    expect(msg2).toContain("Week-over-week Wallet Report");
+  });
+
+  test("month report uses cache on second call", async () => {
+    process.env.TARGET_WALLET = "30506525";
+    const db = new Database(":memory:", { strict: true });
+    initSqlite(db);
+
+    const now = new Date("2026-04-29T22:00:00.000Z");
+    let rangeCallCount = 0;
+    const mockFetchByRange = async () => {
+      rangeCallCount++;
+      return { ok: true as const, data: makeRangeResponse([baseClient]) };
+    };
+
+    await generateReportForUser({
+      now,
+      db,
+      reportPeriod: "month",
+      fetchByRangeFn: mockFetchByRange,
+    });
+
+    expect(rangeCallCount).toBe(2);
+
+    const msg2 = await generateReportForUser({
+      now,
+      db,
+      reportPeriod: "month",
+      fetchByRangeFn: mockFetchByRange,
+    });
+
+    expect(rangeCallCount).toBe(2);
+    expect(msg2).toContain("Month-over-month Wallet Report");
   });
 });

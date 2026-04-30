@@ -1,5 +1,5 @@
 import { test, expect, describe, afterEach } from "bun:test";
-import { fetchPerformance, extractWalletNumber, checkConditions, fetchAllClients, parsePerformanceLookup, resolveLinkedAccounts } from "../src/services/hfm.service";
+import { fetchPerformance, extractWalletNumber, checkConditions, fetchAllClients, fetchClientsByRange, parsePerformanceLookup, resolveLinkedAccounts } from "../src/services/hfm.service";
 import type { HFMClientsPerformanceResponse } from "../src/types/hfm.types";
 
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -259,6 +259,36 @@ describe("fetchAllClients", () => {
   test("fetchAllClients invalid body returns server_error", async () => {
     globalThis.fetch = mockFetch(200, { not_clients: true });
     const result = await fetchAllClients();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("server_error");
+  });
+});
+
+describe("fetchClientsByRange", () => {
+  afterEach(() => {
+    globalThis.fetch = ORIGINAL_FETCH;
+  });
+
+  test("calls client-performance with from_date and to_date query params", async () => {
+    let calledUrl = "";
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      calledUrl = String(url);
+      return new Response(JSON.stringify(mockHfmResponse), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof globalThis.fetch;
+
+    const result = await fetchClientsByRange("2026-03-01", "2026-03-31");
+    expect(result.ok).toBe(true);
+    expect(calledUrl).toContain("from_date=2026-03-01");
+    expect(calledUrl).toContain("to_date=2026-03-31");
+    expect(calledUrl).toContain("/api/performance/client-performance?");
+  });
+
+  test("server error returns server_error", async () => {
+    globalThis.fetch = mockFetch(500, { detail: "Internal error" });
+    const result = await fetchClientsByRange("2026-03-01", "2026-03-31");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("server_error");
   });

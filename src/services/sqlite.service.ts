@@ -40,6 +40,16 @@ CREATE TABLE IF NOT EXISTS line_users (
   request_count   INTEGER DEFAULT 1,
   last_event_type TEXT
 );
+
+CREATE TABLE IF NOT EXISTS report_range_snapshots (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  period     TEXT NOT NULL,
+  from_date  TEXT NOT NULL,
+  to_date    TEXT NOT NULL,
+  raw_json   TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(period, from_date, to_date)
+);
 `;
 
 let _db: Database | null = null;

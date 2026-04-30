@@ -665,6 +665,8 @@ describe("webhook", () => {
     });
     const sig = computeSig(body, SECRET);
 
+    const emptyResponse = { clients: [], totals: { clients: 0, accounts: 0, volume: 0, balance: 0, withdrawals: 0, commission: 0 } };
+
     const fetchCalls: Array<{ url: string; body?: string }> = [];
     globalThis.fetch = (async (
       input: Parameters<typeof globalThis.fetch>[0],
@@ -673,9 +675,9 @@ describe("webhook", () => {
       const url = String(input);
       fetchCalls.push({ url, body: typeof init?.body === "string" ? init.body : undefined });
       if (url.endsWith("/v2/bot/chat/loading/start")) return new Response("{}", { status: 202 });
-      if (url.includes("/api/performance/client-performance") && !url.includes("?")) {
+      if (url.includes("/api/performance/client-performance")) {
         return new Response(
-          JSON.stringify({ clients: [], totals: { clients: 0, accounts: 0, volume: 0, balance: 0, withdrawals: 0, commission: 0 } }),
+          JSON.stringify(emptyResponse),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
@@ -691,7 +693,7 @@ describe("webhook", () => {
     );
     expect((await res).status).toBe(200);
 
-    await waitFor(() => fetchCalls.length >= 3);
+    await waitFor(() => fetchCalls.length >= 4);
     expect(fetchCalls.at(-1)?.url).toBe("https://api.line.me/v2/bot/message/reply");
     const replyBody = JSON.parse(fetchCalls.at(-1)?.body ?? "{}");
     expect(replyBody.replyToken).toBe("tokenWeek");
@@ -715,6 +717,8 @@ describe("webhook", () => {
     });
     const sig = computeSig(body, SECRET);
 
+    const emptyResponse = { clients: [], totals: { clients: 0, accounts: 0, volume: 0, balance: 0, withdrawals: 0, commission: 0 } };
+
     const fetchCalls: Array<{ url: string; body?: string }> = [];
     globalThis.fetch = (async (
       input: Parameters<typeof globalThis.fetch>[0],
@@ -723,9 +727,9 @@ describe("webhook", () => {
       const url = String(input);
       fetchCalls.push({ url, body: typeof init?.body === "string" ? init.body : undefined });
       if (url.endsWith("/v2/bot/chat/loading/start")) return new Response("{}", { status: 202 });
-      if (url.includes("/api/performance/client-performance") && !url.includes("?")) {
+      if (url.includes("/api/performance/client-performance")) {
         return new Response(
-          JSON.stringify({ clients: [], totals: { clients: 0, accounts: 0, volume: 0, balance: 0, withdrawals: 0, commission: 0 } }),
+          JSON.stringify(emptyResponse),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
@@ -741,7 +745,7 @@ describe("webhook", () => {
     );
     expect((await res).status).toBe(200);
 
-    await waitFor(() => fetchCalls.length >= 3);
+    await waitFor(() => fetchCalls.length >= 4);
     expect(fetchCalls.at(-1)?.url).toBe("https://api.line.me/v2/bot/message/reply");
     const replyBody = JSON.parse(fetchCalls.at(-1)?.body ?? "{}");
     expect(replyBody.replyToken).toBe("tokenMonth");

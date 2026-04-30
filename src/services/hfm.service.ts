@@ -182,3 +182,42 @@ export async function fetchAllClients(timeoutMs = 10_000): Promise<HFMAllClients
     clearTimeout(timer);
   }
 }
+
+export async function fetchClientsByRange(
+  fromDate: string,
+  toDate: string,
+  timeoutMs = 30_000,
+): Promise<HFMAllClientsResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
+    const params = new URLSearchParams({ from_date: fromDate, to_date: toDate });
+    const url = `${baseUrl}/api/performance/client-performance?${params}`;
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
+    });
+
+    if (res.status !== 200) {
+      logError("hfm-service", `fetchClientsByRange unexpected status ${res.status}`);
+      return { ok: false, reason: "server_error" };
+    }
+
+    const body = await readJsonResponse<HFMClientsPerformanceResponse>(res);
+    if (!Array.isArray(body.clients) || body.totals == null) {
+      return { ok: false, reason: "server_error" };
+    }
+
+    return { ok: true, data: body };
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "AbortError") {
+      logError("hfm-service", "fetchClientsByRange request timeout");
+      return { ok: false, reason: "timeout" };
+    }
+    logError("hfm-service", e);
+    return { ok: false, reason: "server_error" };
+  } finally {
+    clearTimeout(timer);
+  }
+}

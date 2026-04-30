@@ -1,4 +1,4 @@
-import type { HFMPerformanceData, ConditionCheck, PerformanceLookup } from "../types/hfm.types";
+import type { HFMPerformanceData, ConditionCheck } from "../types/hfm.types";
 import { dayjs } from "../utils/dayjs";
 
 const fmtCurrency = (n: number, currency: string): string => {
@@ -186,15 +186,13 @@ const keyValueRow = (label: string, value: string): object => ({
 
 export function buildTradingCard(
   data: HFMPerformanceData,
-  lookup: PerformanceLookup,
   conditions: ConditionCheck
 ): object {
   const status = getStatusMeta(data.activity_status);
   const accountStatus = getAccountStatusMeta(data.status);
   const matchAllBadge = getMatchAllMeta(conditions.matchAll);
-  const searchLabel = lookup.kind === "wallet" ? "Wallet ID" : "Account ID";
-  const secondLabel = lookup.kind === "wallet" ? "Account ID" : "Wallet ID";
-  const secondValue = lookup.kind === "wallet" ? String(data.account_id) : String(data.client_id);
+  const walletIdValue = String(data.client_id);
+  const accountIdValue = String(data.account_id);
 
   return {
     type: "bubble",
@@ -240,8 +238,8 @@ export function buildTradingCard(
           layout: "horizontal",
           spacing: "sm",
           contents: [
-            infoCard(searchLabel, lookup.label),
-            infoCard(secondLabel, secondValue),
+            infoCard("Wallet ID", walletIdValue),
+            infoCard("Trading Account ID", accountIdValue),
           ],
         },
         detailCard("Registration Date", fmtDate(data.account_regdate)),

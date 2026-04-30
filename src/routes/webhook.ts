@@ -124,17 +124,14 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
     : await resolveLinkedAccounts(lookup.id);
 
   if (result.ok) {
-    const effectiveLookup = lookup.kind === "account"
-      ? { kind: "wallet" as const, id: lookup.id, label: String(lookup.id) }
-      : lookup;
-
     const clientsToShow = result.data.slice(0, 10);
     const bubbles = clientsToShow.map((clientData) => {
       const conditions = checkConditions(clientData);
-      return buildTradingCard(clientData, effectiveLookup, conditions);
+      return buildTradingCard(clientData, conditions);
     });
 
-    const altLabel = `Wallet ${effectiveLookup.label}`;
+    const walletId = result.data[0]!.client_id;
+    const altLabel = `Wallet ${walletId}`;
     if (bubbles.length === 1) {
       await replyFlex(replyToken, `Trading Summary \u2014 ${altLabel}`, bubbles[0]!);
     } else {

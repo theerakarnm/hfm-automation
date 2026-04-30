@@ -1,6 +1,6 @@
 import { test, expect, describe } from "bun:test";
 import { buildTradingCard } from "../src/builders/flex-message.builder";
-import type { HFMPerformanceData, PerformanceLookup } from "../src/types/hfm.types";
+import type { HFMPerformanceData } from "../src/types/hfm.types";
 
 const mockData: HFMPerformanceData = {
   client_id: 45219,
@@ -17,10 +17,6 @@ const mockData: HFMPerformanceData = {
   account_regdate: "2024-01-15T00:00:00Z",
   status: "approved",
 };
-
-const WALLET_ID = "WL-98241376";
-
-const walletLookup: PerformanceLookup = { kind: "wallet", id: 98241376, label: WALLET_ID };
 
 const matchAllConditions = {
   underTargetWallet: true,
@@ -72,10 +68,10 @@ function findBadgeByLabel(
 
 describe("buildTradingCard", () => {
   test("all fields populated in output JSON", () => {
-    const card = buildTradingCard(mockData, walletLookup, matchAllConditions);
+    const card = buildTradingCard(mockData, matchAllConditions);
     const texts = extractTexts(card);
 
-    expect(texts.some((t) => t.includes("WL-98241376"))).toBe(true);
+    expect(texts.some((t) => t.includes("45219"))).toBe(true);
     expect(texts.some((t) => t.includes("78451293"))).toBe(true);
     expect(texts.some((t) => t.includes("Active"))).toBe(true);
     expect(texts.some((t) => t.includes("24"))).toBe(true);
@@ -91,7 +87,7 @@ describe("buildTradingCard", () => {
   });
 
   test("active status shows green badge", () => {
-    const card = buildTradingCard(mockData, walletLookup, matchAllConditions) as Record<string, unknown>;
+    const card = buildTradingCard(mockData, matchAllConditions) as Record<string, unknown>;
     const badge = findBadgeByLabel(card, "\u2713 Active");
     expect(badge).toBeDefined();
     expect(badge!.color).toBe("#1DB954");
@@ -99,21 +95,21 @@ describe("buildTradingCard", () => {
 
   test("inactive status shows grey badge", () => {
     const inactiveData = { ...mockData, activity_status: "inactive" };
-    const card = buildTradingCard(inactiveData, walletLookup, matchAllConditions) as Record<string, unknown>;
+    const card = buildTradingCard(inactiveData, matchAllConditions) as Record<string, unknown>;
     const badge = findBadgeByLabel(card, "inactive");
     expect(badge).toBeDefined();
     expect(badge!.color).toBe("#9E9E9E");
   });
 
   test("USD currency formatting", () => {
-    const card = buildTradingCard(mockData, walletLookup, matchAllConditions);
+    const card = buildTradingCard(mockData, matchAllConditions);
     const texts = extractTexts(card);
     expect(texts.some((t) => t === "$12,450.80")).toBe(true);
     expect(texts.some((t) => t === "$12,998.35")).toBe(true);
   });
 
   test("volume formatting with lots suffix", () => {
-    const card = buildTradingCard(mockData, walletLookup, matchAllConditions);
+    const card = buildTradingCard(mockData, matchAllConditions);
     const texts = extractTexts(card);
     expect(texts.some((t) => t === "3.42 lots")).toBe(true);
   });
@@ -125,7 +121,7 @@ describe("buildTradingCard", () => {
       equity: 450500,
       account_currency: "THB",
     };
-    const card = buildTradingCard(thbData, walletLookup, matchAllConditions);
+    const card = buildTradingCard(thbData, matchAllConditions);
     const texts = extractTexts(card);
     expect(texts.some((t) => t === "THB\u00A0450,000.00")).toBe(true);
     expect(texts.some((t) => t === "THB\u00A0450,500.00")).toBe(true);
@@ -139,7 +135,7 @@ describe("buildTradingCard", () => {
       equity: 1299835,
       account_currency: "USC",
     };
-    const card = buildTradingCard(uscData, walletLookup, matchAllConditions);
+    const card = buildTradingCard(uscData, matchAllConditions);
     const texts = extractTexts(card);
     expect(texts.some((t) => t === "1,245,080.00 USC")).toBe(true);
     expect(texts.some((t) => t === "1,299,835.00 USC")).toBe(true);
@@ -151,38 +147,38 @@ describe("buildTradingCard", () => {
       ...mockData,
       account_currency: "EUR",
     };
-    const card = buildTradingCard(unknownData, walletLookup, matchAllConditions);
+    const card = buildTradingCard(unknownData, matchAllConditions);
     const texts = extractTexts(card);
     expect(texts.some((t) => t === "$12,450.80")).toBe(true);
     expect(texts.some((t) => t === "EUR")).toBe(true);
   });
 
   test("bubble has size mega", () => {
-    const card = buildTradingCard(mockData, walletLookup, matchAllConditions) as Record<string, unknown>;
+    const card = buildTradingCard(mockData, matchAllConditions) as Record<string, unknown>;
     expect(card.size).toBe("mega");
   });
 
   test("bubble type is bubble", () => {
-    const card = buildTradingCard(mockData, walletLookup, matchAllConditions) as Record<string, unknown>;
+    const card = buildTradingCard(mockData, matchAllConditions) as Record<string, unknown>;
     expect(card.type).toBe("bubble");
   });
 
   test("match all shows green badge", () => {
-    const card = buildTradingCard(mockData, walletLookup, matchAllConditions) as Record<string, unknown>;
+    const card = buildTradingCard(mockData, matchAllConditions) as Record<string, unknown>;
     const badge = findBadgeByLabel(card, "\u2713 Match All");
     expect(badge).toBeDefined();
     expect(badge!.color).toBe("#1DB954");
   });
 
   test("not match shows red badge", () => {
-    const card = buildTradingCard(mockData, walletLookup, notMatchConditions) as Record<string, unknown>;
+    const card = buildTradingCard(mockData, notMatchConditions) as Record<string, unknown>;
     const badge = findBadgeByLabel(card, "\u2717 Not Match");
     expect(badge).toBeDefined();
     expect(badge!.color).toBe("#DC2626");
   });
 
   test("not match shows failing conditions detail", () => {
-    const card = buildTradingCard(mockData, walletLookup, notMatchConditions);
+    const card = buildTradingCard(mockData, notMatchConditions);
     const texts = extractTexts(card);
     expect(texts.some((t) => t.includes("Wallet does not match target"))).toBe(true);
     expect(texts.some((t) => t.includes("Deposit below threshold"))).toBe(true);
@@ -194,7 +190,7 @@ describe("buildTradingCard", () => {
       depositThresholdMet: true,
       matchAll: false,
     };
-    const card = buildTradingCard(mockData, walletLookup, walletOnlyFail);
+    const card = buildTradingCard(mockData, walletOnlyFail);
     const texts = extractTexts(card);
     expect(texts.some((t) => t.includes("Wallet does not match target"))).toBe(true);
     expect(texts.some((t) => t.includes("Deposit below threshold"))).toBe(false);
@@ -206,21 +202,21 @@ describe("buildTradingCard", () => {
       depositThresholdMet: false,
       matchAll: false,
     };
-    const card = buildTradingCard(mockData, walletLookup, depositOnlyFail);
+    const card = buildTradingCard(mockData, depositOnlyFail);
     const texts = extractTexts(card);
     expect(texts.some((t) => t.includes("Wallet does not match target"))).toBe(false);
     expect(texts.some((t) => t.includes("Deposit below threshold"))).toBe(true);
   });
 
   test("match all does not show failing conditions", () => {
-    const card = buildTradingCard(mockData, walletLookup, matchAllConditions);
+    const card = buildTradingCard(mockData, matchAllConditions);
     const texts = extractTexts(card);
     expect(texts.some((t) => t.includes("Wallet does not match target"))).toBe(false);
     expect(texts.some((t) => t.includes("Deposit below threshold"))).toBe(false);
   });
 
   test("account status approved shows green badge", () => {
-    const card = buildTradingCard(mockData, walletLookup, matchAllConditions) as Record<string, unknown>;
+    const card = buildTradingCard(mockData, matchAllConditions) as Record<string, unknown>;
     const badge = findBadgeByLabel(card, "\u2713 Approved");
     expect(badge).toBeDefined();
     expect(badge!.color).toBe("#1DB954");
@@ -228,7 +224,7 @@ describe("buildTradingCard", () => {
 
   test("account status non-approved shows grey badge", () => {
     const pendingData = { ...mockData, status: "pending" };
-    const card = buildTradingCard(pendingData, walletLookup, matchAllConditions) as Record<string, unknown>;
+    const card = buildTradingCard(pendingData, matchAllConditions) as Record<string, unknown>;
     const badge = findBadgeByLabel(card, "pending");
     expect(badge).toBeDefined();
     expect(badge!.color).toBe("#9E9E9E");
@@ -236,35 +232,37 @@ describe("buildTradingCard", () => {
 
   test("subaffiliate displayed as raw number", () => {
     const subData = { ...mockData, subaffiliate: 12345 };
-    const card = buildTradingCard(subData, walletLookup, matchAllConditions);
+    const card = buildTradingCard(subData, matchAllConditions);
     const texts = extractTexts(card);
     expect(texts.some((t) => t === "12345")).toBe(true);
   });
 
   test("registration date formatted as DD MMM YYYY", () => {
-    const card = buildTradingCard(mockData, walletLookup, matchAllConditions);
+    const card = buildTradingCard(mockData, matchAllConditions);
     const texts = extractTexts(card);
     expect(texts.some((t) => t === "15 Jan 2024")).toBe(true);
   });
 
-  test("wallet lookup with resolved wallet shows Wallet ID and Account ID", () => {
-    const resolvedWalletLookup: PerformanceLookup = { kind: "wallet", id: 98241376, label: "98241376" };
-    const dataWithWallet = { ...mockData, subaffiliate: 98241376 };
-    const card = buildTradingCard(dataWithWallet, resolvedWalletLookup, matchAllConditions);
+  test("shows Wallet ID from data.client_id and Trading Account ID from data.account_id", () => {
+    const card = buildTradingCard(mockData, matchAllConditions);
     const texts = extractTexts(card);
 
     expect(texts.some((t) => t === "Wallet ID")).toBe(true);
-    expect(texts.some((t) => t.includes("98241376"))).toBe(true);
-    expect(texts.some((t) => t === "Account ID")).toBe(true);
-    expect(texts.some((t) => t.includes("78451293"))).toBe(true);
+    expect(texts.some((t) => t === "45219")).toBe(true);
+    expect(texts.some((t) => t === "Trading Account ID")).toBe(true);
+    expect(texts.some((t) => t === "78451293")).toBe(true);
   });
 
-  test("wallet lookup shows Account ID from data.account_id", () => {
-    const card = buildTradingCard(mockData, walletLookup, matchAllConditions);
+  test("different client_id and account_id values display correctly", () => {
+    const diffData: HFMPerformanceData = {
+      ...mockData,
+      client_id: 99999,
+      account_id: 11111111,
+    };
+    const card = buildTradingCard(diffData, matchAllConditions);
     const texts = extractTexts(card);
 
-    expect(texts.some((t) => t === "Wallet ID")).toBe(true);
-    expect(texts.some((t) => t === "Account ID")).toBe(true);
-    expect(texts.some((t) => t.includes("78451293"))).toBe(true);
+    expect(texts.some((t) => t === "99999")).toBe(true);
+    expect(texts.some((t) => t === "11111111")).toBe(true);
   });
 });

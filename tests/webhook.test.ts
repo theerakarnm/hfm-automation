@@ -393,7 +393,7 @@ describe("webhook", () => {
     expect(fetchCalls[2]?.url).toContain("wallets=45219");
     expect(fetchCalls[3]?.url).toBe("https://api.line.me/v2/bot/message/reply");
     const pushBody = JSON.parse(fetchCalls[3]?.body ?? "{}");
-    expect(pushBody.messages[0].altText).toContain("Wallet 123456789");
+    expect(pushBody.messages[0].altText).toContain("Wallet 45219");
     const contents = pushBody.messages[0].contents;
     expect(contents.type).toBe("carousel");
     expect(contents.contents).toHaveLength(2);

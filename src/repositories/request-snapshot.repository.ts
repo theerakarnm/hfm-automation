@@ -2,11 +2,13 @@ import type { Database } from "bun:sqlite";
 import type { HFMClientRow } from "../types/hfm.types";
 
 export interface RequestSnapshotRow {
-  composite_key: string;
-  account_id: number;
   client_id: number;
-  full_name: string;
-  raw: HFMClientRow;
+}
+
+export interface RequestSnapshotResult {
+  rows: RequestSnapshotRow[];
+  snapshotDate: string;
+  createdAt: string;
 }
 
 export function insertRequestSnapshot(
@@ -19,22 +21,17 @@ export function insertRequestSnapshot(
     "INSERT INTO client_request_snapshots (snapshot_date, created_at) VALUES ($date, $createdAt)"
   );
   const insertRow = db.prepare(
-    "INSERT INTO client_request_snapshot_rows (snapshot_id, composite_key, account_id, client_id, full_name, raw_json) VALUES ($snapshotId, $compositeKey, $accountId, $clientId, $fullName, $rawJson)"
+    "INSERT OR IGNORE INTO client_request_snapshot_rows (snapshot_id, client_id) VALUES ($snapshotId, $clientId)"
   );
 
+  const seen = new Set<number>();
   const tx = db.transaction(() => {
     const info = insertHeader.run({ date, createdAt: now });
     const snapshotId = Number(info.lastInsertRowid);
     for (const row of rows) {
-      const compositeKey = `${row.id}_${row.wallet}`;
-      insertRow.run({
-        snapshotId,
-        compositeKey,
-        accountId: row.id,
-        clientId: row.wallet,
-        fullName: row.name?.trim() || "Unknown Client",
-        rawJson: JSON.stringify(row),
-      });
+      if (seen.has(row.wallet)) continue;
+      seen.add(row.wallet);
+      insertRow.run({ snapshotId, clientId: row.wallet });
     }
     return snapshotId;
   });
@@ -45,40 +42,31 @@ export function insertRequestSnapshot(
 export function getLatestRequestSnapshotBefore(
   db: Database,
   beforeDate: string,
-): RequestSnapshotRow[] | null {
+): RequestSnapshotResult | null {
   const headerRow = db
     .prepare(
-      "SELECT id FROM client_request_snapshots WHERE snapshot_date <= $beforeDate ORDER BY id DESC LIMIT 1"
+      "SELECT id, snapshot_date, created_at FROM client_request_snapshots WHERE snapshot_date <= $beforeDate ORDER BY id DESC LIMIT 1"
     )
-    .get({ beforeDate }) as { id: number } | null;
+    .get({ beforeDate }) as { id: number; snapshot_date: string; created_at: string } | null;
   if (!headerRow) return null;
 
   const rows = db
     .prepare(
-      "SELECT composite_key, account_id, client_id, full_name, raw_json FROM client_request_snapshot_rows WHERE snapshot_id = $snapshotId"
+      "SELECT client_id FROM client_request_snapshot_rows WHERE snapshot_id = $snapshotId"
     )
-    .all({ snapshotId: headerRow.id }) as Array<{
-    composite_key: string;
-    account_id: number;
-    client_id: number;
-    full_name: string;
-    raw_json: string;
-  }>;
+    .all({ snapshotId: headerRow.id }) as Array<{ client_id: number }>;
 
   if (rows.length === 0) return null;
 
-  return rows.map((r) => ({
-    composite_key: r.composite_key,
-    account_id: r.account_id,
-    client_id: r.client_id,
-    full_name: r.full_name,
-    raw: JSON.parse(r.raw_json) as HFMClientRow,
-  }));
+  return {
+    rows: rows.map((r) => ({ client_id: r.client_id })),
+    snapshotDate: headerRow.snapshot_date,
+    createdAt: headerRow.created_at,
+  };
 }
 
 export function countDistinctWallets(rows: RequestSnapshotRow[]): number {
-  const ids = new Set(rows.map((r) => r.client_id));
-  return ids.size;
+  return new Set(rows.map((r) => r.client_id)).size;
 }
 
 export function findMissingWalletIds(

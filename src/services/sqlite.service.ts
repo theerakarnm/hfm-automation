@@ -6,20 +6,13 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS client_snapshots (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   snapshot_date   TEXT NOT NULL,
-  composite_key   TEXT NOT NULL,
-  account_id      INTEGER NOT NULL,
   client_id       INTEGER NOT NULL,
-  full_name       TEXT NOT NULL,
-  raw_json        TEXT NOT NULL,
   created_at      TEXT DEFAULT (datetime('now')),
-  UNIQUE(snapshot_date, composite_key)
+  UNIQUE(snapshot_date, client_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_snapshot_date
   ON client_snapshots(snapshot_date);
-
-CREATE INDEX IF NOT EXISTS idx_composite_key
-  ON client_snapshots(composite_key, snapshot_date);
 
 CREATE TABLE IF NOT EXISTS notify_recipients (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,17 +53,64 @@ CREATE TABLE IF NOT EXISTS client_request_snapshots (
 CREATE TABLE IF NOT EXISTS client_request_snapshot_rows (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   snapshot_id INTEGER NOT NULL REFERENCES client_request_snapshots(id),
-  composite_key TEXT NOT NULL,
-  account_id  INTEGER NOT NULL,
   client_id   INTEGER NOT NULL,
-  full_name   TEXT NOT NULL,
-  raw_json    TEXT NOT NULL,
-  UNIQUE(snapshot_id, composite_key)
+  UNIQUE(snapshot_id, client_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_req_snapshot_date
   ON client_request_snapshots(snapshot_date);
 `;
+
+const MIGRATIONS = [
+  migrateClientSnapshotsV2,
+  migrateRequestSnapshotRowsV2,
+];
+
+function migrateClientSnapshotsV2(db: Database): void {
+  const cols = db
+    .prepare("PRAGMA table_info(client_snapshots)")
+    .all() as Array<{ name: string }>;
+  if (cols.some((c) => c.name === "composite_key")) {
+    db.run("ALTER TABLE client_snapshots RENAME TO _old_client_snapshots");
+    db.run(`
+      CREATE TABLE client_snapshots (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        snapshot_date   TEXT NOT NULL,
+        client_id       INTEGER NOT NULL,
+        created_at      TEXT DEFAULT (datetime('now')),
+        UNIQUE(snapshot_date, client_id)
+      )
+    `);
+    db.run(`
+      INSERT OR IGNORE INTO client_snapshots (snapshot_date, client_id, created_at)
+      SELECT snapshot_date, client_id, created_at FROM _old_client_snapshots
+    `);
+    db.run("DROP TABLE _old_client_snapshots");
+    db.run("CREATE INDEX IF NOT EXISTS idx_snapshot_date ON client_snapshots(snapshot_date)");
+  }
+}
+
+function migrateRequestSnapshotRowsV2(db: Database): void {
+  const cols = db
+    .prepare("PRAGMA table_info(client_request_snapshot_rows)")
+    .all() as Array<{ name: string }>;
+  if (cols.some((c) => c.name === "composite_key")) {
+    db.run("ALTER TABLE client_request_snapshot_rows RENAME TO _old_client_request_snapshot_rows");
+    db.run(`
+      CREATE TABLE client_request_snapshot_rows (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        snapshot_id INTEGER NOT NULL REFERENCES client_request_snapshots(id),
+        client_id   INTEGER NOT NULL,
+        UNIQUE(snapshot_id, client_id)
+      )
+    `);
+    db.run(`
+      INSERT OR IGNORE INTO client_request_snapshot_rows (snapshot_id, client_id)
+      SELECT snapshot_id, client_id FROM _old_client_request_snapshot_rows
+    `);
+    db.run("DROP TABLE _old_client_request_snapshot_rows");
+  }
+}
 
 let _db: Database | null = null;
 let _initializedDb: Database | null = null;
@@ -96,6 +136,9 @@ export function initSqlite(db?: Database): void {
   const target = db ?? getDatabase();
   if (_initializedDb === target) return;
   target.run(SCHEMA);
+  for (const m of MIGRATIONS) {
+    m(target);
+  }
   _initializedDb = target;
 }
 

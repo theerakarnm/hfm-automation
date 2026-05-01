@@ -290,14 +290,14 @@ async function buildReportMessages(
 
     const prevRequest = getLatestRequestSnapshotBefore(db, today);
     if (prevRequest) {
-      const prevMissing = findMissingFromRequestSnapshots(prevRequest, currentWalletIds);
-      const prevNew = findNewFromRequestSnapshots(prevRequest, currentWalletIds);
+      const prevMissing = findMissingFromRequestSnapshots(prevRequest.rows, currentWalletIds);
+      const prevNew = findNewFromRequestSnapshots(prevRequest.rows, currentWalletIds);
       messages.push(
         buildComparisonReportMessage({
           title: "Since Last Request",
           prevLabel: "Last request",
-          prevDate: "",
-          prevCount: countDistinctInSnapshots(prevRequest),
+          prevDate: prevRequest.snapshotDate,
+          prevCount: countDistinctInSnapshots(prevRequest.rows),
           currLabel: "Current",
           currCount,
           targetWalletLabel: targetLabel,
@@ -346,14 +346,14 @@ async function buildReportMessages(
 
     const prevRequest = getLatestRequestSnapshotBefore(db, today);
     if (prevRequest) {
-      const prevMissing = findMissingFromRequestSnapshots(prevRequest, currentWalletIds);
-      const prevNew = findNewFromRequestSnapshots(prevRequest, currentWalletIds);
+      const prevMissing = findMissingFromRequestSnapshots(prevRequest.rows, currentWalletIds);
+      const prevNew = findNewFromRequestSnapshots(prevRequest.rows, currentWalletIds);
       messages.push(
         buildComparisonReportMessage({
           title: "Since Last Request",
           prevLabel: "Last request",
-          prevDate: "",
-          prevCount: countDistinctInSnapshots(prevRequest),
+          prevDate: prevRequest.snapshotDate,
+          prevCount: countDistinctInSnapshots(prevRequest.rows),
           currLabel: "Current",
           currCount,
           targetWalletLabel: targetLabel,
@@ -402,14 +402,14 @@ async function buildReportMessages(
 
     const prevRequest = getLatestRequestSnapshotBefore(db, today);
     if (prevRequest) {
-      const prevMissing = findMissingFromRequestSnapshots(prevRequest, currentWalletIds);
-      const prevNew = findNewFromRequestSnapshots(prevRequest, currentWalletIds);
+      const prevMissing = findMissingFromRequestSnapshots(prevRequest.rows, currentWalletIds);
+      const prevNew = findNewFromRequestSnapshots(prevRequest.rows, currentWalletIds);
       messages.push(
         buildComparisonReportMessage({
           title: "Since Last Request",
           prevLabel: "Last request",
-          prevDate: "",
-          prevCount: countDistinctInSnapshots(prevRequest),
+          prevDate: prevRequest.snapshotDate,
+          prevCount: countDistinctInSnapshots(prevRequest.rows),
           currLabel: "Current",
           currCount,
           targetWalletLabel: targetLabel,

@@ -10,7 +10,8 @@
     "typecheck": "bunx tsc --noEmit",
     "trigger:daily-client-report": "bun run scripts/trigger-daily-client-report.ts",
     "fetch:client-performance": "bun run scripts/fetch-client-performance-range.ts",
-    "compare:client-performance": "bun run scripts/compare-client-performance-files.ts"
+    "compare:client-performance": "bun run scripts/compare-client-performance-files.ts",
+    "seed:mock-snapshots": "bun run scripts/seed-mock-client-snapshots.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"

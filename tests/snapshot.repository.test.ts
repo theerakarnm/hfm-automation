@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { initSqlite } from "../src/services/sqlite.service";
-import { toCompositeKey, countByDate, getByDate, insertMany, purgeOlderThan } from "../src/repositories/snapshot.repository";
+import { countByDate, insertMany, purgeOlderThan } from "../src/repositories/snapshot.repository";
 import type { HFMPerformanceData } from "../src/types/hfm.types";
 
 const clientA: HFMPerformanceData = {
@@ -28,44 +28,19 @@ const clientB: HFMPerformanceData = {
   full_name: "Malee Srisuk",
 };
 
-test("toCompositeKey creates account_id_client_id string", () => {
-  expect(toCompositeKey(clientA)).toBe("78451293_10023");
+test("insertMany stores wallet IDs and deduplicates", () => {
+  const db = new Database(":memory:", { strict: true });
+  initSqlite(db);
+  insertMany(db, "2026-04-26", [clientA, clientA]);
+  expect(countByDate(db, "2026-04-26")).toBe(1);
 });
 
-test("insertMany stores composite key and raw json", () => {
+test("insertMany is idempotent for same date and client_id", () => {
   const db = new Database(":memory:", { strict: true });
   initSqlite(db);
   insertMany(db, "2026-04-26", [clientA]);
-  const rows = getByDate(db, "2026-04-26");
-  expect(rows).toHaveLength(1);
-  expect(rows[0]!.composite_key).toBe("78451293_10023");
-  expect(rows[0]!.full_name).toBe("Somchai Jaidee");
-  expect(rows[0]!.raw.client_id).toBe(10023);
-});
-
-test("insertMany normalizes missing full_name as Unknown Client", () => {
-  const db = new Database(":memory:", { strict: true });
-  initSqlite(db);
-  const noName = { ...clientA, full_name: undefined };
-  insertMany(db, "2026-04-26", [noName]);
-  const rows = getByDate(db, "2026-04-26");
-  expect(rows[0]!.full_name).toBe("Unknown Client");
-});
-
-test("insertMany normalizes blank full_name as Unknown Client", () => {
-  const db = new Database(":memory:", { strict: true });
-  initSqlite(db);
-  const blankName = { ...clientA, full_name: "   " };
-  insertMany(db, "2026-04-26", [blankName]);
-  const rows = getByDate(db, "2026-04-26");
-  expect(rows[0]!.full_name).toBe("Unknown Client");
-});
-
-test("insertMany is protected by unique snapshot date and composite key", () => {
-  const db = new Database(":memory:", { strict: true });
-  initSqlite(db);
   insertMany(db, "2026-04-26", [clientA]);
-  expect(() => insertMany(db, "2026-04-26", [clientA])).toThrow();
+  expect(countByDate(db, "2026-04-26")).toBe(1);
 });
 
 test("countByDate returns 0 when no rows", () => {
@@ -89,10 +64,4 @@ test("purgeOlderThan removes rows older than retention window", () => {
   purgeOlderThan(db, 90, "2026-04-26");
   expect(countByDate(db, "2026-01-01")).toBe(0);
   expect(countByDate(db, "2026-04-26")).toBe(1);
-});
-
-test("getByDate returns empty array for missing date", () => {
-  const db = new Database(":memory:", { strict: true });
-  initSqlite(db);
-  expect(getByDate(db, "2026-04-26")).toEqual([]);
 });

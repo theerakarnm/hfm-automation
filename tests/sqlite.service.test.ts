@@ -6,7 +6,7 @@ afterEach(() => {
   resetDatabaseForTests();
 });
 
-test("initSqlite creates both tables and indexes", () => {
+test("initSqlite creates tables and indexes", () => {
   const db = new Database(":memory:", { strict: true });
   initSqlite(db);
 
@@ -24,21 +24,20 @@ test("initSqlite creates both tables and indexes", () => {
     .all() as Array<{ name: string }>;
   const indexNames = indexes.map((i) => i.name);
   expect(indexNames).toContain("idx_snapshot_date");
-  expect(indexNames).toContain("idx_composite_key");
 });
 
-test("client_snapshots has UNIQUE constraint on snapshot_date and composite_key", () => {
+test("client_snapshots has UNIQUE constraint on snapshot_date and client_id", () => {
   const db = new Database(":memory:", { strict: true });
   initSqlite(db);
 
   db.prepare(
-    "INSERT INTO client_snapshots (snapshot_date, composite_key, account_id, client_id, full_name, raw_json) VALUES ($d, $k, $a, $c, $f, $r)"
-  ).run({ d: "2026-04-26", k: "123_456", a: 123, c: 456, f: "Test", r: "{}" });
+    "INSERT INTO client_snapshots (snapshot_date, client_id) VALUES ($d, $c)"
+  ).run({ d: "2026-04-26", c: 456 });
 
   expect(() => {
     db.prepare(
-      "INSERT INTO client_snapshots (snapshot_date, composite_key, account_id, client_id, full_name, raw_json) VALUES ($d, $k, $a, $c, $f, $r)"
-    ).run({ d: "2026-04-26", k: "123_456", a: 123, c: 456, f: "Test", r: "{}" });
+      "INSERT INTO client_snapshots (snapshot_date, client_id) VALUES ($d, $c)"
+    ).run({ d: "2026-04-26", c: 456 });
   }).toThrow();
 });
 

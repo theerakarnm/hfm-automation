@@ -1,7 +1,7 @@
 import { expect, test, describe, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { initSqlite } from "../src/services/sqlite.service";
-import { insertMany, getByDate, diffCounts, getAddedClients, getMissingClients } from "../src/repositories/snapshot.repository";
+import { insertMany, countByDate } from "../src/repositories/snapshot.repository";
 import { seedFromEnv } from "../src/repositories/recipient.repository";
 import {
   insertRequestSnapshot,
@@ -125,8 +125,8 @@ describe("buildComparisonReportMessage", () => {
   });
 });
 
-describe("SQL-based diff", () => {
-  test("diffCounts, getAddedClients, getMissingClients work correctly", () => {
+describe("snapshot storage", () => {
+  test("insertMany stores wallets and dedupes by client_id", () => {
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
 
@@ -146,36 +146,8 @@ describe("SQL-based diff", () => {
     insertMany(db, "2026-04-25", [clientA, clientC]);
     insertMany(db, "2026-04-26", [clientA, clientB]);
 
-    const counts = diffCounts(db, "2026-04-26", "2026-04-25");
-    expect(counts.added).toBe(1);
-    expect(counts.missing).toBe(1);
-
-    const added = getAddedClients(db, "2026-04-26", "2026-04-25", 10);
-    expect(added).toHaveLength(1);
-    expect(added[0]!.full_name).toBe("Bob");
-
-    const missing = getMissingClients(db, "2026-04-26", "2026-04-25", 10);
-    expect(missing).toHaveLength(1);
-    expect(missing[0]!.full_name).toBe("Charlie");
-  });
-
-  test("diffCounts returns zeros for identical snapshots", () => {
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
-
-    const client: HFMPerformanceData = {
-      client_id: 10023, account_id: 78451293, activity_status: "active",
-      trades: 0, volume: 0, account_type: "Standard", balance: 0,
-      account_currency: "USD", equity: 0, archived: null, subaffiliate: 0,
-      account_regdate: "2024-01-15T00:00:00Z", status: "approved", full_name: "Alice",
-    };
-
-    insertMany(db, "2026-04-25", [client]);
-    insertMany(db, "2026-04-26", [client]);
-
-    const counts = diffCounts(db, "2026-04-26", "2026-04-25");
-    expect(counts.added).toBe(0);
-    expect(counts.missing).toBe(0);
+    expect(countByDate(db, "2026-04-25")).toBe(2);
+    expect(countByDate(db, "2026-04-26")).toBe(2);
   });
 });
 
@@ -280,18 +252,19 @@ describe("request-snapshot repository", () => {
 
     const latest = getLatestRequestSnapshotBefore(db, "2026-04-27");
     expect(latest).not.toBeNull();
-    expect(latest!.length).toBe(3);
+    expect(latest!.rows.length).toBe(3);
+    expect(latest!.snapshotDate).toBe("2026-04-26");
 
-    const missing = findMissingWalletIds(latest!, []);
+    const missing = findMissingWalletIds(latest!.rows, []);
     expect(missing).toEqual([100, 200, 300]);
 
     insertRequestSnapshot(db, "2026-04-27", makeClientRows([100, 200, 400]));
     const latest2 = getLatestRequestSnapshotBefore(db, "2026-04-28")!;
 
-    const missing2 = findMissingWalletIds(latest!, latest2);
+    const missing2 = findMissingWalletIds(latest!.rows, latest2.rows);
     expect(missing2).toEqual([300]);
 
-    const newIds = findNewWalletIds(latest!, latest2);
+    const newIds = findNewWalletIds(latest!.rows, latest2.rows);
     expect(newIds).toEqual([400]);
   });
 
@@ -474,9 +447,7 @@ describe("runDailyClientReport", () => {
     });
 
     expect(pushedMessage).toBe("");
-
-    const rows = getByDate(db, "2026-04-26");
-    expect(rows).toHaveLength(2);
+    expect(countByDate(db, "2026-04-26")).toBe(2);
   });
 
   test("second day sends comparison report", async () => {
@@ -498,7 +469,7 @@ describe("runDailyClientReport", () => {
       pushToAllFn: mockPushAll,
     });
 
-    expect(getByDate(db, "2026-04-26")).toHaveLength(2);
+    expect(countByDate(db, "2026-04-26")).toBe(2);
 
     const day2Clients: HFMClientRow[] = [
       mockClientRows[0]!,
@@ -595,7 +566,6 @@ describe("runDailyClientReport", () => {
     process.env.LINE_NOTIFY_UIDS = originalNotifyUids;
 
     expect(pushCalled).toBe(false);
-    const rows = getByDate(db, "2026-04-26");
-    expect(rows).toHaveLength(2);
+    expect(countByDate(db, "2026-04-26")).toBe(2);
   });
 });

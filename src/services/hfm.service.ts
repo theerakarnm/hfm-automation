@@ -3,7 +3,9 @@ import type {
   ConditionCheck,
   HFMApiResult,
   HFMAllClientsResult,
+  HFMClientRow,
   HFMClientsPerformanceResponse,
+  HFMClientsResult,
   HFMPerformanceData,
   PerformanceLookup,
 } from "../types/hfm.types";
@@ -149,6 +151,73 @@ export async function resolveLinkedAccounts(
   });
 }
 
+function toNum(val: number | string | null | undefined): number {
+  if (val == null) return 0;
+  const n = Number(val);
+  return Number.isNaN(n) ? 0 : n;
+}
+
+export function normalizeClientRow(row: HFMClientRow): HFMPerformanceData {
+  return {
+    client_id: row.wallet,
+    account_id: row.id,
+    full_name: row.name?.trim() || "Unknown Client",
+    activity_status: row.last_trade ? "active" : "inactive",
+    trades: 0,
+    volume: toNum(row.volume),
+    account_type: row.type ?? "N/A",
+    deposits: toNum(row.deposits),
+    withdrawals: toNum(row.withdrawals),
+    account_currency: row.account_currency ?? "USD",
+    equity: toNum(row.equity),
+    archived: null,
+    subaffiliate: 0,
+    account_regdate: row.registration ?? "",
+    status: "approved",
+    balance: toNum(row.balance),
+    commission: toNum(row.commission),
+    country: row.country ?? undefined,
+    platform: row.platform ?? undefined,
+    email: row.email ?? undefined,
+    margin: toNum(row.margin),
+    free_margin: toNum(row.free_margin),
+  };
+}
+
+export async function fetchClients(timeoutMs = 15_000): Promise<HFMClientsResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
+    const url = `${baseUrl}/api/clients/`;
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
+    });
+
+    if (res.status !== 200) {
+      logError("hfm-service", `fetchClients unexpected status ${res.status}`);
+      return { ok: false, reason: "server_error" };
+    }
+
+    const body = await readJsonResponse<{ data: HFMClientRow[] }>(res);
+    if (!Array.isArray(body.data)) {
+      return { ok: false, reason: "server_error" };
+    }
+
+    return { ok: true, data: body.data };
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === "AbortError") {
+      logError("hfm-service", "fetchClients request timeout");
+      return { ok: false, reason: "timeout" };
+    }
+    logError("hfm-service", e);
+    return { ok: false, reason: "server_error" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function fetchAllClients(timeoutMs = 10_000): Promise<HFMAllClientsResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -194,6 +263,8 @@ export async function fetchClientsByRange(
     const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
     const params = new URLSearchParams({ from_date: fromDate, to_date: toDate });
     const url = `${baseUrl}/api/performance/client-performance?${params}`;
+    console.log(url);
+
     const res = await fetch(url, {
       signal: controller.signal,
       headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },

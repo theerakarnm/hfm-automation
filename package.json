@@ -8,7 +8,9 @@
     "start": "bun run src/index.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit",
-    "trigger:daily-client-report": "bun run scripts/trigger-daily-client-report.ts"
+    "trigger:daily-client-report": "bun run scripts/trigger-daily-client-report.ts",
+    "fetch:client-performance": "bun run scripts/fetch-client-performance-range.ts",
+    "compare:client-performance": "bun run scripts/compare-client-performance-files.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"

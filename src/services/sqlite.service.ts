@@ -50,6 +50,26 @@ CREATE TABLE IF NOT EXISTS report_range_snapshots (
   created_at TEXT DEFAULT (datetime('now')),
   UNIQUE(period, from_date, to_date)
 );
+
+CREATE TABLE IF NOT EXISTS client_request_snapshots (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  snapshot_date TEXT NOT NULL,
+  created_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS client_request_snapshot_rows (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  snapshot_id INTEGER NOT NULL REFERENCES client_request_snapshots(id),
+  composite_key TEXT NOT NULL,
+  account_id  INTEGER NOT NULL,
+  client_id   INTEGER NOT NULL,
+  full_name   TEXT NOT NULL,
+  raw_json    TEXT NOT NULL,
+  UNIQUE(snapshot_id, composite_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_req_snapshot_date
+  ON client_request_snapshots(snapshot_date);
 `;
 
 let _db: Database | null = null;

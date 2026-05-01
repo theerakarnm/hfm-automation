@@ -26,6 +26,27 @@ async function pushMessage(
   }
 }
 
+async function replyMessages(
+  replyToken: string,
+  messages: object[],
+): Promise<void> {
+  const res = await fetch(LINE_REPLY_API, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+    },
+    body: JSON.stringify({ replyToken, messages }),
+    signal: AbortSignal.timeout(LINE_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    const err = new Error(`LINE reply failed ${res.status}: ${errText}`);
+    logError("line-service", err);
+    throw err;
+  }
+}
+
 async function replyMessage(
   replyToken: string,
   message: object
@@ -80,6 +101,12 @@ export const pushFlex = (
 
 export const replyText = (replyToken: string, text: string) =>
   replyMessage(replyToken, { type: "text", text });
+
+export const replyTexts = (replyToken: string, texts: string[]) =>
+  replyMessages(
+    replyToken,
+    texts.map((text) => ({ type: "text", text })),
+  );
 
 export const replyFlex = (
   replyToken: string,

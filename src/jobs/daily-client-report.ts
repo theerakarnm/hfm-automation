@@ -1,12 +1,22 @@
 import type { Database } from "bun:sqlite";
-import type { HFMClientsPerformanceResponse, HFMAllClientsResult } from "../types/hfm.types";
+import type { HFMClientRow, HFMClientsResult } from "../types/hfm.types";
 import { getDatabase, initSqlite, checkpointDatabase } from "../services/sqlite.service";
-import { countByDate, insertMany, purgeOlderThan, countWalletsByDate, getMissingWalletIds, getNewWalletIds } from "../repositories/snapshot.repository";
-import { getRangeSnapshot, upsertRangeSnapshot } from "../repositories/report-range.repository";
+import { countByDate, insertMany, purgeOlderThan } from "../repositories/snapshot.repository";
+import {
+  insertRequestSnapshot,
+  getLatestRequestSnapshotBefore,
+  type RequestSnapshotRow,
+} from "../repositories/request-snapshot.repository";
 import { seedFromEnv, getActiveUids } from "../repositories/recipient.repository";
-import { fetchAllClients, fetchClientsByRange } from "../services/hfm.service";
+import { fetchClients, normalizeClientRow } from "../services/hfm.service";
 import { pushToAll } from "../services/line.service";
-import { getIctDateString, getPreviousIctDateString, formatShortDate, getThisWeekRange, getLastWeekRange, getThisMonthRange, getLastMonthRange } from "../utils/date";
+import {
+  getIctDateString,
+  getPreviousIctDateString,
+  formatShortDate,
+  getLastWeekRange,
+  getLastMonthRange,
+} from "../utils/date";
 
 export type ReportPeriod = "day" | "week" | "month";
 
@@ -18,73 +28,129 @@ function getTargetWallet(): { wallet: number; label: string } {
   };
 }
 
-function filterByWallet(clients: HFMClientsPerformanceResponse["clients"], targetWallet: number): HFMClientsPerformanceResponse["clients"] {
-  if (!targetWallet) return clients;
-  return clients.filter((c) => c.subaffiliate === targetWallet);
+function dedupeByCompositeKey(rows: HFMClientRow[]): HFMClientRow[] {
+  const seen = new Set<string>();
+  const result: HFMClientRow[] = [];
+  for (const row of rows) {
+    const key = `${row.id}_${row.wallet}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(row);
+    }
+  }
+  return result;
 }
 
-function countDistinctClients(clients: HFMClientsPerformanceResponse["clients"]): number {
-  const ids = new Set(clients.map((c) => c.client_id));
-  return ids.size;
+function extractWalletIds(rows: HFMClientRow[]): Set<number> {
+  return new Set(rows.map((r) => r.wallet));
 }
 
-function findMissing(prev: HFMClientsPerformanceResponse["clients"], curr: HFMClientsPerformanceResponse["clients"]): number[] {
-  const currIds = new Set(curr.map((c) => c.client_id));
+function getWalletIdsFromNightlySnapshot(db: Database, date: string): Set<number> {
+  const rows = db
+    .prepare("SELECT DISTINCT client_id FROM client_snapshots WHERE snapshot_date = $date")
+    .all({ date }) as Array<{ client_id: number }>;
+  return new Set(rows.map((r) => r.client_id));
+}
+
+function findMissingFromSets(prev: Set<number>, curr: Set<number>): number[] {
+  const result: number[] = [];
+  for (const id of prev) {
+    if (!curr.has(id)) result.push(id);
+  }
+  return result.sort((a, b) => a - b);
+}
+
+function findNewFromSets(prev: Set<number>, curr: Set<number>): number[] {
+  const result: number[] = [];
+  for (const id of curr) {
+    if (!prev.has(id)) result.push(id);
+  }
+  return result.sort((a, b) => a - b);
+}
+
+function findMissingFromRequestSnapshots(prev: RequestSnapshotRow[], curr: Set<number>): number[] {
   const prevIds = new Set<number>();
-  for (const c of prev) {
-    if (!currIds.has(c.client_id) && !prevIds.has(c.client_id)) {
-      prevIds.add(c.client_id);
+  for (const r of prev) {
+    if (!curr.has(r.client_id) && !prevIds.has(r.client_id)) {
+      prevIds.add(r.client_id);
     }
   }
   return [...prevIds].sort((a, b) => a - b);
 }
 
-function findNew(prev: HFMClientsPerformanceResponse["clients"], curr: HFMClientsPerformanceResponse["clients"]): number[] {
-  const prevIds = new Set(prev.map((c) => c.client_id));
+function findNewFromRequestSnapshots(prev: RequestSnapshotRow[], curr: Set<number>): number[] {
+  const prevIds = new Set(prev.map((r) => r.client_id));
   const newIds = new Set<number>();
-  for (const c of curr) {
-    if (!prevIds.has(c.client_id) && !newIds.has(c.client_id)) {
-      newIds.add(c.client_id);
-    }
+  for (const id of curr) {
+    if (!prevIds.has(id)) newIds.add(id);
   }
   return [...newIds].sort((a, b) => a - b);
 }
 
-export function buildWeeklyReportMessage(options: {
-  dates: string[];
-  dateCounts: Map<string, number>;
+function countDistinctInSnapshots(rows: RequestSnapshotRow[]): number {
+  return new Set(rows.map((r) => r.client_id)).size;
+}
+
+export function buildDayReportMessage(options: {
+  baselineLabel: string;
+  baselineDate: string;
+  baselineCount: number;
+  currentCount: number;
   targetWalletLabel: string;
-  missingWalletIds: number[];
-  newWalletCount: number;
+  missingIds: number[];
+  newIds: number[];
 }): string {
-  const { dates, dateCounts, targetWalletLabel, missingWalletIds, newWalletCount } = options;
+  const {
+    baselineLabel,
+    baselineDate,
+    baselineCount,
+    currentCount,
+    targetWalletLabel,
+    missingIds,
+    newIds,
+  } = options;
 
-  let message = "";
-  for (const date of dates) {
-    const count = dateCounts.get(date) ?? 0;
-    message += `${formatShortDate(date)} : Total Wallet under ${targetWalletLabel} : ${count} Wallets\n`;
+  const delta = currentCount - baselineCount;
+  const sign = delta > 0 ? "+" : "";
+  const pctStr = baselineCount > 0 ? ` (${sign}${((delta / baselineCount) * 100).toFixed(2)}%)` : "";
+
+  let msg = `Daily Wallet Report\n`;
+  msg += `Wallet under ${targetWalletLabel}\n`;
+  msg += `${baselineLabel} (${formatShortDate(baselineDate)}): ${baselineCount} Wallets\n`;
+  msg += `Current: ${currentCount} Wallets\n`;
+  msg += `Change: ${sign}${delta} Wallets${pctStr}\n`;
+
+  if (missingIds.length > 0) {
+    msg += `${missingIds.length} Missing Wallets since ${baselineLabel}\n`;
+    for (const id of missingIds.slice(0, 50)) {
+      msg += `-${id}\n`;
+    }
+    if (missingIds.length > 50) {
+      msg += `... and ${missingIds.length - 50} more\n`;
+    }
+  } else {
+    msg += `0 Missing Wallets since ${baselineLabel}\n`;
   }
 
-  const missingCount = missingWalletIds.length;
-  message += `${missingCount} Missing Wallet today\n`;
-  for (const id of missingWalletIds) {
-    message += `-${id}\n`;
+  if (newIds.length > 0) {
+    msg += `${newIds.length} New Wallets\n`;
+  } else {
+    msg += `0 New Wallets\n`;
   }
 
-  message += `${newWalletCount} New Wallets today`;
+  if (msg.length > 4900) {
+    msg = msg.slice(0, 4900) + "\n... truncated";
+  }
 
-  return message.trimEnd();
+  return msg.trimEnd();
 }
 
 export function buildComparisonReportMessage(options: {
   title: string;
   prevLabel: string;
-  prevFrom: string;
-  prevTo: string;
+  prevDate: string;
   prevCount: number;
   currLabel: string;
-  currFrom: string;
-  currTo: string;
   currCount: number;
   targetWalletLabel: string;
   missingIds: number[];
@@ -93,12 +159,9 @@ export function buildComparisonReportMessage(options: {
   const {
     title,
     prevLabel,
-    prevFrom,
-    prevTo,
+    prevDate,
     prevCount,
     currLabel,
-    currFrom,
-    currTo,
     currCount,
     targetWalletLabel,
     missingIds,
@@ -111,23 +174,30 @@ export function buildComparisonReportMessage(options: {
 
   let msg = `${title}\n`;
   msg += `Wallet under ${targetWalletLabel}\n`;
-  msg += `${prevLabel} (${formatShortDate(prevFrom)} - ${formatShortDate(prevTo)}): ${prevCount} Wallets\n`;
-  msg += `${currLabel} (${formatShortDate(currFrom)} - ${formatShortDate(currTo)}): ${currCount} Wallets\n`;
+  msg += `${prevLabel} (${formatShortDate(prevDate)}): ${prevCount} Wallets\n`;
+  msg += `${currLabel}: ${currCount} Wallets\n`;
   msg += `Change: ${sign}${delta} Wallets${pctStr}\n`;
 
   if (missingIds.length > 0) {
     msg += `${missingIds.length} Missing Wallets since ${prevLabel}\n`;
-    for (const id of missingIds) {
+    for (const id of missingIds.slice(0, 50)) {
       msg += `-${id}\n`;
+    }
+    if (missingIds.length > 50) {
+      msg += `... and ${missingIds.length - 50} more\n`;
     }
   } else {
     msg += `0 Missing Wallets since ${prevLabel}\n`;
   }
 
   if (newIds.length > 0) {
-    msg += `${newIds.length} New Wallets in ${currLabel}\n`;
+    msg += `${newIds.length} New Wallets\n`;
   } else {
-    msg += `0 New Wallets in ${currLabel}\n`;
+    msg += `0 New Wallets\n`;
+  }
+
+  if (msg.length > 4900) {
+    msg = msg.slice(0, 4900) + "\n... truncated";
   }
 
   return msg.trimEnd();
@@ -136,8 +206,7 @@ export function buildComparisonReportMessage(options: {
 export interface RunDailyClientReportOptions {
   now?: Date;
   db?: Database;
-  fetchAllClientsFn?: () => Promise<HFMAllClientsResult>;
-  fetchByRangeFn?: (fromDate: string, toDate: string) => Promise<HFMAllClientsResult>;
+  fetchClientsFn?: () => Promise<HFMClientsResult>;
   pushToAllFn?: (uids: string[], text: string) => Promise<void>;
   reportPeriod?: ReportPeriod;
 }
@@ -158,194 +227,261 @@ function markDailyReportNotificationSent(db: Database, date: string): void {
 async function ensureTodaySnapshot(
   db: Database,
   today: string,
-  fetchAll: () => Promise<HFMAllClientsResult>,
+  fetchCurrent: () => Promise<HFMClientsResult>,
 ): Promise<void> {
   const existingTodayCount = countByDate(db, today);
   if (existingTodayCount > 0) return;
 
-  const result = await fetchAll();
-  if (!result.ok) throw new Error(`HFM fetchAllClients failed: ${result.reason}`);
+  const result = await fetchCurrent();
+  if (!result.ok) throw new Error(`HFM fetchClients failed: ${result.reason}`);
 
-  insertMany(db, today, result.data.clients);
+  const normalized = dedupeByCompositeKey(result.data).map(normalizeClientRow);
+  insertMany(db, today, normalized);
 }
 
-async function ensureRangeSnapshot(
-  db: Database,
-  period: string,
-  fromDate: string,
-  toDate: string,
-  fetchByRange: (fromDate: string, toDate: string) => Promise<HFMAllClientsResult>,
-): Promise<HFMClientsPerformanceResponse> {
-  const cached = getRangeSnapshot(db, period, fromDate, toDate);
-  if (cached) return cached.data;
-
-  const result = await fetchByRange(fromDate, toDate);
-  if (!result.ok) throw new Error(`HFM fetchClientsByRange(${fromDate},${toDate}) failed: ${result.reason}`);
-
-  upsertRangeSnapshot(db, period, fromDate, toDate, result.data);
-  return result.data;
-}
-
-async function buildReportData(
+async function buildReportMessages(
   db: Database,
   now: Date,
   today: string,
-  fetchAll: () => Promise<HFMAllClientsResult>,
-  period: ReportPeriod = "day",
-  fetchByRange: (fromDate: string, toDate: string) => Promise<HFMAllClientsResult> = fetchClientsByRange,
-) {
-  const { wallet: targetWallet, label: targetLabel } = getTargetWallet();
+  fetchCurrent: () => Promise<HFMClientsResult>,
+  period: ReportPeriod,
+): Promise<string[]> {
+  const { label: targetLabel } = getTargetWallet();
+
+  const result = await fetchCurrent();
+  console.log(result);
+
+  if (!result.ok) throw new Error(`HFM fetchClients failed: ${result.reason}`);
+  const currentRows = dedupeByCompositeKey(result.data);
+  const currentWalletIds = extractWalletIds(currentRows);
+  const currCount = currentWalletIds.size;
+
+  const messages: string[] = [];
 
   if (period === "day") {
-    await ensureTodaySnapshot(db, today, fetchAll);
     const yesterday = getPreviousIctDateString(now);
-    const dates = [today];
+    const yesterdayExists = countByDate(db, yesterday) > 0;
 
-    const dateCounts = new Map<string, number>();
-    for (const d of dates) {
-      dateCounts.set(d, countWalletsByDate(db, d, targetWallet));
+    if (!yesterdayExists) {
+      insertRequestSnapshot(db, today, currentRows);
+      return [`The report of yesterday (${formatShortDate(yesterday)}) was not found.`];
     }
 
-    const yesterdayExists = countByDate(db, yesterday) > 0;
-    const missingWalletIds = yesterdayExists
-      ? getMissingWalletIds(db, today, yesterday, targetWallet)
-      : [];
-    const newWalletCount = yesterdayExists
-      ? getNewWalletIds(db, today, yesterday, targetWallet).length
-      : 0;
+    const yesterdayWalletIds = getWalletIdsFromNightlySnapshot(db, yesterday);
+    if (yesterdayWalletIds.size === 0) {
+      insertRequestSnapshot(db, today, currentRows);
+      return [`The report of yesterday (${formatShortDate(yesterday)}) was not found.`];
+    }
 
-    return buildWeeklyReportMessage({
-      dates,
-      dateCounts,
-      targetWalletLabel: targetLabel,
-      missingWalletIds,
-      newWalletCount,
-    });
+    const missingIds = findMissingFromSets(yesterdayWalletIds, currentWalletIds);
+    const newIds = findNewFromSets(yesterdayWalletIds, currentWalletIds);
+
+    messages.push(
+      buildDayReportMessage({
+        baselineLabel: "Yesterday",
+        baselineDate: yesterday,
+        baselineCount: yesterdayWalletIds.size,
+        currentCount: currCount,
+        targetWalletLabel: targetLabel,
+        missingIds,
+        newIds,
+      }),
+    );
+
+    const prevRequest = getLatestRequestSnapshotBefore(db, today);
+    if (prevRequest) {
+      const prevMissing = findMissingFromRequestSnapshots(prevRequest, currentWalletIds);
+      const prevNew = findNewFromRequestSnapshots(prevRequest, currentWalletIds);
+      messages.push(
+        buildComparisonReportMessage({
+          title: "Since Last Request",
+          prevLabel: "Last request",
+          prevDate: "",
+          prevCount: countDistinctInSnapshots(prevRequest),
+          currLabel: "Current",
+          currCount,
+          targetWalletLabel: targetLabel,
+          missingIds: prevMissing,
+          newIds: prevNew,
+        }),
+      );
+    }
+
+    insertRequestSnapshot(db, today, currentRows);
+    return messages;
   }
 
   if (period === "week") {
     const lastWeek = getLastWeekRange(now);
-    const thisWeek = getThisWeekRange(now);
+    const lastWeekSunday = lastWeek.to;
+    const lastWeekExists = countByDate(db, lastWeekSunday) > 0;
 
-    const prevData = await ensureRangeSnapshot(db, "week_prev", lastWeek.from, lastWeek.to, fetchByRange);
-    const currData = await ensureRangeSnapshot(db, "week_curr", thisWeek.from, thisWeek.to, fetchByRange);
+    if (!lastWeekExists) {
+      insertRequestSnapshot(db, today, currentRows);
+      return [`The report of last week (${formatShortDate(lastWeekSunday)}) was not found.`];
+    }
 
-    const prevClients = filterByWallet(prevData.clients, targetWallet);
-    const currClients = filterByWallet(currData.clients, targetWallet);
+    const lastWeekWalletIds = getWalletIdsFromNightlySnapshot(db, lastWeekSunday);
+    if (lastWeekWalletIds.size === 0) {
+      insertRequestSnapshot(db, today, currentRows);
+      return [`The report of last week (${formatShortDate(lastWeekSunday)}) was not found.`];
+    }
 
-    return buildComparisonReportMessage({
-      title: "Week-over-week Wallet Report",
-      prevLabel: "Last week",
-      prevFrom: lastWeek.from,
-      prevTo: lastWeek.to,
-      prevCount: countDistinctClients(prevClients),
-      currLabel: "This week",
-      currFrom: thisWeek.from,
-      currTo: thisWeek.to,
-      currCount: countDistinctClients(currClients),
-      targetWalletLabel: targetLabel,
-      missingIds: findMissing(prevClients, currClients),
-      newIds: findNew(prevClients, currClients),
-    });
+    const missingIds = findMissingFromSets(lastWeekWalletIds, currentWalletIds);
+    const newIds = findNewFromSets(lastWeekWalletIds, currentWalletIds);
+
+    messages.push(
+      buildComparisonReportMessage({
+        title: "Week-over-week Wallet Report",
+        prevLabel: "End of last week",
+        prevDate: lastWeekSunday,
+        prevCount: lastWeekWalletIds.size,
+        currLabel: "Current",
+        currCount,
+        targetWalletLabel: targetLabel,
+        missingIds,
+        newIds,
+      }),
+    );
+
+    const prevRequest = getLatestRequestSnapshotBefore(db, today);
+    if (prevRequest) {
+      const prevMissing = findMissingFromRequestSnapshots(prevRequest, currentWalletIds);
+      const prevNew = findNewFromRequestSnapshots(prevRequest, currentWalletIds);
+      messages.push(
+        buildComparisonReportMessage({
+          title: "Since Last Request",
+          prevLabel: "Last request",
+          prevDate: "",
+          prevCount: countDistinctInSnapshots(prevRequest),
+          currLabel: "Current",
+          currCount,
+          targetWalletLabel: targetLabel,
+          missingIds: prevMissing,
+          newIds: prevNew,
+        }),
+      );
+    }
+
+    insertRequestSnapshot(db, today, currentRows);
+    return messages;
   }
 
   if (period === "month") {
     const lastMonth = getLastMonthRange(now);
-    const thisMonth = getThisMonthRange(now);
+    const lastMonthEnd = lastMonth.to;
+    const lastMonthExists = countByDate(db, lastMonthEnd) > 0;
 
-    const prevData = await ensureRangeSnapshot(db, "month_prev", lastMonth.from, lastMonth.to, fetchByRange);
-    const currData = await ensureRangeSnapshot(db, "month_curr", thisMonth.from, thisMonth.to, fetchByRange);
+    if (!lastMonthExists) {
+      insertRequestSnapshot(db, today, currentRows);
+      return [`The report of last month (${formatShortDate(lastMonthEnd)}) was not found.`];
+    }
 
-    const prevClients = filterByWallet(prevData.clients, targetWallet);
-    const currClients = filterByWallet(currData.clients, targetWallet);
+    const lastMonthWalletIds = getWalletIdsFromNightlySnapshot(db, lastMonthEnd);
+    if (lastMonthWalletIds.size === 0) {
+      insertRequestSnapshot(db, today, currentRows);
+      return [`The report of last month (${formatShortDate(lastMonthEnd)}) was not found.`];
+    }
 
-    return buildComparisonReportMessage({
-      title: "Month-over-month Wallet Report",
-      prevLabel: "Last month",
-      prevFrom: lastMonth.from,
-      prevTo: lastMonth.to,
-      prevCount: countDistinctClients(prevClients),
-      currLabel: "This month",
-      currFrom: thisMonth.from,
-      currTo: thisMonth.to,
-      currCount: countDistinctClients(currClients),
-      targetWalletLabel: targetLabel,
-      missingIds: findMissing(prevClients, currClients),
-      newIds: findNew(prevClients, currClients),
-    });
+    const missingIds = findMissingFromSets(lastMonthWalletIds, currentWalletIds);
+    const newIds = findNewFromSets(lastMonthWalletIds, currentWalletIds);
+
+    messages.push(
+      buildComparisonReportMessage({
+        title: "Month-over-month Wallet Report",
+        prevLabel: "End of last month",
+        prevDate: lastMonthEnd,
+        prevCount: lastMonthWalletIds.size,
+        currLabel: "Current",
+        currCount,
+        targetWalletLabel: targetLabel,
+        missingIds,
+        newIds,
+      }),
+    );
+
+    const prevRequest = getLatestRequestSnapshotBefore(db, today);
+    if (prevRequest) {
+      const prevMissing = findMissingFromRequestSnapshots(prevRequest, currentWalletIds);
+      const prevNew = findNewFromRequestSnapshots(prevRequest, currentWalletIds);
+      messages.push(
+        buildComparisonReportMessage({
+          title: "Since Last Request",
+          prevLabel: "Last request",
+          prevDate: "",
+          prevCount: countDistinctInSnapshots(prevRequest),
+          currLabel: "Current",
+          currCount,
+          targetWalletLabel: targetLabel,
+          missingIds: prevMissing,
+          newIds: prevNew,
+        }),
+      );
+    }
+
+    insertRequestSnapshot(db, today, currentRows);
+    return messages;
   }
 
   throw new Error(`Unknown report period: ${period}`);
 }
 
-export async function generateReportForUser(options: RunDailyClientReportOptions = {}): Promise<string> {
+export async function generateReportForUser(options: RunDailyClientReportOptions = {}): Promise<string[]> {
   const now = options.now ?? new Date();
   const db = options.db ?? getDatabase();
-  const fetchAll = options.fetchAllClientsFn ?? fetchAllClients;
-  const fetchByRange = options.fetchByRangeFn ?? fetchClientsByRange;
+  const fetchCurrent = options.fetchClientsFn ?? fetchClients;
   const period = options.reportPeriod ?? "day";
 
   initSqlite(db);
   const today = getIctDateString(now);
-  return await buildReportData(db, now, today, fetchAll, period, fetchByRange);
+  return await buildReportMessages(db, now, today, fetchCurrent, period);
 }
 
 export async function runDailyClientReport(options: RunDailyClientReportOptions = {}): Promise<void> {
   const now = options.now ?? new Date();
   const db = options.db ?? getDatabase();
-  const fetchAll = options.fetchAllClientsFn ?? fetchAllClients;
+  const fetchCurrent = options.fetchClientsFn ?? fetchClients;
   const pushAll = options.pushToAllFn ?? pushToAll;
-  const fetchByRange = options.fetchByRangeFn ?? fetchClientsByRange;
 
   initSqlite(db);
   seedFromEnv(db, process.env.LINE_NOTIFY_UIDS ?? "");
 
   const today = getIctDateString(now);
 
-  await ensureTodaySnapshot(db, today, fetchAll);
-
-  const lastWeek = getLastWeekRange(now);
-  const thisWeek = getThisWeekRange(now);
-  const lastMonth = getLastMonthRange(now);
-  const thisMonth = getThisMonthRange(now);
-
-  await ensureRangeSnapshot(db, "week_prev", lastWeek.from, lastWeek.to, fetchByRange);
-  await ensureRangeSnapshot(db, "week_curr", thisWeek.from, thisWeek.to, fetchByRange);
-  await ensureRangeSnapshot(db, "month_prev", lastMonth.from, lastMonth.to, fetchByRange);
-  await ensureRangeSnapshot(db, "month_curr", thisMonth.from, thisMonth.to, fetchByRange);
+  await ensureTodaySnapshot(db, today, fetchCurrent);
 
   if (hasDailyReportNotificationSent(db, today)) {
     console.warn(`[cron] daily-client-report notification already sent for ${today}; skipping`);
     return;
   }
 
-  const { wallet: targetWallet, label: targetLabel } = getTargetWallet();
   const yesterday = getPreviousIctDateString(now);
-  const dateCounts = new Map<string, number>();
-  dateCounts.set(today, countWalletsByDate(db, today, targetWallet));
-
   const yesterdayExists = countByDate(db, yesterday) > 0;
-  const missingWalletIds = yesterdayExists
-    ? getMissingWalletIds(db, today, yesterday, targetWallet)
-    : [];
-  const newWalletCount = yesterdayExists
-    ? getNewWalletIds(db, today, yesterday, targetWallet).length
-    : 0;
-
-  const message = buildWeeklyReportMessage({
-    dates: [today],
-    dateCounts,
-    targetWalletLabel: targetLabel,
-    missingWalletIds,
-    newWalletCount,
-  });
 
   const uids = getActiveUids(db);
   if (uids.length === 0) {
     console.warn("[cron] daily-client-report has no active LINE recipients");
-  } else {
+  } else if (yesterdayExists) {
+    const { label: targetLabel } = getTargetWallet();
+    const todayWalletIds = getWalletIdsFromNightlySnapshot(db, today);
+    const yesterdayWalletIds = getWalletIdsFromNightlySnapshot(db, yesterday);
+    const todayCount = todayWalletIds.size;
+    const yesterdayCount = yesterdayWalletIds.size;
+    const missing = findMissingFromSets(yesterdayWalletIds, todayWalletIds);
+    const newW = findNewFromSets(yesterdayWalletIds, todayWalletIds);
+    const message = buildDayReportMessage({
+      baselineLabel: "Yesterday",
+      baselineDate: yesterday,
+      baselineCount: yesterdayCount,
+      currentCount: todayCount,
+      targetWalletLabel: targetLabel,
+      missingIds: missing,
+      newIds: newW,
+    });
     await pushAll(uids, message);
     markDailyReportNotificationSent(db, today);
+  } else {
+    console.warn(`[cron] daily-client-report: no yesterday snapshot for ${yesterday}, skipping notification`);
   }
 
   purgeOlderThan(db, 90, today);

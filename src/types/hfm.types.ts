@@ -61,3 +61,39 @@ export interface PerformanceLookup {
   id: number;
   label: string;
 }
+
+export interface HFMClientRow {
+  id: number;
+  wallet: number;
+  type: string | null;
+  last_trade: string | null;
+  volume: string | number | null;
+  balance: number | string | null;
+  commission: number | string | null;
+  account_currency: string | null;
+  country: string | null;
+  rebates_paid: number | string | null;
+  rebates_unpaid: number | string | null;
+  rebates_rejected: number | string | null;
+  first_trade: string | null;
+  first_funding: string | null;
+  registration: string | null;
+  server: number | null;
+  platform: string | null;
+  conversion_device: string | null;
+  deposits: number | string | null;
+  withdrawals: number | string | null;
+  name: string | null;
+  email: string | null;
+  equity: number | string | null;
+  margin: number | string | null;
+  free_margin: number | string | null;
+}
+
+export interface HFMClientsResponse {
+  data: HFMClientRow[];
+}
+
+export type HFMClientsResult =
+  | { ok: true; data: HFMClientRow[] }
+  | { ok: false; reason: "server_error" | "timeout" };

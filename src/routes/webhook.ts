@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { verifyLineSignature } from "../utils/signature";
 import { fetchPerformance, resolveLinkedAccounts, checkConditions, parsePerformanceLookup } from "../services/hfm.service";
-import { replyText, replyFlex, showLoading } from "../services/line.service";
+import { replyText, replyFlex, replyTexts, showLoading } from "../services/line.service";
 import { buildTradingCard } from "../builders/flex-message.builder";
 import { generateReportForUser, type ReportPeriod } from "../jobs/daily-client-report";
 import { isTextMessageEvent } from "../types/line.types";
@@ -93,8 +93,12 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
       logError("line-loading", err);
     });
     try {
-      const reportText = await generateReportForUser({ reportPeriod });
-      await replyText(replyToken, reportText);
+      const reportMessages = await generateReportForUser({ reportPeriod });
+      if (reportMessages.length === 1) {
+        await replyText(replyToken, reportMessages[0]!);
+      } else {
+        await replyTexts(replyToken, reportMessages);
+      }
     } catch (err) {
       logError("webhook-report", err);
       await replyText(

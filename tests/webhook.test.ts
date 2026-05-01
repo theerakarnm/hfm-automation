@@ -481,28 +481,38 @@ describe("webhook", () => {
         return new Response("{}", { status: 202 });
       }
 
-      if (url.includes("/api/performance/client-performance") && !url.includes("?")) {
+      if (url.includes("/api/clients/")) {
         return new Response(
           JSON.stringify({
-            clients: [
+            data: [
               {
-                client_id: 6503256,
-                account_id: 11111,
-                activity_status: "active",
-                trades: 10,
-                volume: 1.0,
-                account_type: "Standard",
+                id: 11111,
+                wallet: 6503256,
+                type: "Standard",
+                last_trade: "2026-04-25 10:00:00",
+                volume: "1.0",
                 balance: 500,
+                commission: 10,
                 account_currency: "USD",
+                country: "Thailand",
+                rebates_paid: 0,
+                rebates_unpaid: 0,
+                rebates_rejected: 0,
+                first_trade: "2026-04-20 10:00:00",
+                first_funding: "2026-04-20 10:00:00",
+                registration: "2026-04-20T00:00:00Z",
+                server: 5,
+                platform: "MT4",
+                conversion_device: "Mobile Browser",
+                deposits: 500,
+                withdrawals: 0,
+                name: "Wallet Owner",
+                email: "owner@test.com",
                 equity: 600,
-                archived: null,
-                subaffiliate: 30506525,
-                account_regdate: "2026-04-20T00:00:00Z",
-                status: "approved",
-                full_name: "Wallet Owner",
+                margin: 100,
+                free_margin: 500,
               },
             ],
-            totals: { clients: 1, accounts: 1, volume: 1.0, balance: 500, withdrawals: 0, commission: 10 },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
@@ -528,15 +538,13 @@ describe("webhook", () => {
 
     expect(fetchCalls[0]?.url).toBe("https://api.line.me/v2/bot/chat/loading/start");
 
-    expect(fetchCalls[1]?.url).toBe("https://api.hfaffiliates.com/api/performance/client-performance");
+    expect(fetchCalls[1]?.url).toBe("https://api.hfaffiliates.com/api/clients");
 
     expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/reply");
     const replyBody = JSON.parse(fetchCalls[2]?.body ?? "{}");
     expect(replyBody.replyToken).toBe("tokenRpt");
     expect(replyBody.messages[0].type).toBe("text");
-    expect(replyBody.messages[0].text).toContain("Total Wallet under 30506525");
-    expect(replyBody.messages[0].text).toContain("0 Missing Wallet today");
-    expect(replyBody.messages[0].text).toContain("0 New Wallets today");
+    expect(replyBody.messages[0].text).toContain("was not found");
   });
 
   test("report command is case-insensitive", async () => {
@@ -569,12 +577,9 @@ describe("webhook", () => {
         return new Response("{}", { status: 202 });
       }
 
-      if (url.includes("/api/performance/client-performance") && !url.includes("?")) {
+      if (url.includes("/api/clients/")) {
         return new Response(
-          JSON.stringify({
-            clients: [],
-            totals: { clients: 0, accounts: 0, volume: 0, balance: 0, withdrawals: 0, commission: 0 },
-          }),
+          JSON.stringify({ data: [] }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
@@ -585,7 +590,10 @@ describe("webhook", () => {
     const res = app.fetch(
       new Request("http://localhost/webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-line-signature": sig },
+        headers: {
+          "Content-Type": "application/json",
+          "x-line-signature": sig,
+        },
         body,
       })
     );
@@ -593,7 +601,7 @@ describe("webhook", () => {
     expect(response.status).toBe(200);
 
     await waitFor(() => fetchCalls.length >= 3);
-    expect(fetchCalls[1]?.url).toBe("https://api.hfaffiliates.com/api/performance/client-performance");
+    expect(fetchCalls[1]?.url).toBe("https://api.hfaffiliates.com/api/clients");
     expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/reply");
   });
 
@@ -623,9 +631,9 @@ describe("webhook", () => {
       const url = String(input);
       fetchCalls.push({ url, body: typeof init?.body === "string" ? init.body : undefined });
       if (url.endsWith("/v2/bot/chat/loading/start")) return new Response("{}", { status: 202 });
-      if (url.includes("/api/performance/client-performance") && !url.includes("?")) {
+      if (url.includes("/api/clients/")) {
         return new Response(
-          JSON.stringify({ clients: [], totals: { clients: 0, accounts: 0, volume: 0, balance: 0, withdrawals: 0, commission: 0 } }),
+          JSON.stringify({ data: [] }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
@@ -635,7 +643,10 @@ describe("webhook", () => {
     const res = app.fetch(
       new Request("http://localhost/webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-line-signature": sig },
+        headers: {
+          "Content-Type": "application/json",
+          "x-line-signature": sig,
+        },
         body,
       })
     );
@@ -665,8 +676,6 @@ describe("webhook", () => {
     });
     const sig = computeSig(body, SECRET);
 
-    const emptyResponse = { clients: [], totals: { clients: 0, accounts: 0, volume: 0, balance: 0, withdrawals: 0, commission: 0 } };
-
     const fetchCalls: Array<{ url: string; body?: string }> = [];
     globalThis.fetch = (async (
       input: Parameters<typeof globalThis.fetch>[0],
@@ -675,9 +684,9 @@ describe("webhook", () => {
       const url = String(input);
       fetchCalls.push({ url, body: typeof init?.body === "string" ? init.body : undefined });
       if (url.endsWith("/v2/bot/chat/loading/start")) return new Response("{}", { status: 202 });
-      if (url.includes("/api/performance/client-performance")) {
+      if (url.includes("/api/clients/")) {
         return new Response(
-          JSON.stringify(emptyResponse),
+          JSON.stringify({ data: [] }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
@@ -687,13 +696,16 @@ describe("webhook", () => {
     const res = app.fetch(
       new Request("http://localhost/webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-line-signature": sig },
+        headers: {
+          "Content-Type": "application/json",
+          "x-line-signature": sig,
+        },
         body,
       })
     );
     expect((await res).status).toBe(200);
 
-    await waitFor(() => fetchCalls.length >= 4);
+    await waitFor(() => fetchCalls.length >= 3);
     expect(fetchCalls.at(-1)?.url).toBe("https://api.line.me/v2/bot/message/reply");
     const replyBody = JSON.parse(fetchCalls.at(-1)?.body ?? "{}");
     expect(replyBody.replyToken).toBe("tokenWeek");
@@ -717,8 +729,6 @@ describe("webhook", () => {
     });
     const sig = computeSig(body, SECRET);
 
-    const emptyResponse = { clients: [], totals: { clients: 0, accounts: 0, volume: 0, balance: 0, withdrawals: 0, commission: 0 } };
-
     const fetchCalls: Array<{ url: string; body?: string }> = [];
     globalThis.fetch = (async (
       input: Parameters<typeof globalThis.fetch>[0],
@@ -727,9 +737,9 @@ describe("webhook", () => {
       const url = String(input);
       fetchCalls.push({ url, body: typeof init?.body === "string" ? init.body : undefined });
       if (url.endsWith("/v2/bot/chat/loading/start")) return new Response("{}", { status: 202 });
-      if (url.includes("/api/performance/client-performance")) {
+      if (url.includes("/api/clients/")) {
         return new Response(
-          JSON.stringify(emptyResponse),
+          JSON.stringify({ data: [] }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
@@ -739,17 +749,21 @@ describe("webhook", () => {
     const res = app.fetch(
       new Request("http://localhost/webhook", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-line-signature": sig },
+        headers: {
+          "Content-Type": "application/json",
+          "x-line-signature": sig,
+        },
         body,
       })
     );
     expect((await res).status).toBe(200);
 
-    await waitFor(() => fetchCalls.length >= 4);
+    await waitFor(() => fetchCalls.length >= 3);
     expect(fetchCalls.at(-1)?.url).toBe("https://api.line.me/v2/bot/message/reply");
     const replyBody = JSON.parse(fetchCalls.at(-1)?.body ?? "{}");
     expect(replyBody.replyToken).toBe("tokenMonth");
   });
+
 });
 
 async function importWebhook() {

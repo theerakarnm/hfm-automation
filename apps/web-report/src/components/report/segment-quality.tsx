@@ -6,7 +6,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { formatNumber, formatCurrency, formatPercent } from "@/lib/formatters"
@@ -22,7 +21,7 @@ function SegmentTable({
   return (
     <div className="space-y-2">
       <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
-      <ScrollArea className="w-full">
+      <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -78,7 +77,7 @@ function SegmentTable({
             ))}
           </TableBody>
         </Table>
-      </ScrollArea>
+      </div>
     </div>
   )
 }

@@ -66,7 +66,7 @@ export function TrendAnalytics({ trends }: { trends: ReportTrends }) {
           </h3>
           <ChartContainer
             config={walletGrowthConfig}
-            className="h-[280px] min-h-[200px] w-full"
+            className="h-[220px] min-h-[180px] w-full sm:h-[280px] sm:min-h-[200px]"
           >
             <LineChart data={trends.walletGrowth}>
               <CartesianGrid vertical={false} />
@@ -76,9 +76,14 @@ export function TrendAnalytics({ trends }: { trends: ReportTrends }) {
                 axisLine={false}
                 tickMargin={8}
                 tickFormatter={tickFormatter}
-                interval={6}
+                interval={9}
               />
-              <YAxis tickLine={false} axisLine={false} width={50} />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                width={40}
+                className="sm:w-[50px]"
+              />
               <ChartTooltip
                 content={<ChartTooltipContent labelFormatter={dateFormatter} />}
               />
@@ -99,7 +104,7 @@ export function TrendAnalytics({ trends }: { trends: ReportTrends }) {
           </h3>
           <ChartContainer
             config={accountGrowthConfig}
-            className="h-[280px] min-h-[200px] w-full"
+            className="h-[220px] min-h-[180px] w-full sm:h-[280px] sm:min-h-[200px]"
           >
             <LineChart data={trends.accountGrowth}>
               <CartesianGrid vertical={false} />
@@ -109,9 +114,9 @@ export function TrendAnalytics({ trends }: { trends: ReportTrends }) {
                 axisLine={false}
                 tickMargin={8}
                 tickFormatter={tickFormatter}
-                interval={6}
+                interval={9}
               />
-              <YAxis tickLine={false} axisLine={false} width={50} />
+              <YAxis tickLine={false} axisLine={false} width={40} />
               <ChartTooltip
                 content={<ChartTooltipContent labelFormatter={dateFormatter} />}
               />
@@ -132,7 +137,7 @@ export function TrendAnalytics({ trends }: { trends: ReportTrends }) {
           </h3>
           <ChartContainer
             config={fundedNoTradeConfig}
-            className="h-[280px] min-h-[200px] w-full"
+            className="h-[220px] min-h-[180px] w-full sm:h-[280px] sm:min-h-[200px]"
           >
             <AreaChart data={trends.fundedNoTrade}>
               <CartesianGrid vertical={false} />
@@ -142,9 +147,9 @@ export function TrendAnalytics({ trends }: { trends: ReportTrends }) {
                 axisLine={false}
                 tickMargin={8}
                 tickFormatter={tickFormatter}
-                interval={6}
+                interval={9}
               />
-              <YAxis tickLine={false} axisLine={false} width={50} />
+              <YAxis tickLine={false} axisLine={false} width={40} />
               <ChartTooltip
                 content={<ChartTooltipContent labelFormatter={dateFormatter} />}
               />
@@ -166,7 +171,7 @@ export function TrendAnalytics({ trends }: { trends: ReportTrends }) {
           </h3>
           <ChartContainer
             config={cashflowConfig}
-            className="h-[280px] min-h-[200px] w-full"
+            className="h-[220px] min-h-[180px] w-full sm:h-[280px] sm:min-h-[200px]"
           >
             <BarChart data={trends.cashflow}>
               <CartesianGrid vertical={false} />
@@ -176,9 +181,9 @@ export function TrendAnalytics({ trends }: { trends: ReportTrends }) {
                 axisLine={false}
                 tickMargin={8}
                 tickFormatter={tickFormatter}
-                interval={6}
+                interval={9}
               />
-              <YAxis tickLine={false} axisLine={false} width={50} />
+              <YAxis tickLine={false} axisLine={false} width={40} />
               <ChartTooltip
                 content={<ChartTooltipContent labelFormatter={dateFormatter} />}
               />

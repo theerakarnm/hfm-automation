@@ -40,11 +40,13 @@ export function DashboardShell({ data }: { data: ReportDashboardResponse }) {
   return (
     <TooltipProvider>
       <div className="min-h-svh bg-background">
-        <header className="border-b border-border px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-lg font-medium">HFM Affiliate Report</h1>
+        <header className="border-b border-border px-4 py-3 sm:px-6 sm:py-4">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <h1 className="text-base font-medium sm:text-lg">
+                  HFM Affiliate Report
+                </h1>
                 <Badge
                   variant="outline"
                   className="border-amber-500/20 bg-amber-500/10 text-xs text-amber-600 dark:text-amber-400"
@@ -90,16 +92,18 @@ export function DashboardShell({ data }: { data: ReportDashboardResponse }) {
         />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="mx-6 mt-4">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="activation">Activation</TabsTrigger>
-            <TabsTrigger value="funded-no-trade">Funded No Trade</TabsTrigger>
-            <TabsTrigger value="missing-wallets">Missing Wallets</TabsTrigger>
-            <TabsTrigger value="segments">Segments</TabsTrigger>
-            <TabsTrigger value="data-quality">Data Quality</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto px-4 sm:mx-6 sm:mt-4 sm:px-0">
+            <TabsList className="mt-3 w-max min-w-full sm:mt-4">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="activation">Activation</TabsTrigger>
+              <TabsTrigger value="funded-no-trade">Funded No Trade</TabsTrigger>
+              <TabsTrigger value="missing-wallets">Missing Wallets</TabsTrigger>
+              <TabsTrigger value="segments">Segments</TabsTrigger>
+              <TabsTrigger value="data-quality">Data Quality</TabsTrigger>
+            </TabsList>
+          </div>
 
-          <div className="px-6 py-4">
+          <div className="px-4 py-4 sm:px-6">
             <TabsContent value="overview" className="mt-0 space-y-0">
               <ExecutiveOverview summary={data.summary} />
               <Separator className="my-6" />

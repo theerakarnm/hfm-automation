@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge"
 import { formatNumber, formatCurrency, formatPercent } from "@/lib/formatters"
 import type { AccountTypeSummary } from "@/types/report"
 
+import { ScrollArea } from "@/components/ui/scroll-area"
+
 export function AccountTypeOverview({
   accountTypes,
 }: {
@@ -23,7 +25,7 @@ export function AccountTypeOverview({
       <h2 className="text-sm font-medium text-muted-foreground">
         Account Type Overview
       </h2>
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
         {accountTypes.map((at) => (
           <Card key={at.type} className="gap-0 py-2">
             <CardHeader className="px-3 pt-0 pb-1">
@@ -62,44 +64,46 @@ export function AccountTypeOverview({
           </div>
         ))}
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Type</TableHead>
-            <TableHead className="text-right">Accounts</TableHead>
-            <TableHead className="text-right">Active</TableHead>
-            <TableHead className="text-right">FnT</TableHead>
-            <TableHead className="text-right">Deposits</TableHead>
-            <TableHead className="text-right">Volume</TableHead>
-            <TableHead className="text-right">Active Rate</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {accountTypes.map((at) => (
-            <TableRow key={at.type}>
-              <TableCell className="font-medium">{at.type}</TableCell>
-              <TableCell className="text-right tabular-nums">
-                {formatNumber(at.accounts)}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {formatNumber(at.activeAccounts)}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {formatNumber(at.fundedNoTrade)}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {formatCurrency(at.deposits)}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {formatCompact(at.volume)}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {formatPercent(at.activeRate)}
-              </TableCell>
+      <ScrollArea className="w-full">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Type</TableHead>
+              <TableHead className="text-right">Accounts</TableHead>
+              <TableHead className="text-right">Active</TableHead>
+              <TableHead className="text-right">FnT</TableHead>
+              <TableHead className="text-right">Deposits</TableHead>
+              <TableHead className="text-right">Volume</TableHead>
+              <TableHead className="text-right">Active Rate</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {accountTypes.map((at) => (
+              <TableRow key={at.type}>
+                <TableCell className="font-medium">{at.type}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatNumber(at.accounts)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatNumber(at.activeAccounts)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatNumber(at.fundedNoTrade)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatCurrency(at.deposits)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatCompact(at.volume)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatPercent(at.activeRate)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </ScrollArea>
     </div>
   )
 }

@@ -31,17 +31,17 @@ export function KpiCard({
   className?: string
 }) {
   return (
-    <Card className={cn("gap-0 py-3", className)}>
+    <Card className={cn("min-w-0 gap-0 py-3", className)}>
       <CardHeader className="px-3 pt-0 pb-1">
         <CardTitle className="text-xs font-medium text-muted-foreground">
           {title}
         </CardTitle>
       </CardHeader>
-      <CardContent className="px-3 pb-0">
-        <div className="text-xl font-semibold tabular-nums">
+      <CardContent className="min-w-0 px-3 pb-0">
+        <div className="text-xl font-semibold break-words tabular-nums">
           {formatMetricValue(metric.value, metric.format)}
         </div>
-        <div className="mt-1 flex items-center gap-2">
+        <div className="mt-1 flex flex-wrap items-center gap-2">
           <MetricDeltaDisplay
             delta={metric.delta}
             direction={metric.direction}

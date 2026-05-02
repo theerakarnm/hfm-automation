@@ -45,7 +45,7 @@ export function ActivationFunnel({ funnel }: { funnel: FunnelStage[] }) {
                   </span>
                 </div>
               </div>
-              <div className="flex gap-4 text-xs text-muted-foreground">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 {stage.conversionFromPrevious !== null && (
                   <span>
                     Conversion:{" "}
@@ -78,7 +78,9 @@ export function ActivationFunnel({ funnel }: { funnel: FunnelStage[] }) {
           .filter((s) => s.conversionFromPrevious !== null)
           .map((stage) => (
             <div key={stage.stage} className="flex items-center gap-2">
-              <span className="w-40 truncate text-xs">{stage.stage}</span>
+              <span className="w-28 truncate text-xs sm:w-40">
+                {stage.stage}
+              </span>
               <Progress
                 value={stage.conversionFromPrevious ?? 0}
                 className="h-2 flex-1"

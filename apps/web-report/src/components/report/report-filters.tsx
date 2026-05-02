@@ -83,7 +83,7 @@ export function ReportFilters({
   onSearchChange: (v: string) => void
 }) {
   return (
-    <div className="space-y-3 border-b border-border px-6 py-3">
+    <div className="space-y-3 border-b border-border px-4 py-3 sm:px-6">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex gap-1">
           {datePresets.map((p) => (
@@ -91,7 +91,7 @@ export function ReportFilters({
               key={p.value}
               onClick={() => onDateRangeChange(p.value)}
               className={cn(
-                "border border-border px-2 py-1 text-xs transition-colors",
+                "min-h-8 border border-border px-2 py-1.5 text-xs transition-colors sm:min-h-7 sm:py-1",
                 dateRange === p.value
                   ? "bg-primary text-primary-foreground"
                   : "bg-background text-foreground hover:bg-muted"
@@ -102,15 +102,17 @@ export function ReportFilters({
           ))}
         </div>
 
-        <Separator orientation="vertical" className="h-6" />
+        <Separator orientation="vertical" className="hidden h-6 sm:block" />
+      </div>
 
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
         <Select
           value={accountType}
           onValueChange={(v) =>
             onAccountTypeChange(v as AccountTypeGroup | "All")
           }
         >
-          <SelectTrigger className="h-7 w-[120px] text-xs">
+          <SelectTrigger className="h-9 w-full text-xs sm:h-7 sm:w-[120px]">
             <SelectValue placeholder="Account Type" />
           </SelectTrigger>
           <SelectContent>
@@ -123,7 +125,7 @@ export function ReportFilters({
         </Select>
 
         <Select value={country} onValueChange={onCountryChange}>
-          <SelectTrigger className="h-7 w-[120px] text-xs">
+          <SelectTrigger className="h-9 w-full text-xs sm:h-7 sm:w-[120px]">
             <SelectValue placeholder="Country" />
           </SelectTrigger>
           <SelectContent>
@@ -136,7 +138,7 @@ export function ReportFilters({
         </Select>
 
         <Select value={campaign} onValueChange={onCampaignChange}>
-          <SelectTrigger className="h-7 w-[140px] text-xs">
+          <SelectTrigger className="h-9 w-full text-xs sm:h-7 sm:w-[140px]">
             <SelectValue placeholder="Campaign" />
           </SelectTrigger>
           <SelectContent>
@@ -149,7 +151,7 @@ export function ReportFilters({
         </Select>
 
         <Select value={platform} onValueChange={onPlatformChange}>
-          <SelectTrigger className="h-7 w-[90px] text-xs">
+          <SelectTrigger className="h-9 w-full text-xs sm:h-7 sm:w-[90px]">
             <SelectValue placeholder="Platform" />
           </SelectTrigger>
           <SelectContent>
@@ -165,7 +167,7 @@ export function ReportFilters({
           value={risk}
           onValueChange={(v) => onRiskChange(v as RiskLevel | "All")}
         >
-          <SelectTrigger className="h-7 w-[90px] text-xs">
+          <SelectTrigger className="h-9 w-full text-xs sm:h-7 sm:w-[90px]">
             <SelectValue placeholder="Risk" />
           </SelectTrigger>
           <SelectContent>
@@ -182,7 +184,7 @@ export function ReportFilters({
         placeholder="Search wallet ID, account ID, country, campaign..."
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
-        className="h-7 max-w-sm text-xs"
+        className="h-9 w-full text-xs sm:h-7 sm:max-w-sm"
       />
     </div>
   )

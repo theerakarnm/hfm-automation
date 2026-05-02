@@ -16,9 +16,10 @@ import type {
   FundedNoTradeAccount,
   AccountTypeGroup,
   RiskLevel,
+  SuggestedAction,
 } from "@/types/report"
 
-const actionBadge: Record<string, string> = {
+const actionBadge: Record<SuggestedAction, string> = {
   "Call today":
     "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
   "Send onboarding guide":
@@ -26,6 +27,68 @@ const actionBadge: Record<string, string> = {
   "Check platform setup":
     "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
   Monitor: "bg-secondary text-secondary-foreground",
+}
+
+function MobileCard({ a }: { a: FundedNoTradeAccount }) {
+  return (
+    <div className="space-y-2 border border-border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <RiskBadge level={a.priority} />
+          <Badge variant="outline" className="text-xs">
+            {a.accountType}
+          </Badge>
+          <Badge variant="outline" className="text-xs">
+            {a.platform}
+          </Badge>
+        </div>
+        <Badge
+          variant="outline"
+          className={`text-xs ${actionBadge[a.suggestedAction]}`}
+        >
+          {a.suggestedAction}
+        </Badge>
+      </div>
+      <div className="flex items-baseline justify-between">
+        <div>
+          <p className="text-xs text-muted-foreground">Wallet</p>
+          <p className="text-sm font-medium tabular-nums">{a.walletId}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-muted-foreground">Account</p>
+          <p className="text-sm font-medium tabular-nums">{a.accountId}</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+        <div>
+          <span className="text-muted-foreground">Deposit: </span>
+          <span className="font-medium tabular-nums">
+            {formatCurrency(a.depositAmount)}
+          </span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Days: </span>
+          <span className="font-medium tabular-nums">{a.daysSinceFunding}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Registered: </span>
+          <span>{formatDate(a.accountRegistration)}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Funded: </span>
+          <span>{formatDate(a.firstFunding)}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Country: </span>
+          <span>{a.country}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Campaign: </span>
+          <span>{a.campaign}</span>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export function FundedNoTradeTable({
@@ -59,71 +122,80 @@ export function FundedNoTradeTable({
           description="Try adjusting your filters or search query."
         />
       ) : (
-        <ScrollArea className="w-full">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Priority</TableHead>
-                <TableHead>Wallet ID</TableHead>
-                <TableHead>Account ID</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Registered</TableHead>
-                <TableHead>First Funding</TableHead>
-                <TableHead className="text-right">Deposit</TableHead>
-                <TableHead className="text-right">Days</TableHead>
-                <TableHead>Country</TableHead>
-                <TableHead>Campaign</TableHead>
-                <TableHead>Platform</TableHead>
-                <TableHead>Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((a) => (
-                <TableRow key={a.accountId}>
-                  <TableCell>
-                    <RiskBadge level={a.priority} />
-                  </TableCell>
-                  <TableCell className="font-medium tabular-nums">
-                    {a.walletId}
-                  </TableCell>
-                  <TableCell className="tabular-nums">{a.accountId}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">
-                      {a.accountType}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {formatDate(a.accountRegistration)}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {formatDate(a.firstFunding)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatCurrency(a.depositAmount)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {a.daysSinceFunding}
-                  </TableCell>
-                  <TableCell className="text-xs">{a.country}</TableCell>
-                  <TableCell className="text-xs">{a.campaign}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">
-                      {a.platform}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={`text-xs ${actionBadge[a.suggestedAction] ?? ""}`}
-                    >
-                      {a.suggestedAction}
-                    </Badge>
-                  </TableCell>
+        <>
+          <div className="space-y-2 md:hidden">
+            {filtered.map((a) => (
+              <MobileCard key={a.accountId} a={a} />
+            ))}
+          </div>
+          <ScrollArea className="hidden w-full md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Priority</TableHead>
+                  <TableHead>Wallet ID</TableHead>
+                  <TableHead>Account ID</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Registered</TableHead>
+                  <TableHead>First Funding</TableHead>
+                  <TableHead className="text-right">Deposit</TableHead>
+                  <TableHead className="text-right">Days</TableHead>
+                  <TableHead>Country</TableHead>
+                  <TableHead>Campaign</TableHead>
+                  <TableHead>Platform</TableHead>
+                  <TableHead>Action</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </ScrollArea>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((a) => (
+                  <TableRow key={a.accountId}>
+                    <TableCell>
+                      <RiskBadge level={a.priority} />
+                    </TableCell>
+                    <TableCell className="font-medium tabular-nums">
+                      {a.walletId}
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {a.accountId}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {a.accountType}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {formatDate(a.accountRegistration)}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {formatDate(a.firstFunding)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatCurrency(a.depositAmount)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {a.daysSinceFunding}
+                    </TableCell>
+                    <TableCell className="text-xs">{a.country}</TableCell>
+                    <TableCell className="text-xs">{a.campaign}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {a.platform}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={`text-xs ${actionBadge[a.suggestedAction] ?? ""}`}
+                      >
+                        {a.suggestedAction}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </>
       )}
     </div>
   )

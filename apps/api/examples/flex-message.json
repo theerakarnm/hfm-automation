@@ -1,0 +1,352 @@
+{
+  "type": "bubble",
+  "size": "mega",
+  "styles": {
+    "header": {
+      "backgroundColor": "#1DB954"
+    },
+    "footer": {
+      "backgroundColor": "#F5F5F5"
+    }
+  },
+  "header": {
+    "type": "box",
+    "layout": "vertical",
+    "paddingAll": "16px",
+    "spacing": "xs",
+    "contents": [
+      {
+        "type": "text",
+        "text": "Trading Account Summary",
+        "color": "#FFFFFF",
+        "weight": "bold",
+        "size": "md",
+        "wrap": true,
+        "maxLines": 2,
+        "adjustMode": "shrink-to-fit"
+      },
+      {
+        "type": "text",
+        "text": "Customer Support",
+        "color": "#E8F5E9",
+        "size": "xs",
+        "wrap": true,
+        "maxLines": 1
+      }
+    ]
+  },
+  "body": {
+    "type": "box",
+    "layout": "vertical",
+    "spacing": "sm",
+    "paddingAll": "14px",
+    "contents": [
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "vertical",
+            "flex": 1,
+            "backgroundColor": "#F4FBF7",
+            "borderColor": "#DDE7DF",
+            "borderWidth": "light",
+            "cornerRadius": "8px",
+            "paddingAll": "10px",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Wallet ID",
+                "size": "xs",
+                "color": "#9E9E9E",
+                "wrap": true,
+                "maxLines": 1
+              },
+              {
+                "type": "text",
+                "text": "WL-98241376",
+                "size": "sm",
+                "weight": "bold",
+                "color": "#1A1A1A",
+                "wrap": true,
+                "maxLines": 2,
+                "adjustMode": "shrink-to-fit"
+              }
+            ]
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "flex": 1,
+            "backgroundColor": "#F4FBF7",
+            "borderColor": "#DDE7DF",
+            "borderWidth": "light",
+            "cornerRadius": "8px",
+            "paddingAll": "10px",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Account ID",
+                "size": "xs",
+                "color": "#9E9E9E",
+                "wrap": true,
+                "maxLines": 1
+              },
+              {
+                "type": "text",
+                "text": "78451293",
+                "size": "sm",
+                "weight": "bold",
+                "color": "#1A1A1A",
+                "wrap": true,
+                "maxLines": 2,
+                "adjustMode": "shrink-to-fit"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#EAF7EF",
+        "borderColor": "#DDE7DF",
+        "borderWidth": "light",
+        "cornerRadius": "8px",
+        "paddingAll": "10px",
+        "spacing": "xs",
+        "contents": [
+          {
+            "type": "text",
+            "text": "Registration",
+            "size": "xs",
+            "color": "#9E9E9E",
+            "wrap": true,
+            "maxLines": 1
+          },
+          {
+            "type": "text",
+            "text": "\u2713 Active",
+            "size": "sm",
+            "weight": "bold",
+            "color": "#1DB954",
+            "wrap": true,
+            "maxLines": 2,
+            "adjustMode": "shrink-to-fit"
+          }
+        ]
+      },
+      {
+        "type": "separator",
+        "color": "#DDE7DF"
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "vertical",
+            "flex": 1,
+            "backgroundColor": "#EAF7EF",
+            "cornerRadius": "8px",
+            "paddingAll": "10px",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Trades",
+                "size": "xs",
+                "color": "#9E9E9E",
+                "wrap": true,
+                "maxLines": 1
+              },
+              {
+                "type": "text",
+                "text": "24",
+                "size": "md",
+                "weight": "bold",
+                "color": "#1A1A1A",
+                "wrap": true,
+                "maxLines": 2,
+                "adjustMode": "shrink-to-fit"
+              }
+            ]
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "flex": 1,
+            "backgroundColor": "#EAF7EF",
+            "cornerRadius": "8px",
+            "paddingAll": "10px",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Volume",
+                "size": "xs",
+                "color": "#9E9E9E",
+                "wrap": true,
+                "maxLines": 1
+              },
+              {
+                "type": "text",
+                "text": "3.42 lots",
+                "size": "md",
+                "weight": "bold",
+                "color": "#1A1A1A",
+                "wrap": true,
+                "maxLines": 2,
+                "adjustMode": "shrink-to-fit"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "sm",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "vertical",
+            "flex": 1,
+            "backgroundColor": "#EAF7EF",
+            "cornerRadius": "8px",
+            "paddingAll": "10px",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Balance",
+                "size": "xs",
+                "color": "#9E9E9E",
+                "wrap": true,
+                "maxLines": 1
+              },
+              {
+                "type": "text",
+                "text": "$12,450.80",
+                "size": "md",
+                "weight": "bold",
+                "color": "#1A1A1A",
+                "wrap": true,
+                "maxLines": 2,
+                "adjustMode": "shrink-to-fit"
+              }
+            ]
+          },
+          {
+            "type": "box",
+            "layout": "vertical",
+            "flex": 1,
+            "backgroundColor": "#EAF7EF",
+            "cornerRadius": "8px",
+            "paddingAll": "10px",
+            "spacing": "xs",
+            "contents": [
+              {
+                "type": "text",
+                "text": "Equity",
+                "size": "xs",
+                "color": "#9E9E9E",
+                "wrap": true,
+                "maxLines": 1
+              },
+              {
+                "type": "text",
+                "text": "$12,998.35",
+                "size": "md",
+                "weight": "bold",
+                "color": "#1A1A1A",
+                "wrap": true,
+                "maxLines": 2,
+                "adjustMode": "shrink-to-fit"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#F4FBF7",
+        "borderColor": "#DDE7DF",
+        "borderWidth": "light",
+        "cornerRadius": "8px",
+        "paddingAll": "10px",
+        "spacing": "xs",
+        "contents": [
+          {
+            "type": "text",
+            "text": "Account Type",
+            "size": "xs",
+            "color": "#9E9E9E",
+            "wrap": true,
+            "maxLines": 1
+          },
+          {
+            "type": "text",
+            "text": "Standard",
+            "size": "sm",
+            "weight": "bold",
+            "color": "#1A1A1A",
+            "wrap": true,
+            "maxLines": 2,
+            "adjustMode": "shrink-to-fit"
+          }
+        ]
+      },
+      {
+        "type": "box",
+        "layout": "horizontal",
+        "spacing": "md",
+        "contents": [
+          {
+            "type": "text",
+            "text": "Account Currency",
+            "size": "xs",
+            "color": "#9E9E9E",
+            "wrap": true,
+            "maxLines": 1,
+            "flex": 4
+          },
+          {
+            "type": "text",
+            "text": "USD",
+            "size": "sm",
+            "weight": "bold",
+            "color": "#1A1A1A",
+            "align": "end",
+            "wrap": true,
+            "maxLines": 2,
+            "adjustMode": "shrink-to-fit",
+            "flex": 3
+          }
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "type": "box",
+    "layout": "vertical",
+    "paddingAll": "12px",
+    "contents": [
+      {
+        "type": "text",
+        "text": "For assistance, please contact support.",
+        "size": "xs",
+        "color": "#9E9E9E",
+        "align": "center",
+        "wrap": true
+      }
+    ]
+  }
+}

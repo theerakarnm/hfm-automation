@@ -184,7 +184,7 @@ export function normalizeClientRow(row: HFMClientRow): HFMPerformanceData {
   };
 }
 
-export async function fetchClients(timeoutMs = 15_000): Promise<HFMClientsResult> {
+export async function fetchClients(timeoutMs = 60_000): Promise<HFMClientsResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -263,7 +263,6 @@ export async function fetchClientsByRange(
     const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
     const params = new URLSearchParams({ from_date: fromDate, to_date: toDate });
     const url = `${baseUrl}/api/performance/client-performance?${params}`;
-    console.log(url);
 
     const res = await fetch(url, {
       signal: controller.signal,

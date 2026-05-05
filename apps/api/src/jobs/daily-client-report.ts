@@ -228,15 +228,31 @@ async function ensureTodaySnapshot(
   db: Database,
   today: string,
   fetchCurrent: () => Promise<HFMClientsResult>,
-): Promise<void> {
+  maxRetries = 3,
+): Promise<boolean> {
   const existingTodayCount = countByDate(db, today);
-  if (existingTodayCount > 0) return;
+  if (existingTodayCount > 0) return true;
 
-  const result = await fetchCurrent();
-  if (!result.ok) throw new Error(`HFM fetchClients failed: ${result.reason}`);
-
-  const normalized = dedupeByCompositeKey(result.data).map(normalizeClientRow);
-  insertMany(db, today, normalized);
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const result = await fetchCurrent();
+    if (result.ok) {
+      const normalized = dedupeByCompositeKey(result.data).map(normalizeClientRow);
+      insertMany(db, today, normalized);
+      return true;
+    }
+    if (attempt < maxRetries) {
+      const delayMs = attempt * 5_000;
+      console.warn(
+        `[cron] ensureTodaySnapshot attempt ${attempt}/${maxRetries} failed (${result.reason}), retrying in ${delayMs / 1000}s...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    } else {
+      console.error(
+        `[cron] ensureTodaySnapshot failed after ${maxRetries} attempts: ${result.reason}`,
+      );
+    }
+  }
+  return false;
 }
 
 async function buildReportMessages(
@@ -249,7 +265,6 @@ async function buildReportMessages(
   const { label: targetLabel } = getTargetWallet();
 
   const result = await fetchCurrent();
-  console.log(result);
 
   if (!result.ok) throw new Error(`HFM fetchClients failed: ${result.reason}`);
   const currentRows = dedupeByCompositeKey(result.data);
@@ -448,7 +463,7 @@ export async function runDailyClientReport(options: RunDailyClientReportOptions 
 
   const today = getIctDateString(now);
 
-  await ensureTodaySnapshot(db, today, fetchCurrent);
+  const snapshotOk = await ensureTodaySnapshot(db, today, fetchCurrent);
 
   if (hasDailyReportNotificationSent(db, today)) {
     console.warn(`[cron] daily-client-report notification already sent for ${today}; skipping`);
@@ -461,7 +476,7 @@ export async function runDailyClientReport(options: RunDailyClientReportOptions 
   const uids = getActiveUids(db);
   if (uids.length === 0) {
     console.warn("[cron] daily-client-report has no active LINE recipients");
-  } else if (yesterdayExists) {
+  } else if (yesterdayExists && snapshotOk) {
     const { label: targetLabel } = getTargetWallet();
     const todayWalletIds = getWalletIdsFromNightlySnapshot(db, today);
     const yesterdayWalletIds = getWalletIdsFromNightlySnapshot(db, yesterday);

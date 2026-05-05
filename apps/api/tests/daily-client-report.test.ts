@@ -16,7 +16,7 @@ import {
   runDailyClientReport,
   type ReportPeriod,
 } from "../src/jobs/daily-client-report";
-import { getLastWeekRange, getLastMonthRange } from "../src/utils/date";
+import { getLastWeekRange, getLastMonthRange, getIctDateString } from "../src/utils/date";
 import type { HFMPerformanceData, HFMClientRow, HFMClientsResult } from "../src/types/hfm.types";
 
 describe("buildDayReportMessage", () => {
@@ -526,24 +526,30 @@ describe("runDailyClientReport", () => {
     expect(pushCount).toBe(1);
   });
 
-  test("throws when HFM fetch fails", async () => {
+  test("does not throw when HFM fetch fails after retries", async () => {
     process.env.TARGET_WALLET = "30506525";
     const db = new Database(":memory:", { strict: true });
     initSqlite(db);
     seedFromEnv(db, "Utest001");
 
-    const mockFetchFail = async () => ({ ok: false as const, reason: "server_error" as const });
+    let calls = 0;
+    const mockFetchFail = async () => {
+      calls++;
+      return { ok: false as const, reason: "server_error" as const };
+    };
     const mockPushAll = async () => {};
 
-    await expect(
-      runDailyClientReport({
-        now: new Date("2026-04-25T22:00:00.000Z"),
-        db,
-        fetchClientsFn: mockFetchFail,
-        pushToAllFn: mockPushAll,
-      })
-    ).rejects.toThrow("HFM fetchClients failed: server_error");
-  });
+    await runDailyClientReport({
+      now: new Date("2026-04-25T22:00:00.000Z"),
+      db,
+      fetchClientsFn: mockFetchFail,
+      pushToAllFn: mockPushAll,
+    });
+
+    expect(calls).toBe(3);
+    const today = getIctDateString(new Date("2026-04-25T22:00:00.000Z"));
+    expect(countByDate(db, today)).toBe(0);
+  }, 30_000);
 
   test("warns but does not throw when no active recipients", async () => {
     process.env.TARGET_WALLET = "30506525";

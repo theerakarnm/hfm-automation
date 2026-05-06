@@ -1,7 +1,9 @@
-import type { Database } from "bun:sqlite";
+import { eq, count, sql, desc } from "drizzle-orm";
+import type { DrizzleDb } from "../db/connection";
+import { getDb, initDb } from "../db/connection";
+import { clientSnapshots, dailyReportNotifications } from "../db/schema";
 import type { HFMClientRow, HFMClientsResult } from "../types/hfm.types";
-import { getDatabase, initSqlite, checkpointDatabase } from "../services/sqlite.service";
-import { countByDate, insertMany, purgeOlderThan } from "../repositories/snapshot.repository";
+import { countByDate, insertMany } from "../repositories/snapshot.repository";
 import {
   insertRequestSnapshot,
   getLatestRequestSnapshotBefore,
@@ -45,11 +47,15 @@ function extractWalletIds(rows: HFMClientRow[]): Set<number> {
   return new Set(rows.map((r) => r.wallet));
 }
 
-function getWalletIdsFromNightlySnapshot(db: Database, date: string): Set<number> {
-  const rows = db
-    .prepare("SELECT DISTINCT client_id FROM client_snapshots WHERE snapshot_date = $date")
-    .all({ date }) as Array<{ client_id: number }>;
-  return new Set(rows.map((r) => r.client_id));
+async function getWalletIdsFromNightlySnapshot(
+  db: DrizzleDb,
+  date: string,
+): Promise<Set<number>> {
+  const rows = await db
+    .selectDistinct({ clientId: clientSnapshots.clientId })
+    .from(clientSnapshots)
+    .where(eq(clientSnapshots.snapshotDate, date));
+  return new Set(rows.map((r) => r.clientId));
 }
 
 function findMissingFromSets(prev: Set<number>, curr: Set<number>): number[] {
@@ -205,39 +211,50 @@ export function buildComparisonReportMessage(options: {
 
 export interface RunDailyClientReportOptions {
   now?: Date;
-  db?: Database;
+  db?: DrizzleDb;
   fetchClientsFn?: () => Promise<HFMClientsResult>;
   pushToAllFn?: (uids: string[], text: string) => Promise<void>;
   reportPeriod?: ReportPeriod;
 }
 
-function hasDailyReportNotificationSent(db: Database, date: string): boolean {
-  const row = db
-    .query("SELECT COUNT(*) as count FROM daily_report_notifications WHERE snapshot_date = $date")
-    .get({ date }) as { count: number } | null;
-  return (row?.count ?? 0) > 0;
+async function hasDailyReportNotificationSent(
+  db: DrizzleDb,
+  date: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ count: count() })
+    .from(dailyReportNotifications)
+    .where(eq(dailyReportNotifications.snapshotDate, date));
+  return (rows[0]?.count ?? 0) > 0;
 }
 
-function markDailyReportNotificationSent(db: Database, date: string): void {
-  db.prepare(
-    "INSERT OR REPLACE INTO daily_report_notifications (snapshot_date, sent_at) VALUES ($date, datetime('now'))"
-  ).run({ date });
+async function markDailyReportNotificationSent(
+  db: DrizzleDb,
+  date: string,
+): Promise<void> {
+  await db
+    .insert(dailyReportNotifications)
+    .values({ snapshotDate: date })
+    .onConflictDoUpdate({
+      target: dailyReportNotifications.snapshotDate,
+      set: { sentAt: new Date().toISOString() },
+    });
 }
 
 async function ensureTodaySnapshot(
-  db: Database,
+  db: DrizzleDb,
   today: string,
   fetchCurrent: () => Promise<HFMClientsResult>,
   maxRetries = 3,
 ): Promise<boolean> {
-  const existingTodayCount = countByDate(db, today);
+  const existingTodayCount = await countByDate(db, today);
   if (existingTodayCount > 0) return true;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     const result = await fetchCurrent();
     if (result.ok) {
       const normalized = dedupeByCompositeKey(result.data).map(normalizeClientRow);
-      insertMany(db, today, normalized);
+      await insertMany(db, today, normalized);
       return true;
     }
     if (attempt < maxRetries) {
@@ -256,7 +273,7 @@ async function ensureTodaySnapshot(
 }
 
 async function buildReportMessages(
-  db: Database,
+  db: DrizzleDb,
   now: Date,
   today: string,
   fetchCurrent: () => Promise<HFMClientsResult>,
@@ -275,16 +292,16 @@ async function buildReportMessages(
 
   if (period === "day") {
     const yesterday = getPreviousIctDateString(now);
-    const yesterdayExists = countByDate(db, yesterday) > 0;
+    const yesterdayExists = (await countByDate(db, yesterday)) > 0;
 
     if (!yesterdayExists) {
-      insertRequestSnapshot(db, today, currentRows);
+      await insertRequestSnapshot(db, today, currentRows);
       return [`The report of yesterday (${formatShortDate(yesterday)}) was not found.`];
     }
 
-    const yesterdayWalletIds = getWalletIdsFromNightlySnapshot(db, yesterday);
+    const yesterdayWalletIds = await getWalletIdsFromNightlySnapshot(db, yesterday);
     if (yesterdayWalletIds.size === 0) {
-      insertRequestSnapshot(db, today, currentRows);
+      await insertRequestSnapshot(db, today, currentRows);
       return [`The report of yesterday (${formatShortDate(yesterday)}) was not found.`];
     }
 
@@ -303,7 +320,7 @@ async function buildReportMessages(
       }),
     );
 
-    const prevRequest = getLatestRequestSnapshotBefore(db, today);
+    const prevRequest = await getLatestRequestSnapshotBefore(db, today);
     if (prevRequest) {
       const prevMissing = findMissingFromRequestSnapshots(prevRequest.rows, currentWalletIds);
       const prevNew = findNewFromRequestSnapshots(prevRequest.rows, currentWalletIds);
@@ -322,23 +339,23 @@ async function buildReportMessages(
       );
     }
 
-    insertRequestSnapshot(db, today, currentRows);
+    await insertRequestSnapshot(db, today, currentRows);
     return messages;
   }
 
   if (period === "week") {
     const lastWeek = getLastWeekRange(now);
     const lastWeekSunday = lastWeek.to;
-    const lastWeekExists = countByDate(db, lastWeekSunday) > 0;
+    const lastWeekExists = (await countByDate(db, lastWeekSunday)) > 0;
 
     if (!lastWeekExists) {
-      insertRequestSnapshot(db, today, currentRows);
+      await insertRequestSnapshot(db, today, currentRows);
       return [`The report of last week (${formatShortDate(lastWeekSunday)}) was not found.`];
     }
 
-    const lastWeekWalletIds = getWalletIdsFromNightlySnapshot(db, lastWeekSunday);
+    const lastWeekWalletIds = await getWalletIdsFromNightlySnapshot(db, lastWeekSunday);
     if (lastWeekWalletIds.size === 0) {
-      insertRequestSnapshot(db, today, currentRows);
+      await insertRequestSnapshot(db, today, currentRows);
       return [`The report of last week (${formatShortDate(lastWeekSunday)}) was not found.`];
     }
 
@@ -359,7 +376,7 @@ async function buildReportMessages(
       }),
     );
 
-    const prevRequest = getLatestRequestSnapshotBefore(db, today);
+    const prevRequest = await getLatestRequestSnapshotBefore(db, today);
     if (prevRequest) {
       const prevMissing = findMissingFromRequestSnapshots(prevRequest.rows, currentWalletIds);
       const prevNew = findNewFromRequestSnapshots(prevRequest.rows, currentWalletIds);
@@ -378,23 +395,23 @@ async function buildReportMessages(
       );
     }
 
-    insertRequestSnapshot(db, today, currentRows);
+    await insertRequestSnapshot(db, today, currentRows);
     return messages;
   }
 
   if (period === "month") {
     const lastMonth = getLastMonthRange(now);
     const lastMonthEnd = lastMonth.to;
-    const lastMonthExists = countByDate(db, lastMonthEnd) > 0;
+    const lastMonthExists = (await countByDate(db, lastMonthEnd)) > 0;
 
     if (!lastMonthExists) {
-      insertRequestSnapshot(db, today, currentRows);
+      await insertRequestSnapshot(db, today, currentRows);
       return [`The report of last month (${formatShortDate(lastMonthEnd)}) was not found.`];
     }
 
-    const lastMonthWalletIds = getWalletIdsFromNightlySnapshot(db, lastMonthEnd);
+    const lastMonthWalletIds = await getWalletIdsFromNightlySnapshot(db, lastMonthEnd);
     if (lastMonthWalletIds.size === 0) {
-      insertRequestSnapshot(db, today, currentRows);
+      await insertRequestSnapshot(db, today, currentRows);
       return [`The report of last month (${formatShortDate(lastMonthEnd)}) was not found.`];
     }
 
@@ -415,7 +432,7 @@ async function buildReportMessages(
       }),
     );
 
-    const prevRequest = getLatestRequestSnapshotBefore(db, today);
+    const prevRequest = await getLatestRequestSnapshotBefore(db, today);
     if (prevRequest) {
       const prevMissing = findMissingFromRequestSnapshots(prevRequest.rows, currentWalletIds);
       const prevNew = findNewFromRequestSnapshots(prevRequest.rows, currentWalletIds);
@@ -434,7 +451,7 @@ async function buildReportMessages(
       );
     }
 
-    insertRequestSnapshot(db, today, currentRows);
+    await insertRequestSnapshot(db, today, currentRows);
     return messages;
   }
 
@@ -443,43 +460,43 @@ async function buildReportMessages(
 
 export async function generateReportForUser(options: RunDailyClientReportOptions = {}): Promise<string[]> {
   const now = options.now ?? new Date();
-  const db = options.db ?? getDatabase();
+  const db = options.db ?? getDb();
   const fetchCurrent = options.fetchClientsFn ?? fetchClients;
   const period = options.reportPeriod ?? "day";
 
-  initSqlite(db);
+  await initDb(db);
   const today = getIctDateString(now);
   return await buildReportMessages(db, now, today, fetchCurrent, period);
 }
 
 export async function runDailyClientReport(options: RunDailyClientReportOptions = {}): Promise<void> {
   const now = options.now ?? new Date();
-  const db = options.db ?? getDatabase();
+  const db = options.db ?? getDb();
   const fetchCurrent = options.fetchClientsFn ?? fetchClients;
   const pushAll = options.pushToAllFn ?? pushToAll;
 
-  initSqlite(db);
-  seedFromEnv(db, process.env.LINE_NOTIFY_UIDS ?? "");
+  await initDb(db);
+  await seedFromEnv(db, process.env.LINE_NOTIFY_UIDS ?? "");
 
   const today = getIctDateString(now);
 
   const snapshotOk = await ensureTodaySnapshot(db, today, fetchCurrent);
 
-  if (hasDailyReportNotificationSent(db, today)) {
+  if (await hasDailyReportNotificationSent(db, today)) {
     console.warn(`[cron] daily-client-report notification already sent for ${today}; skipping`);
     return;
   }
 
   const yesterday = getPreviousIctDateString(now);
-  const yesterdayExists = countByDate(db, yesterday) > 0;
+  const yesterdayExists = (await countByDate(db, yesterday)) > 0;
 
-  const uids = getActiveUids(db);
+  const uids = await getActiveUids(db);
   if (uids.length === 0) {
     console.warn("[cron] daily-client-report has no active LINE recipients");
   } else if (yesterdayExists && snapshotOk) {
     const { label: targetLabel } = getTargetWallet();
-    const todayWalletIds = getWalletIdsFromNightlySnapshot(db, today);
-    const yesterdayWalletIds = getWalletIdsFromNightlySnapshot(db, yesterday);
+    const todayWalletIds = await getWalletIdsFromNightlySnapshot(db, today);
+    const yesterdayWalletIds = await getWalletIdsFromNightlySnapshot(db, yesterday);
     const todayCount = todayWalletIds.size;
     const yesterdayCount = yesterdayWalletIds.size;
     const missing = findMissingFromSets(yesterdayWalletIds, todayWalletIds);
@@ -494,11 +511,10 @@ export async function runDailyClientReport(options: RunDailyClientReportOptions 
       newIds: newW,
     });
     await pushAll(uids, message);
-    markDailyReportNotificationSent(db, today);
+    await markDailyReportNotificationSent(db, today);
   } else {
     console.warn(`[cron] daily-client-report: no yesterday snapshot for ${yesterday}, skipping notification`);
   }
 
-  purgeOlderThan(db, 90, today);
-  checkpointDatabase();
+  await purgeOlderThan(db, 90, today);
 }

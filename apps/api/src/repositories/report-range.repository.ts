@@ -1,4 +1,6 @@
-import type { Database } from "bun:sqlite";
+import { eq, and } from "drizzle-orm";
+import type { DrizzleDb } from "../db/connection";
+import { reportRangeSnapshots } from "../db/schema";
 import type { HFMClientsPerformanceResponse } from "../types/hfm.types";
 
 export interface RangeSnapshotRow {
@@ -8,44 +10,54 @@ export interface RangeSnapshotRow {
   data: HFMClientsPerformanceResponse;
 }
 
-export function getRangeSnapshot(
-  db: Database,
+export async function getRangeSnapshot(
+  db: DrizzleDb,
   period: string,
   fromDate: string,
   toDate: string,
-): RangeSnapshotRow | null {
-  const row = db
-    .prepare(
-      "SELECT period, from_date, to_date, raw_json FROM report_range_snapshots WHERE period = $period AND from_date = $fromDate AND to_date = $toDate"
+): Promise<RangeSnapshotRow | null> {
+  const [row] = await db
+    .select()
+    .from(reportRangeSnapshots)
+    .where(
+      and(
+        eq(reportRangeSnapshots.period, period),
+        eq(reportRangeSnapshots.fromDate, fromDate),
+        eq(reportRangeSnapshots.toDate, toDate),
+      ),
     )
-    .get({ period, fromDate, toDate }) as {
-    period: string;
-    from_date: string;
-    to_date: string;
-    raw_json: string;
-  } | null;
+    .limit(1);
+
   if (!row) return null;
   return {
     period: row.period,
-    from_date: row.from_date,
-    to_date: row.to_date,
-    data: JSON.parse(row.raw_json) as HFMClientsPerformanceResponse,
+    from_date: row.fromDate,
+    to_date: row.toDate,
+    data: JSON.parse(row.rawJson) as HFMClientsPerformanceResponse,
   };
 }
 
-export function upsertRangeSnapshot(
-  db: Database,
+export async function upsertRangeSnapshot(
+  db: DrizzleDb,
   period: string,
   fromDate: string,
   toDate: string,
   data: HFMClientsPerformanceResponse,
-): void {
-  db.prepare(
-    "INSERT OR REPLACE INTO report_range_snapshots (period, from_date, to_date, raw_json) VALUES ($period, $fromDate, $toDate, $rawJson)"
-  ).run({
-    period,
-    fromDate,
-    toDate,
-    rawJson: JSON.stringify(data),
-  });
+): Promise<void> {
+  await db
+    .insert(reportRangeSnapshots)
+    .values({
+      period,
+      fromDate,
+      toDate,
+      rawJson: JSON.stringify(data),
+    })
+    .onConflictDoUpdate({
+      target: [
+        reportRangeSnapshots.period,
+        reportRangeSnapshots.fromDate,
+        reportRangeSnapshots.toDate,
+      ],
+      set: { rawJson: JSON.stringify(data) },
+    });
 }

@@ -8,8 +8,6 @@ services:
       - "127.0.0.1:${PORT:-3000}:3000"
     environment:
       - PORT=3000
-    volumes:
-      - ./data:/app/data
     logging:
       driver: json-file
       options:
@@ -33,3 +31,15 @@ services:
       nofile:
         soft: 1024
         hard: 2048
+
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: hfm-postgres-test
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: hfm_test
+    ports:
+      - "127.0.0.1:5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data

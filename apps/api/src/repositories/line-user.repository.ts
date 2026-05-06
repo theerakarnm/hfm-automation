@@ -1,4 +1,6 @@
-import type { Database } from "bun:sqlite";
+import { desc, sql } from "drizzle-orm";
+import type { DrizzleDb } from "../db/connection";
+import { lineUsers } from "../db/schema";
 
 export interface LineUserRow {
   line_uid: string;
@@ -8,25 +10,40 @@ export interface LineUserRow {
   last_event_type: string | null;
 }
 
-export function recordLineUserRequest(
-  db: Database,
+export async function recordLineUserRequest(
+  db: DrizzleDb,
   lineUid: string,
-  eventType: string
-): void {
-  db.prepare(
-    `INSERT INTO line_users (line_uid, first_seen_at, last_seen_at, request_count, last_event_type)
-     VALUES ($uid, datetime('now'), datetime('now'), 1, $eventType)
-     ON CONFLICT(line_uid) DO UPDATE SET
-       last_seen_at = datetime('now'),
-       request_count = request_count + 1,
-       last_event_type = $eventType`
-  ).run({ uid: lineUid, eventType });
+  eventType: string,
+): Promise<void> {
+  await db
+    .insert(lineUsers)
+    .values({
+      lineUid,
+      firstSeenAt: new Date().toISOString(),
+      lastSeenAt: new Date().toISOString(),
+      requestCount: 1,
+      lastEventType: eventType,
+    })
+    .onConflictDoUpdate({
+      target: lineUsers.lineUid,
+      set: {
+        lastSeenAt: new Date().toISOString(),
+        requestCount: sql`${lineUsers.requestCount} + 1`,
+        lastEventType: eventType,
+      },
+    });
 }
 
-export function listLineUsers(db: Database): LineUserRow[] {
-  return db
-    .query(
-      "SELECT line_uid, first_seen_at, last_seen_at, request_count, last_event_type FROM line_users ORDER BY last_seen_at DESC"
-    )
-    .all() as LineUserRow[];
+export async function listLineUsers(db: DrizzleDb): Promise<LineUserRow[]> {
+  const rows = await db
+    .select()
+    .from(lineUsers)
+    .orderBy(desc(lineUsers.lastSeenAt));
+  return rows.map((r) => ({
+    line_uid: r.lineUid,
+    first_seen_at: r.firstSeenAt,
+    last_seen_at: r.lastSeenAt,
+    request_count: r.requestCount,
+    last_event_type: r.lastEventType,
+  }));
 }

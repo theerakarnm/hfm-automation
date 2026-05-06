@@ -1,6 +1,7 @@
 import { Hono } from "hono";
+import { sql } from "drizzle-orm";
 import { readLog, parseLog, listLogDates } from "../utils/logger";
-import { getDatabase } from "../services/sqlite.service";
+import { getDb } from "../db/connection";
 import { listLineUsers } from "../repositories/line-user.repository";
 
 const internal = new Hono();
@@ -20,8 +21,8 @@ internal.get("/health", async (c) => {
   const checks: Record<string, "ok" | "error"> = {};
 
   try {
-    const db = getDatabase();
-    db.query("SELECT 1").get();
+    const db = getDb();
+    await db.execute(sql`SELECT 1`);
     checks.database = "ok";
   } catch {
     checks.database = "error";
@@ -65,13 +66,14 @@ internal.get("/logs/:date", async (c) => {
 });
 
 internal.get("/line-uids", async (c) => {
-  const db = getDatabase();
-  const users = listLineUsers(db).slice(0, MAX_LINE_UIDS);
+  const db = getDb();
+  const users = await listLineUsers(db);
+  const truncated = users.length > MAX_LINE_UIDS;
   return c.json({
-    count: users.length,
-    truncated: listLineUsers(db).length > MAX_LINE_UIDS,
-    uids: users.map((u) => u.line_uid),
-    users,
+    count: Math.min(users.length, MAX_LINE_UIDS),
+    truncated,
+    uids: users.slice(0, MAX_LINE_UIDS).map((u) => u.line_uid),
+    users: users.slice(0, MAX_LINE_UIDS),
   });
 });
 

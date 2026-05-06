@@ -1,4 +1,6 @@
-import type { Database } from "bun:sqlite";
+import { eq, lte, desc, sql } from "drizzle-orm";
+import type { DrizzleDb } from "../db/connection";
+import { clientRequestSnapshots, clientRequestSnapshotRows } from "../db/schema";
 import type { HFMClientRow } from "../types/hfm.types";
 
 export interface RequestSnapshotRow {
@@ -11,57 +13,62 @@ export interface RequestSnapshotResult {
   createdAt: string;
 }
 
-export function insertRequestSnapshot(
-  db: Database,
+export async function insertRequestSnapshot(
+  db: DrizzleDb,
   date: string,
   rows: HFMClientRow[],
-): number {
-  const now = new Date().toISOString();
-  const insertHeader = db.prepare(
-    "INSERT INTO client_request_snapshots (snapshot_date, created_at) VALUES ($date, $createdAt)"
-  );
-  const insertRow = db.prepare(
-    "INSERT OR IGNORE INTO client_request_snapshot_rows (snapshot_id, client_id) VALUES ($snapshotId, $clientId)"
-  );
+): Promise<number> {
+  return await db.transaction(async (tx) => {
+    const [header] = await tx
+      .insert(clientRequestSnapshots)
+      .values({ snapshotDate: date })
+      .returning({ id: clientRequestSnapshots.id });
 
-  const seen = new Set<number>();
-  const tx = db.transaction(() => {
-    const info = insertHeader.run({ date, createdAt: now });
-    const snapshotId = Number(info.lastInsertRowid);
+    const snapshotId = header.id;
+    const seen = new Set<number>();
+    const values: { snapshotId: number; clientId: number }[] = [];
+
     for (const row of rows) {
       if (seen.has(row.wallet)) continue;
       seen.add(row.wallet);
-      insertRow.run({ snapshotId, clientId: row.wallet });
+      values.push({ snapshotId, clientId: row.wallet });
     }
+
+    if (values.length > 0) {
+      await tx
+        .insert(clientRequestSnapshotRows)
+        .values(values)
+        .onConflictDoNothing();
+    }
+
     return snapshotId;
   });
-
-  return tx();
 }
 
-export function getLatestRequestSnapshotBefore(
-  db: Database,
+export async function getLatestRequestSnapshotBefore(
+  db: DrizzleDb,
   beforeDate: string,
-): RequestSnapshotResult | null {
-  const headerRow = db
-    .prepare(
-      "SELECT id, snapshot_date, created_at FROM client_request_snapshots WHERE snapshot_date <= $beforeDate ORDER BY id DESC LIMIT 1"
-    )
-    .get({ beforeDate }) as { id: number; snapshot_date: string; created_at: string } | null;
-  if (!headerRow) return null;
+): Promise<RequestSnapshotResult | null> {
+  const [header] = await db
+    .select()
+    .from(clientRequestSnapshots)
+    .where(lte(clientRequestSnapshots.snapshotDate, beforeDate))
+    .orderBy(desc(clientRequestSnapshots.id))
+    .limit(1);
 
-  const rows = db
-    .prepare(
-      "SELECT client_id FROM client_request_snapshot_rows WHERE snapshot_id = $snapshotId"
-    )
-    .all({ snapshotId: headerRow.id }) as Array<{ client_id: number }>;
+  if (!header) return null;
+
+  const rows = await db
+    .select({ clientId: clientRequestSnapshotRows.clientId })
+    .from(clientRequestSnapshotRows)
+    .where(eq(clientRequestSnapshotRows.snapshotId, header.id));
 
   if (rows.length === 0) return null;
 
   return {
-    rows: rows.map((r) => ({ client_id: r.client_id })),
-    snapshotDate: headerRow.snapshot_date,
-    createdAt: headerRow.created_at,
+    rows: rows.map((r) => ({ client_id: r.clientId })),
+    snapshotDate: header.snapshotDate,
+    createdAt: header.createdAt,
   };
 }
 

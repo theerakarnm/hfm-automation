@@ -1,7 +1,8 @@
-import { Database } from "bun:sqlite";
+import { sql } from "drizzle-orm";
 import { normalizeClientRow } from "../src/services/hfm.service";
-import { getDatabase, initSqlite, closeDatabase } from "../src/services/sqlite.service";
+import { getDb, initDb, closeDb } from "../src/db/connection";
 import { countByDate, insertMany } from "../src/repositories/snapshot.repository";
+import { dailyReportNotifications, clientSnapshots } from "../src/db/schema";
 import type { HFMClientRow } from "../src/types/hfm.types";
 
 const SOURCE_FILE = process.env.SOURCE_FILE ?? "output/client_2026-04-30.json";
@@ -101,21 +102,25 @@ async function main() {
   }
   console.log(`[seed] will seed ${dates.length} snapshot dates`);
 
-  const db = getDatabase();
-  initSqlite(db);
+  const db = getDb();
+  await initDb(db);
 
   if (MOCK_REPLACE) {
     console.log("[seed] MOCK_REPLACE=1 — deleting existing snapshots in range...");
-    db.prepare(
-      "DELETE FROM client_snapshots WHERE snapshot_date >= $from AND snapshot_date <= $to"
-    ).run({ from: FROM_DATE, to: TO_DATE });
-    db.prepare(
-      "DELETE FROM daily_report_notifications WHERE snapshot_date >= $from AND snapshot_date <= $to"
-    ).run({ from: FROM_DATE, to: TO_DATE });
+    await db
+      .delete(clientSnapshots)
+      .where(
+        sql`${clientSnapshots.snapshotDate} >= ${FROM_DATE} AND ${clientSnapshots.snapshotDate} <= ${TO_DATE}`
+      );
+    await db
+      .delete(dailyReportNotifications)
+      .where(
+        sql`${dailyReportNotifications.snapshotDate} >= ${FROM_DATE} AND ${dailyReportNotifications.snapshotDate} <= ${TO_DATE}`
+      );
   }
 
   for (const date of dates) {
-    const existing = countByDate(db, date);
+    const existing = await countByDate(db, date);
     if (existing > 0) {
       console.log(`[seed] ${date}: already has ${existing} rows — skipping`);
       continue;
@@ -127,7 +132,7 @@ async function main() {
 
   for (let di = 0; di < dates.length; di++) {
     const date = dates[di]!;
-    const existing = countByDate(db, date);
+    const existing = await countByDate(db, date);
     if (existing > 0) continue;
 
     let dayRows = [...sourceRows];
@@ -153,9 +158,9 @@ async function main() {
       continue;
     }
 
-    insertMany(db, date, normalized);
+    await insertMany(db, date, normalized);
 
-    const inserted = countByDate(db, date);
+    const inserted = await countByDate(db, date);
     const wallets = new Set(normalized.map((r) => r.client_id));
     console.log(
       `[seed] ${date}: ${inserted} rows, ${wallets.size} distinct wallets (removed ${walletsToRemove.length}, added ${newMockRows.length})`
@@ -164,12 +169,12 @@ async function main() {
 
   console.log("\n[seed] summary");
   for (const date of dates) {
-    const count = countByDate(db, date);
+    const count = await countByDate(db, date);
     console.log(`  ${date}: ${count} rows`);
   }
 
   if (!DRY_RUN) {
-    closeDatabase();
+    await closeDb();
   }
 
   console.log(`[seed] done`);

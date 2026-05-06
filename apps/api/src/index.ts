@@ -3,12 +3,12 @@ import webhook from "./routes/webhook";
 import internal from "./routes/internal";
 import { registerJobs } from "./jobs";
 import { logger } from "./utils/logger";
-import { getDatabase, initSqlite, closeDatabase } from "./services/sqlite.service";
+import { getDb, initDb, closeDb } from "./db/connection";
 
 const app = new Hono();
 
-const db = getDatabase();
-initSqlite(db);
+const db = getDb();
+await initDb(db);
 
 app.use("*", async (c, next) => {
   const start = Date.now();
@@ -33,8 +33,7 @@ registerJobs();
 
 function shutdown(signal: string): void {
   logger.info({ signal }, `Received ${signal}, shutting down gracefully`);
-  closeDatabase();
-  process.exit(0);
+  closeDb().then(() => process.exit(0));
 }
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));

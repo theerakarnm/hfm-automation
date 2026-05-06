@@ -8,7 +8,7 @@ import { generateReportForUser, type ReportPeriod } from "../jobs/daily-client-r
 import { isTextMessageEvent } from "../types/line.types";
 import { isWhitelisted } from "../utils/whitelist";
 import { logError } from "../utils/logger";
-import { getDatabase } from "../services/sqlite.service";
+import { getDb } from "../db/connection";
 import { recordLineUserRequest } from "../repositories/line-user.repository";
 import type { WebhookBody, TextMessageEvent } from "../types/line.types";
 
@@ -44,14 +44,14 @@ webhook.post(
     }
 
     const events = body.events ?? [];
-    const db = getDatabase();
+    const db = getDb();
 
     const eventsToProcess = events.slice(0, MAX_WEBHOOK_EVENTS);
 
     for (const event of eventsToProcess) {
       const uid = event.source?.userId;
       if (uid) {
-        recordLineUserRequest(db, uid, event.type);
+        await recordLineUserRequest(db, uid, event.type);
       }
       if (isTextMessageEvent(event)) {
         processTextEvent(event).catch((err) => logError("webhook", err));

@@ -15,8 +15,8 @@ logs
 _.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
-# local SQLite data
-data/
+# Drizzle Kit generated migrations
+drizzle/
 
 # dotenv environment variable files
 .env

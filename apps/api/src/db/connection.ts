@@ -17,8 +17,8 @@ export function getDb(url?: string): DrizzleDb {
   return _db;
 }
 
-export async function initDb(db?: DrizzleDb): Promise<void> {
-  const target = db ?? getDb();
+export async function initDb(db?: DrizzleDb | PostgresJsDatabase<Record<string, unknown>>): Promise<void> {
+  const target = (db ?? getDb()) as PostgresJsDatabase<Record<string, unknown>>;
   await target.execute(sql`
     CREATE TABLE IF NOT EXISTS client_snapshots (
       id              SERIAL PRIMARY KEY,

@@ -1,6 +1,8 @@
-import { expect, test, describe, afterEach } from "bun:test";
-import { Database } from "bun:sqlite";
-import { initSqlite } from "../src/services/sqlite.service";
+import { expect, test, describe, beforeEach, afterEach } from "bun:test";
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
+import { sql } from "drizzle-orm";
+import { initDb } from "../src/db/connection";
 import { insertMany, countByDate } from "../src/repositories/snapshot.repository";
 import { seedFromEnv } from "../src/repositories/recipient.repository";
 import {
@@ -18,6 +20,33 @@ import {
 } from "../src/jobs/daily-client-report";
 import { getLastWeekRange, getLastMonthRange, getIctDateString } from "../src/utils/date";
 import type { HFMPerformanceData, HFMClientRow, HFMClientsResult } from "../src/types/hfm.types";
+import type { DrizzleDb } from "../src/db/connection";
+
+const TEST_DATABASE_URL =
+  process.env.TEST_DATABASE_URL ?? "postgresql://jametirakarn@localhost:5432/hfm_test";
+
+let client: postgres.Sql;
+let db: DrizzleDb;
+
+async function clearTables() {
+  await db.execute(sql`DELETE FROM client_request_snapshot_rows`);
+  await db.execute(sql`DELETE FROM client_request_snapshots`);
+  await db.execute(sql`DELETE FROM daily_report_notifications`);
+  await db.execute(sql`DELETE FROM notify_recipients`);
+  await db.execute(sql`DELETE FROM client_snapshots`);
+}
+
+beforeEach(async () => {
+  client = postgres(TEST_DATABASE_URL, { max: 1 });
+  db = drizzle(client);
+  await initDb(db);
+  await clearTables();
+});
+
+afterEach(async () => {
+  delete process.env.TARGET_WALLET;
+  await client.end();
+});
 
 describe("buildDayReportMessage", () => {
   test("formats daily report with missing wallets", () => {
@@ -126,10 +155,7 @@ describe("buildComparisonReportMessage", () => {
 });
 
 describe("snapshot storage", () => {
-  test("insertMany stores wallets and dedupes by client_id", () => {
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
-
+  test("insertMany stores wallets and dedupes by client_id", async () => {
     const clientA: HFMPerformanceData = {
       client_id: 10023, account_id: 78451293, activity_status: "active",
       trades: 0, volume: 0, account_type: "Standard", balance: 0,
@@ -143,11 +169,11 @@ describe("snapshot storage", () => {
       ...clientA, client_id: 10031, account_id: 88123456, full_name: "Charlie",
     };
 
-    insertMany(db, "2026-04-25", [clientA, clientC]);
-    insertMany(db, "2026-04-26", [clientA, clientB]);
+    await insertMany(db, "2026-04-25", [clientA, clientC]);
+    await insertMany(db, "2026-04-26", [clientA, clientB]);
 
-    expect(countByDate(db, "2026-04-25")).toBe(2);
-    expect(countByDate(db, "2026-04-26")).toBe(2);
+    expect(await countByDate(db, "2026-04-25")).toBe(2);
+    expect(await countByDate(db, "2026-04-26")).toBe(2);
   });
 });
 
@@ -243,14 +269,11 @@ function makeClientRows(wallets: number[]): HFMClientRow[] {
 }
 
 describe("request-snapshot repository", () => {
-  test("insertRequestSnapshot and getLatestRequestSnapshotBefore work", () => {
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
-
+  test("insertRequestSnapshot and getLatestRequestSnapshotBefore work", async () => {
     const rows = makeClientRows([100, 200, 300]);
-    insertRequestSnapshot(db, "2026-04-26", rows);
+    await insertRequestSnapshot(db, "2026-04-26", rows);
 
-    const latest = getLatestRequestSnapshotBefore(db, "2026-04-27");
+    const latest = await getLatestRequestSnapshotBefore(db, "2026-04-27");
     expect(latest).not.toBeNull();
     expect(latest!.rows.length).toBe(3);
     expect(latest!.snapshotDate).toBe("2026-04-26");
@@ -258,8 +281,8 @@ describe("request-snapshot repository", () => {
     const missing = findMissingWalletIds(latest!.rows, []);
     expect(missing).toEqual([100, 200, 300]);
 
-    insertRequestSnapshot(db, "2026-04-27", makeClientRows([100, 200, 400]));
-    const latest2 = getLatestRequestSnapshotBefore(db, "2026-04-28")!;
+    await insertRequestSnapshot(db, "2026-04-27", makeClientRows([100, 200, 400]));
+    const latest2 = (await getLatestRequestSnapshotBefore(db, "2026-04-28"))!;
 
     const missing2 = findMissingWalletIds(latest!.rows, latest2.rows);
     expect(missing2).toEqual([300]);
@@ -268,24 +291,15 @@ describe("request-snapshot repository", () => {
     expect(newIds).toEqual([400]);
   });
 
-  test("getLatestRequestSnapshotBefore returns null when none exists", () => {
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
-
-    const result = getLatestRequestSnapshotBefore(db, "2026-04-26");
+  test("getLatestRequestSnapshotBefore returns null when none exists", async () => {
+    const result = await getLatestRequestSnapshotBefore(db, "2026-04-26");
     expect(result).toBeNull();
   });
 });
 
 describe("generateReportForUser", () => {
-  afterEach(() => {
-    delete process.env.TARGET_WALLET;
-  });
-
   test("day report returns not-found when no yesterday snapshot", async () => {
     process.env.TARGET_WALLET = "30506525";
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
 
     const messages = await generateReportForUser({
       now: new Date("2026-04-25T22:00:00.000Z"),
@@ -300,12 +314,10 @@ describe("generateReportForUser", () => {
 
   test("day report returns comparison when yesterday snapshot exists", async () => {
     process.env.TARGET_WALLET = "30506525";
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
 
     const { normalizeClientRow } = await import("../src/services/hfm.service");
     const normalized = mockClientRows.map(normalizeClientRow);
-    insertMany(db, "2026-04-25", normalized);
+    await insertMany(db, "2026-04-25", normalized);
 
     const messages = await generateReportForUser({
       now: new Date("2026-04-25T22:00:00.000Z"),
@@ -321,12 +333,10 @@ describe("generateReportForUser", () => {
 
   test("day report returns 2 messages when previous request snapshot exists", async () => {
     process.env.TARGET_WALLET = "30506525";
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
 
     const { normalizeClientRow } = await import("../src/services/hfm.service");
     const normalized = mockClientRows.map(normalizeClientRow);
-    insertMany(db, "2026-04-25", normalized);
+    await insertMany(db, "2026-04-25", normalized);
 
     await generateReportForUser({
       now: new Date("2026-04-25T22:00:00.000Z"),
@@ -349,8 +359,6 @@ describe("generateReportForUser", () => {
 
   test("week report returns not-found when no baseline snapshot", async () => {
     process.env.TARGET_WALLET = "30506525";
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
 
     const messages = await generateReportForUser({
       now: new Date("2026-04-29T22:00:00.000Z"),
@@ -365,14 +373,12 @@ describe("generateReportForUser", () => {
 
   test("week report returns comparison when baseline exists", async () => {
     process.env.TARGET_WALLET = "30506525";
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
 
     const { normalizeClientRow } = await import("../src/services/hfm.service");
     const normalized = mockClientRows.map(normalizeClientRow);
     const now = new Date("2026-04-29T22:00:00.000Z");
     const lastWeek = getLastWeekRange(now);
-    insertMany(db, lastWeek.to, normalized);
+    await insertMany(db, lastWeek.to, normalized);
 
     const messages = await generateReportForUser({
       now,
@@ -388,8 +394,6 @@ describe("generateReportForUser", () => {
 
   test("month report returns not-found when no baseline snapshot", async () => {
     process.env.TARGET_WALLET = "30506525";
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
 
     const messages = await generateReportForUser({
       now: new Date("2026-04-29T22:00:00.000Z"),
@@ -404,14 +408,12 @@ describe("generateReportForUser", () => {
 
   test("month report returns comparison when baseline exists", async () => {
     process.env.TARGET_WALLET = "30506525";
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
 
     const { normalizeClientRow } = await import("../src/services/hfm.service");
     const normalized = mockClientRows.map(normalizeClientRow);
     const now = new Date("2026-04-29T22:00:00.000Z");
     const lastMonth = getLastMonthRange(now);
-    insertMany(db, lastMonth.to, normalized);
+    await insertMany(db, lastMonth.to, normalized);
 
     const messages = await generateReportForUser({
       now,
@@ -426,15 +428,9 @@ describe("generateReportForUser", () => {
 });
 
 describe("runDailyClientReport", () => {
-  afterEach(() => {
-    delete process.env.TARGET_WALLET;
-  });
-
   test("first run stores snapshot and skips notification when no yesterday", async () => {
     process.env.TARGET_WALLET = "30506525";
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
-    seedFromEnv(db, "Utest001");
+    await seedFromEnv(db, "Utest001");
 
     let pushedMessage = "";
     const mockPushAll = async (_uids: string[], text: string) => { pushedMessage = text; };
@@ -447,20 +443,15 @@ describe("runDailyClientReport", () => {
     });
 
     expect(pushedMessage).toBe("");
-    expect(countByDate(db, "2026-04-26")).toBe(2);
+    expect(await countByDate(db, "2026-04-26")).toBe(2);
   });
 
   test("second day sends comparison report", async () => {
     process.env.TARGET_WALLET = "30506525";
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
-    seedFromEnv(db, "Utest001");
+    await seedFromEnv(db, "Utest001");
 
     let pushedMessage = "";
     const mockPushAll = async (_uids: string[], text: string) => { pushedMessage = text; };
-
-    const { normalizeClientRow } = await import("../src/services/hfm.service");
-    const normalized = mockClientRows.map(normalizeClientRow);
 
     await runDailyClientReport({
       now: new Date("2026-04-25T22:00:00.000Z"),
@@ -469,7 +460,7 @@ describe("runDailyClientReport", () => {
       pushToAllFn: mockPushAll,
     });
 
-    expect(countByDate(db, "2026-04-26")).toBe(2);
+    expect(await countByDate(db, "2026-04-26")).toBe(2);
 
     const day2Clients: HFMClientRow[] = [
       mockClientRows[0]!,
@@ -493,9 +484,7 @@ describe("runDailyClientReport", () => {
 
   test("idempotent - second run for same date skips", async () => {
     process.env.TARGET_WALLET = "30506525";
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
-    seedFromEnv(db, "Utest001");
+    await seedFromEnv(db, "Utest001");
 
     await runDailyClientReport({
       now: new Date("2026-04-25T22:00:00.000Z"),
@@ -528,9 +517,7 @@ describe("runDailyClientReport", () => {
 
   test("does not throw when HFM fetch fails after retries", async () => {
     process.env.TARGET_WALLET = "30506525";
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
-    seedFromEnv(db, "Utest001");
+    await seedFromEnv(db, "Utest001");
 
     let calls = 0;
     const mockFetchFail = async () => {
@@ -548,13 +535,11 @@ describe("runDailyClientReport", () => {
 
     expect(calls).toBe(3);
     const today = getIctDateString(new Date("2026-04-25T22:00:00.000Z"));
-    expect(countByDate(db, today)).toBe(0);
+    expect(await countByDate(db, today)).toBe(0);
   }, 30_000);
 
   test("warns but does not throw when no active recipients", async () => {
     process.env.TARGET_WALLET = "30506525";
-    const db = new Database(":memory:", { strict: true });
-    initSqlite(db);
 
     let pushCalled = false;
     const mockPushAll = async () => { pushCalled = true; };
@@ -572,6 +557,6 @@ describe("runDailyClientReport", () => {
     process.env.LINE_NOTIFY_UIDS = originalNotifyUids;
 
     expect(pushCalled).toBe(false);
-    expect(countByDate(db, "2026-04-26")).toBe(2);
+    expect(await countByDate(db, "2026-04-26")).toBe(2);
   });
 });

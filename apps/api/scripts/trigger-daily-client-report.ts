@@ -1,4 +1,5 @@
 import { runDailyClientReport } from "../src/jobs/daily-client-report";
+import { closeDb } from "../src/db/connection";
 
 const DRY_RUN = process.env.DRY_RUN === "1";
 
@@ -19,8 +20,10 @@ async function main() {
     console.log("[trigger] daily-client-report completed");
   } catch (e) {
     console.error("[trigger] daily-client-report failed:", e);
+    await closeDb();
     process.exit(1);
   }
+  await closeDb();
 }
 
 main();

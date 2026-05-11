@@ -16,7 +16,7 @@ export interface RequestSnapshotResult {
 export async function insertRequestSnapshot(
   db: DrizzleDb,
   date: string,
-  rows: HFMClientRow[],
+  clients: HFMClientRow[],
 ): Promise<number> {
   return await db.transaction(async (tx) => {
     const [header] = await tx
@@ -24,11 +24,11 @@ export async function insertRequestSnapshot(
       .values({ snapshotDate: date })
       .returning({ id: clientRequestSnapshots.id });
 
-    const snapshotId = header.id;
+    const snapshotId = header!.id;
     const seen = new Set<number>();
     const values: { snapshotId: number; clientId: number }[] = [];
 
-    for (const row of rows) {
+    for (const row of clients) {
       if (seen.has(row.wallet)) continue;
       seen.add(row.wallet);
       values.push({ snapshotId, clientId: row.wallet });

@@ -1,9 +1,9 @@
-import { eq, count, sql, desc } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import type { DrizzleDb } from "../db/connection";
 import { getDb, initDb } from "../db/connection";
 import { clientSnapshots, dailyReportNotifications } from "../db/schema";
 import type { HFMClientRow, HFMClientsResult } from "../types/hfm.types";
-import { countByDate, insertMany } from "../repositories/snapshot.repository";
+import { countByDate, insertMany, purgeOlderThan } from "../repositories/snapshot.repository";
 import {
   insertRequestSnapshot,
   getLatestRequestSnapshotBefore,

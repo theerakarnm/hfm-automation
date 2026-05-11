@@ -1,7 +1,13 @@
-import { test, expect, describe, afterEach, beforeEach } from "bun:test";
+import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { Hono } from "hono";
 import { createHmac } from "node:crypto";
-import { resetDatabaseForTests, getDatabase, initSqlite } from "../src/services/sqlite.service";
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
+import { sql } from "drizzle-orm";
+import { initDb, resetDbForTests } from "../src/db/connection";
+
+const TEST_DATABASE_URL =
+  process.env.TEST_DATABASE_URL ?? "postgresql://jametirakarn@localhost:5432/hfm_test";
 
 const ORIGINAL_FETCH = globalThis.fetch;
 
@@ -24,33 +30,41 @@ async function waitFor(
   }
 }
 
-function createWebhookApp() {
-  process.env.LINE_CHANNEL_SECRET = SECRET;
-  process.env.LINE_CHANNEL_ACCESS_TOKEN = "test_token";
-  process.env.HFM_API_KEY = "test_hfm_key";
-  process.env.HFM_API_BASE_URL = "https://api.hfaffiliates.com";
-  process.env.SQLITE_PATH = ":memory:";
-
-  const db = getDatabase();
-  initSqlite(db);
-
-  const webhookMod = require("../src/routes/webhook");
-  const app = new Hono();
-  app.route("/webhook", webhookMod.default);
-  return app;
+async function setupTestDb() {
+  const client = postgres(TEST_DATABASE_URL, { max: 1 });
+  const db = drizzle(client);
+  await db.execute(sql`
+    DROP TABLE IF EXISTS client_request_snapshot_rows CASCADE;
+    DROP TABLE IF EXISTS client_request_snapshots CASCADE;
+    DROP TABLE IF EXISTS report_range_snapshots CASCADE;
+    DROP TABLE IF EXISTS line_users CASCADE;
+    DROP TABLE IF EXISTS daily_report_notifications CASCADE;
+    DROP TABLE IF EXISTS notify_recipients CASCADE;
+    DROP TABLE IF EXISTS client_snapshots CASCADE;
+  `);
+  await initDb(db);
+  await client.end();
+  resetDbForTests();
 }
 
 describe("webhook", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     globalThis.fetch = ORIGINAL_FETCH;
-    process.env.SQLITE_PATH = ":memory:";
+    process.env.DATABASE_URL = TEST_DATABASE_URL;
+    process.env.LINE_CHANNEL_SECRET = SECRET;
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "test_token";
+    process.env.HFM_API_KEY = "test_hfm_key";
+    process.env.HFM_API_BASE_URL = "https://api.hfaffiliates.com";
+    await setupTestDb();
   });
 
   afterEach(() => {
     globalThis.fetch = ORIGINAL_FETCH;
     delete process.env.LINE_WHITELIST_UIDS;
     delete process.env.LINE_WHITELIST_ENABLED;
-    resetDatabaseForTests();
+    delete process.env.DATABASE_URL;
+    delete process.env.TARGET_WALLET;
+    resetDbForTests();
   });
 
   test("invalid signature returns 400", async () => {
@@ -538,7 +552,7 @@ describe("webhook", () => {
 
     expect(fetchCalls[0]?.url).toBe("https://api.line.me/v2/bot/chat/loading/start");
 
-    expect(fetchCalls[1]?.url).toBe("https://api.hfaffiliates.com/api/clients");
+    expect(fetchCalls[1]?.url).toBe("https://api.hfaffiliates.com/api/clients/");
 
     expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/reply");
     const replyBody = JSON.parse(fetchCalls[2]?.body ?? "{}");
@@ -601,7 +615,7 @@ describe("webhook", () => {
     expect(response.status).toBe(200);
 
     await waitFor(() => fetchCalls.length >= 3);
-    expect(fetchCalls[1]?.url).toBe("https://api.hfaffiliates.com/api/clients");
+    expect(fetchCalls[1]?.url).toBe("https://api.hfaffiliates.com/api/clients/");
     expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/reply");
   });
 
@@ -763,18 +777,16 @@ describe("webhook", () => {
     const replyBody = JSON.parse(fetchCalls.at(-1)?.body ?? "{}");
     expect(replyBody.replyToken).toBe("tokenMonth");
   });
-
 });
 
 async function importWebhook() {
+  process.env.DATABASE_URL = TEST_DATABASE_URL;
   process.env.LINE_CHANNEL_SECRET = SECRET;
   process.env.LINE_CHANNEL_ACCESS_TOKEN = "test_token";
   process.env.HFM_API_KEY = "test_hfm_key";
   process.env.HFM_API_BASE_URL = "https://api.hfaffiliates.com";
-  process.env.SQLITE_PATH = ":memory:";
 
-  const db = getDatabase();
-  initSqlite(db);
+  resetDbForTests();
 
   const webhookMod = await import("../src/routes/webhook");
   const app = new Hono();

@@ -154,40 +154,23 @@ app.get('/report', guard, (c) =>
 /** Export handler (protected) */
 app.post('/report/export', guard, async (c) => {
   const body = await c.req.parseBody<{
-    wallet_id: string
-    password:  string
+    api_key:   string
     from_date: string
     to_date:   string
   }>()
 
-  const { wallet_id, password, from_date, to_date } = body
+  const { api_key, from_date, to_date } = body
 
-  // Basic validation
-  if (!wallet_id || !password || !from_date || !to_date) {
-    return c.redirect(`/report?error=${encode('กรุณากรอกข้อมูลให้ครบทุกช่อง')}`)
+  if (!api_key) {
+    return c.redirect(`/report?error=${encode('กรุณา Authenticate ก่อน')}`)
+  }
+
+  if (!from_date || !to_date) {
+    return c.redirect(`/report?error=${encode('กรุณาเลือกช่วงวันที่')}`)
   }
 
   try {
-    // ── Step 1: Authenticate with HFM API ──
-    const authRes = await fetch(`${HFM_BASE}/api/auth/key`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ wallet_id: Number(wallet_id), password }),
-    })
-
-    if (!authRes.ok) {
-      const msg = authRes.status === 401
-        ? 'Wallet ID หรือรหัสผ่านไม่ถูกต้อง (HFM 401 Unauthorized)'
-        : `HFM Authentication Error: ${authRes.status}`
-      return c.redirect(`/report?error=${encode(msg)}`)
-    }
-
-    const { api_key } = await authRes.json() as { api_key: string }
-    if (!api_key) {
-      return c.redirect(`/report?error=${encode('HFM API ไม่ส่ง api_key กลับมา')}`)
-    }
-
-    // ── Step 2: Fetch client performance ──
+    // ── Step 1: Fetch client performance ──
     const qs = new URLSearchParams({
       from_date: `${from_date}T00:00:00`,
       to_date:   `${to_date}T23:59:59`,
@@ -199,9 +182,10 @@ app.post('/report/export', guard, async (c) => {
     )
 
     if (!perfRes.ok) {
-      return c.redirect(
-        `/report?error=${encode(`ดึงข้อมูล client performance ไม่สำเร็จ (${perfRes.status})`)}`,
-      )
+      const msg = perfRes.status === 401
+        ? 'API Key หมดอายุหรือไม่ถูกต้อง กรุณา Authenticate ใหม่'
+        : `ดึงข้อมูล client performance ไม่สำเร็จ (${perfRes.status})`
+      return c.redirect(`/report?error=${encode(msg)}`)
     }
 
     const data = await perfRes.json() as { clients: Record<string, unknown>[] }
@@ -213,7 +197,7 @@ app.post('/report/export', guard, async (c) => {
       )
     }
 
-    // ── Step 3: Build XLSX ──
+    // ── Step 2: Build XLSX ──
     const rows = clients.map((cl) => ({
       'Wallet ID':    cl.client_id,
       'Account ID':   cl.account_id,
@@ -230,7 +214,7 @@ app.post('/report/export', guard, async (c) => {
     const buf      = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
     const filename = `hfm_performance_${from_date}_to_${to_date}.xlsx`
 
-    console.log(`[export] wallet=${wallet_id} from=${from_date} to=${to_date} rows=${rows.length}`)
+    console.log(`[export] api_key=***${api_key.slice(-4)} from=${from_date} to=${to_date} rows=${rows.length}`)
 
     return new Response(buf, {
       headers: {

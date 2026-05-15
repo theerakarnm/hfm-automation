@@ -113,7 +113,7 @@ app.post('/logout', (c) => {
 
 /** Authenticate with HFM API — returns api_key */
 app.post('/api/authenticate', async (c) => {
-  const body = await c.req.parseBody<{ wallet_id: string; password: string }>()
+  const body = await c.req.json<{ wallet_id: string; password: string }>()
   const { wallet_id, password } = body
 
   if (!wallet_id || !password) {

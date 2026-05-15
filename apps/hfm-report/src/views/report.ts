@@ -306,6 +306,61 @@ export function reportPage(error?: string, _success?: string): string {
       cursor: not-allowed;
     }
 
+    /* ── Auth button ── */
+    .btn-auth {
+      width: 100%;
+      margin-top: 14px;
+      padding: 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      cursor: pointer;
+      letter-spacing: 0.3px;
+      transition: border-color 0.15s, background 0.15s, color 0.15s;
+    }
+    .btn-auth:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-lo);
+    }
+    .btn-auth:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    /* ── Auth status badge ── */
+    .auth-status {
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      animation: fadeIn 0.3s ease;
+    }
+    .auth-success {
+      background: rgba(63, 185, 80, 0.08);
+      border: 1px solid rgba(63, 185, 80, 0.35);
+      color: #3fb950;
+    }
+    .auth-error {
+      background: var(--err-bg);
+      border: 1px solid var(--err-bd);
+      color: var(--err-tx);
+    }
+    .hidden { display: none; }
+
+    /* read-only inputs */
+    .field input[readonly] {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
     /* ── Info footer ── */
     .info-row {
       display: flex;
@@ -345,6 +400,7 @@ export function reportPage(error?: string, _success?: string): string {
       </div>` : ''}
 
       <form id="export-form" method="POST" action="/report/export">
+        <input type="hidden" name="api_key" id="api_key_field">
 
         <!-- API Credentials -->
         <div class="card">
@@ -377,6 +433,13 @@ export function reportPage(error?: string, _success?: string): string {
                   autocomplete="off"
                 >
               </div>
+            </div>
+
+            <button class="btn-auth" type="button" id="auth-btn">Authenticate</button>
+
+            <div class="auth-status hidden" id="auth-status">
+              <span id="auth-status-icon"></span>
+              <span id="auth-status-text"></span>
             </div>
           </div>
         </div>
@@ -544,6 +607,108 @@ export function reportPage(error?: string, _success?: string): string {
       toInput.value   = toSunday(today)
       updateBadge()
     })()
+
+    // ─── HFM Authentication ───────────────────────────────────────────
+
+    const authBtn    = document.getElementById('auth-btn')
+    const authStatus = document.getElementById('auth-status')
+    const authIcon   = document.getElementById('auth-status-icon')
+    const authText   = document.getElementById('auth-status-text')
+    const walletInput = document.getElementById('wallet_id')
+    const passInput   = document.getElementById('api_password')
+    const apiKeyField = document.getElementById('api_key_field')
+
+    function showAuthSuccess(key) {
+      authStatus.classList.remove('hidden', 'auth-error')
+      authStatus.classList.add('auth-success')
+      authIcon.textContent = '✓'
+      authText.textContent = 'Authenticated (key: ****' + key.slice(-4) + ')'
+      walletInput.readOnly = true
+      passInput.readOnly   = true
+      authBtn.textContent  = 'Re-authenticate'
+    }
+
+    function showAuthError(msg) {
+      authStatus.classList.remove('hidden', 'auth-success')
+      authStatus.classList.add('auth-error')
+      authIcon.textContent = '⚠'
+      authText.textContent = msg
+    }
+
+    function clearAuthState() {
+      authStatus.classList.add('hidden')
+      walletInput.readOnly = false
+      passInput.readOnly   = false
+      passInput.value      = ''
+      authBtn.textContent  = 'Authenticate'
+      localStorage.removeItem('hfm_api_key')
+      apiKeyField.value = ''
+    }
+
+    async function handleAuthenticate() {
+      const walletId = walletInput.value.trim()
+      const password = passInput.value
+
+      if (!walletId || !password) {
+        showAuthError('กรุณากรอก Wallet ID และ Password')
+        return
+      }
+
+      authBtn.disabled    = true
+      authBtn.textContent = '⏳ Authenticating...'
+
+      try {
+        const res = await fetch('/api/authenticate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wallet_id: walletId, password }),
+        })
+
+        const data = await res.json()
+
+        if (res.ok && data.api_key) {
+          localStorage.setItem('hfm_api_key', data.api_key)
+          apiKeyField.value = data.api_key
+          showAuthSuccess(data.api_key)
+        } else {
+          showAuthError(data.error || 'Authentication failed')
+        }
+      } catch (err) {
+        showAuthError('เกิดข้อผิดพลาดในการเชื่อมต่อ')
+      } finally {
+        authBtn.disabled = false
+      }
+    }
+
+    // Toggle between Authenticate and Re-authenticate
+    authBtn.addEventListener('click', () => {
+      if (localStorage.getItem('hfm_api_key')) {
+        clearAuthState()
+        walletInput.focus()
+      } else {
+        handleAuthenticate()
+      }
+    })
+
+    // On page load — restore authenticated state
+    ;(function checkSavedAuth() {
+      const saved = localStorage.getItem('hfm_api_key')
+      if (saved) {
+        apiKeyField.value = saved
+        showAuthSuccess(saved)
+      }
+    })()
+
+    // Populate api_key on form submit
+    document.getElementById('export-form').addEventListener('submit', (e) => {
+      const key = localStorage.getItem('hfm_api_key')
+      if (!key) {
+        e.preventDefault()
+        showAuthError('กรุณา Authenticate ก่อน Export')
+        return
+      }
+      apiKeyField.value = key
+    })
   </script>
 </body>
 </html>`

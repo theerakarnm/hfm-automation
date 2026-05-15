@@ -618,14 +618,15 @@ export function reportPage(error?: string, _success?: string): string {
     const passInput   = document.getElementById('api_password')
     const apiKeyField = document.getElementById('api_key_field')
 
-    function showAuthSuccess(key) {
+    function showAuthSuccess(key, walletId) {
       authStatus.classList.remove('hidden', 'auth-error')
       authStatus.classList.add('auth-success')
       authIcon.textContent = '✓'
       authText.textContent = 'Authenticated (key: ****' + key.slice(-4) + ')'
+      if (walletId) walletInput.value = walletId
       walletInput.readOnly = true
       passInput.readOnly   = true
-      authBtn.textContent  = 'Re-authenticate'
+      authBtn.textContent  = 'Clear credentials'
     }
 
     function showAuthError(msg) {
@@ -642,6 +643,7 @@ export function reportPage(error?: string, _success?: string): string {
       passInput.value      = ''
       authBtn.textContent  = 'Authenticate'
       localStorage.removeItem('hfm_api_key')
+      localStorage.removeItem('hfm_wallet_id')
       apiKeyField.value = ''
     }
 
@@ -668,8 +670,9 @@ export function reportPage(error?: string, _success?: string): string {
 
         if (res.ok && data.api_key) {
           localStorage.setItem('hfm_api_key', data.api_key)
+          localStorage.setItem('hfm_wallet_id', walletId)
           apiKeyField.value = data.api_key
-          showAuthSuccess(data.api_key)
+          showAuthSuccess(data.api_key, walletId)
         } else {
           showAuthError(data.error || 'Authentication failed')
         }
@@ -693,9 +696,10 @@ export function reportPage(error?: string, _success?: string): string {
     // On page load — restore authenticated state
     ;(function checkSavedAuth() {
       const saved = localStorage.getItem('hfm_api_key')
+      const savedWallet = localStorage.getItem('hfm_wallet_id')
       if (saved) {
         apiKeyField.value = saved
-        showAuthSuccess(saved)
+        showAuthSuccess(saved, savedWallet)
       }
     })()
 

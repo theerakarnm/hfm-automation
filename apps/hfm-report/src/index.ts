@@ -111,6 +111,41 @@ app.post('/logout', (c) => {
   return c.redirect('/login')
 })
 
+/** Authenticate with HFM API — returns api_key */
+app.post('/api/authenticate', async (c) => {
+  const body = await c.req.parseBody<{ wallet_id: string; password: string }>()
+  const { wallet_id, password } = body
+
+  if (!wallet_id || !password) {
+    return c.json({ error: 'กรุณากรอก Wallet ID และ Password' }, 400)
+  }
+
+  try {
+    const authRes = await fetch(`${HFM_BASE}/api/auth/key`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ wallet_id: Number(wallet_id), password }),
+    })
+
+    if (!authRes.ok) {
+      const msg = authRes.status === 401
+        ? 'Wallet ID หรือรหัสผ่านไม่ถูกต้อง'
+        : `HFM Authentication Error: ${authRes.status}`
+      return c.json({ error: msg }, authRes.status)
+    }
+
+    const { api_key } = await authRes.json() as { api_key: string }
+    if (!api_key) {
+      return c.json({ error: 'HFM API ไม่ส่ง api_key กลับมา' }, 502)
+    }
+
+    return c.json({ api_key })
+  } catch (err) {
+    console.error('[authenticate] error:', err)
+    return c.json({ error: 'เกิดข้อผิดพลาดในการเชื่อมต่อ' }, 500)
+  }
+})
+
 /** Report page (protected) */
 app.get('/report', guard, (c) =>
   c.html(reportPage(c.req.query('error')))

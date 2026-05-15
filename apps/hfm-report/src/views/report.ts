@@ -225,6 +225,26 @@ export function reportPage(error?: string, _success?: string): string {
 
     .field input::placeholder { color: var(--muted); opacity: 0.5; }
 
+    .field select {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 9px 12px;
+      font-family: var(--font);
+      font-size: 13px;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      -webkit-appearance: none;
+      cursor: pointer;
+    }
+
+    .field select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-lo);
+    }
+
     /* date input color fix */
     .field input[type="date"]::-webkit-calendar-picker-indicator {
       filter: invert(0.5);
@@ -486,6 +506,35 @@ export function reportPage(error?: string, _success?: string): string {
           </div>
         </div>
 
+        <!-- Sort By -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-header-icon">↕️</div>
+            <span class="card-header-title">Sort By</span>
+          </div>
+          <div class="card-body">
+            <div class="field-row">
+              <div class="field">
+                <label for="sort_by">Column</label>
+                <select id="sort_by" name="sort_by">
+                  <option value="">No Sort</option>
+                  <option value="wallet_id">Wallet ID</option>
+                  <option value="account_id">Account ID</option>
+                  <option value="account_type">Account Type</option>
+                  <option value="trading_lots">Trading Lots</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="sort_dir">Direction</label>
+                <select id="sort_dir" name="sort_dir">
+                  <option value="desc">High to Low (Z → A)</option>
+                  <option value="asc">Low to High (A → Z)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Export -->
         <button class="btn-export" type="submit" id="export-btn">
           ↓ Export to Excel (.xlsx)
@@ -597,6 +646,10 @@ export function reportPage(error?: string, _success?: string): string {
     document.getElementById('export-form').addEventListener('submit', () => {
       exportBtn.disabled    = true
       exportBtn.textContent = '⏳ Fetching & Generating...'
+      setTimeout(() => {
+        exportBtn.disabled    = false
+        exportBtn.textContent = 'Export Excel'
+      }, 5000)
     })
 
     // ─── Init with current week ──────────────────────────────────────
@@ -708,6 +761,8 @@ export function reportPage(error?: string, _success?: string): string {
       const key = localStorage.getItem('hfm_api_key')
       if (!key) {
         e.preventDefault()
+        exportBtn.disabled    = false
+        exportBtn.textContent = 'Export Excel'
         showAuthError('กรุณา Authenticate ก่อน Export')
         return
       }

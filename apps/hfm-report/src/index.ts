@@ -3,14 +3,16 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import { loginPage } from './views/login'
 import { reportPage } from './views/report'
 import * as XLSX from 'xlsx'
+import { ContentfulStatusCode } from 'hono/utils/http-status'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const HFM_BASE       = 'https://api.hfaffiliates.com'
+const HFM_BASE = 'https://api.hfaffiliates.com'
 const ADMIN_USERNAME = Bun.env.ADMIN_USERNAME ?? 'admin'
 const ADMIN_PASSWORD = Bun.env.ADMIN_PASSWORD ?? 'admin123'
 const SESSION_SECRET = Bun.env.SESSION_SECRET ?? 'dev-secret-CHANGE-ME-in-production'
-const PORT           = Number(Bun.env.PORT ?? 3000)
+const PORT = Number(Bun.env.PORT ?? 3000)
+const DEFAULT_API_KEY = Bun.env.DEFAULT_API_KEY ?? ''
 
 // ─── Session helpers ──────────────────────────────────────────────────────────
 
@@ -28,9 +30,9 @@ async function importKey(usage: 'sign' | 'verify') {
 async function signSession(username: string): Promise<string> {
   const expires = Date.now() + 8 * 3_600_000   // 8 hours
   const payload = `${username}|${expires}`
-  const key     = await importKey('sign')
-  const raw     = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))
-  const sig     = Buffer.from(raw).toString('base64url')
+  const key = await importKey('sign')
+  const raw = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))
+  const sig = Buffer.from(raw).toString('base64url')
   return `${Buffer.from(payload).toString('base64url')}.${sig}`
 }
 
@@ -40,11 +42,11 @@ async function verifySession(token: string): Promise<string | null> {
     const [b64, sig] = token.split('.')
     if (!b64 || !sig) return null
 
-    const payload  = Buffer.from(b64, 'base64url').toString()
+    const payload = Buffer.from(b64, 'base64url').toString()
     const [username, expStr] = payload.split('|')
     if (!username || Date.now() > Number(expStr)) return null
 
-    const key   = await importKey('verify')
+    const key = await importKey('verify')
     const valid = await crypto.subtle.verify(
       'HMAC',
       key,
@@ -122,16 +124,16 @@ app.post('/api/authenticate', async (c) => {
 
   try {
     const authRes = await fetch(`${HFM_BASE}/api/auth/key`, {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ wallet_id: Number(wallet_id), password }),
+      body: JSON.stringify({ wallet_id: Number(wallet_id), password }),
     })
 
     if (!authRes.ok) {
       const msg = authRes.status === 401
         ? 'Wallet ID หรือรหัสผ่านไม่ถูกต้อง'
         : `HFM Authentication Error: ${authRes.status}`
-      return c.json({ error: msg }, authRes.status)
+      return c.json({ error: msg }, authRes.status as ContentfulStatusCode)
     }
 
     const { api_key } = await authRes.json() as { api_key: string }
@@ -154,12 +156,15 @@ app.get('/report', guard, (c) =>
 /** Export handler (protected) */
 app.post('/report/export', guard, async (c) => {
   const body = await c.req.parseBody<{
-    api_key:   string
+    api_key: string
     from_date: string
-    to_date:   string
+    to_date: string
+    sort_by: string
+    sort_dir: string
   }>()
 
-  const { api_key, from_date, to_date } = body
+  const { from_date, to_date, sort_by, sort_dir } = body
+  const api_key = body.api_key || DEFAULT_API_KEY
 
   if (!api_key) {
     return c.redirect(`/report?error=${encode('กรุณา Authenticate ก่อน')}`)
@@ -173,7 +178,7 @@ app.post('/report/export', guard, async (c) => {
     // ── Step 1: Fetch client performance ──
     const qs = new URLSearchParams({
       from_date: `${from_date}T00:00:00`,
-      to_date:   `${to_date}T23:59:59`,
+      to_date: `${to_date}T23:59:59`,
     })
 
     const perfRes = await fetch(
@@ -199,11 +204,29 @@ app.post('/report/export', guard, async (c) => {
 
     // ── Step 2: Build XLSX ──
     const rows = clients.map((cl) => ({
-      'Wallet ID':    cl.client_id,
-      'Account ID':   cl.account_id,
+      'Wallet ID': cl.client_id,
+      'Account ID': cl.account_id,
       'Account Type': cl.account_type,
       'Trading Lots': cl.volume,
     }))
+
+    const sortColMap: Record<string, keyof typeof rows[0]> = {
+      wallet_id: 'Wallet ID',
+      account_id: 'Account ID',
+      account_type: 'Account Type',
+      trading_lots: 'Trading Lots',
+    }
+
+    const sortCol = sortColMap[sort_by]
+    if (sortCol) {
+      const dir = sort_dir === 'asc' ? 1 : -1
+      rows.sort((a, b) => {
+        const va = a[sortCol]
+        const vb = b[sortCol]
+        if (typeof va === 'number' && typeof vb === 'number') return dir * (va - vb)
+        return dir * String(va ?? '').localeCompare(String(vb ?? ''))
+      })
+    }
 
     const ws = XLSX.utils.json_to_sheet(rows)
     ws['!cols'] = [{ wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 16 }]
@@ -211,16 +234,16 @@ app.post('/report/export', guard, async (c) => {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Performance')
 
-    const buf      = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
     const filename = `hfm_performance_${from_date}_to_${to_date}.xlsx`
 
     console.log(`[export] api_key=***${api_key.slice(-4)} from=${from_date} to=${to_date} rows=${rows.length}`)
 
     return new Response(buf, {
       headers: {
-        'Content-Type':        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="${filename}"`,
-        'Content-Length':      String(buf.byteLength),
+        'Content-Length': String(buf.byteLength),
       },
     })
 

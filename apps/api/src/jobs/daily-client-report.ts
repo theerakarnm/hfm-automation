@@ -1,6 +1,6 @@
 import { eq, count } from "drizzle-orm";
 import type { DrizzleDb } from "../db/connection";
-import { getDb, initDb } from "../db/connection";
+import { getDb } from "../db/connection";
 import { clientSnapshots, dailyReportNotifications } from "../db/schema";
 import type { HFMClientRow, HFMClientsResult } from "../types/hfm.types";
 import { countByDate, insertMany, purgeOlderThan } from "../repositories/snapshot.repository";
@@ -464,7 +464,6 @@ export async function generateReportForUser(options: RunDailyClientReportOptions
   const fetchCurrent = options.fetchClientsFn ?? fetchClients;
   const period = options.reportPeriod ?? "day";
 
-  await initDb(db);
   const today = getIctDateString(now);
   return await buildReportMessages(db, now, today, fetchCurrent, period);
 }
@@ -475,7 +474,6 @@ export async function runDailyClientReport(options: RunDailyClientReportOptions 
   const fetchCurrent = options.fetchClientsFn ?? fetchClients;
   const pushAll = options.pushToAllFn ?? pushToAll;
 
-  await initDb(db);
   await seedFromEnv(db, process.env.LINE_NOTIFY_UIDS ?? "");
 
   const today = getIctDateString(now);

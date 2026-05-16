@@ -96,16 +96,19 @@ export function FundedNoTradeTable({
   searchQuery,
   accountTypeFilter,
   riskFilter,
+  minDepositFilter,
 }: {
   accounts: FundedNoTradeAccount[]
   searchQuery: string
   accountTypeFilter: AccountTypeGroup | "All"
   riskFilter: RiskLevel | "All"
+  minDepositFilter?: number
 }) {
   const filtered = filterFundedNoTrade(accounts, {
     search: searchQuery,
     accountType: accountTypeFilter,
     risk: riskFilter,
+    minDeposit: minDepositFilter,
   })
 
   return (

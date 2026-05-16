@@ -12,6 +12,7 @@ export function filterFundedNoTrade(
     search: string
     accountType?: AccountTypeGroup | "All"
     risk?: RiskLevel | "All"
+    minDeposit?: number
   }
 ): FundedNoTradeAccount[] {
   return accounts.filter((a) => {
@@ -22,6 +23,8 @@ export function filterFundedNoTrade(
     )
       return false
     if (filters.risk && filters.risk !== "All" && a.priority !== filters.risk)
+      return false
+    if (filters.minDeposit !== undefined && a.depositAmount < filters.minDeposit)
       return false
     if (filters.search) {
       const q = filters.search.toLowerCase()
@@ -42,10 +45,12 @@ export function filterFundedNoTrade(
 
 export function filterMissingWallets(
   wallets: MissingWallet[],
-  filters: { search: string; risk?: RiskLevel | "All" }
+  filters: { search: string; risk?: RiskLevel | "All"; minDeposit?: number }
 ): MissingWallet[] {
   return wallets.filter((w) => {
     if (filters.risk && filters.risk !== "All" && w.risk !== filters.risk)
+      return false
+    if (filters.minDeposit !== undefined && w.lastKnownDeposit < filters.minDeposit)
       return false
     if (filters.search) {
       const q = filters.search.toLowerCase()

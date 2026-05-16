@@ -36,6 +36,9 @@ export function DashboardShell({ data }: { data: ReportDashboardResponse }) {
   const [platformFilter, setPlatformFilter] = useState("All")
   const [riskFilter, setRiskFilter] = useState<RiskLevel | "All">("All")
   const [searchQuery, setSearchQuery] = useState("")
+  const [minDepositFilter, setMinDepositFilter] = useState("")
+
+  const minDepositNum = minDepositFilter !== "" ? Number(minDepositFilter) : undefined
 
   return (
     <TooltipProvider>
@@ -89,6 +92,8 @@ export function DashboardShell({ data }: { data: ReportDashboardResponse }) {
           onRiskChange={setRiskFilter}
           search={searchQuery}
           onSearchChange={setSearchQuery}
+          minDeposit={minDepositFilter}
+          onMinDepositChange={setMinDepositFilter}
         />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -124,6 +129,7 @@ export function DashboardShell({ data }: { data: ReportDashboardResponse }) {
                 searchQuery={searchQuery}
                 accountTypeFilter={accountTypeFilter}
                 riskFilter={riskFilter}
+                minDepositFilter={minDepositNum}
               />
             </TabsContent>
 
@@ -132,6 +138,7 @@ export function DashboardShell({ data }: { data: ReportDashboardResponse }) {
                 wallets={data.missingWallets}
                 searchQuery={searchQuery}
                 riskFilter={riskFilter}
+                minDepositFilter={minDepositNum}
               />
             </TabsContent>
 

@@ -69,17 +69,14 @@ export function MissingWalletsTable({
   wallets,
   searchQuery,
   riskFilter,
-  minDepositFilter,
 }: {
   wallets: MissingWallet[]
   searchQuery: string
   riskFilter: RiskLevel | "All"
-  minDepositFilter?: number
 }) {
   const filtered = filterMissingWallets(wallets, {
     search: searchQuery,
     risk: riskFilter,
-    minDeposit: minDepositFilter,
   })
 
   return (

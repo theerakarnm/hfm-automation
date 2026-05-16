@@ -66,8 +66,6 @@ export function ReportFilters({
   onRiskChange,
   search,
   onSearchChange,
-  minDeposit,
-  onMinDepositChange,
 }: {
   dateRange: DateRangePreset
   onDateRangeChange: (v: DateRangePreset) => void
@@ -83,8 +81,6 @@ export function ReportFilters({
   onRiskChange: (v: RiskLevel | "All") => void
   search: string
   onSearchChange: (v: string) => void
-  minDeposit: string
-  onMinDepositChange: (v: string) => void
 }) {
   return (
     <div className="space-y-3 border-b border-border px-4 py-3 sm:px-6">
@@ -184,27 +180,12 @@ export function ReportFilters({
         </Select>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <Input
-          placeholder="Search wallet ID, account ID, country, campaign..."
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="h-9 w-full text-xs sm:h-7 sm:max-w-sm"
-        />
-        <Input
-          type="number"
-          min="0"
-          placeholder="Min deposit amount..."
-          value={minDeposit}
-          onChange={(e) => {
-            const val = e.target.value
-            if (val === "" || /^\d+(\.\d*)?$/.test(val)) {
-              onMinDepositChange(val)
-            }
-          }}
-          className="h-9 w-full text-xs sm:h-7 sm:w-[160px]"
-        />
-      </div>
+      <Input
+        placeholder="Search wallet ID, account ID, country, campaign..."
+        value={search}
+        onChange={(e) => onSearchChange(e.target.value)}
+        className="h-9 w-full text-xs sm:h-7 sm:max-w-sm"
+      />
     </div>
   )
 }

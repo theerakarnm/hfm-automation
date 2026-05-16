@@ -375,6 +375,20 @@ export function reportPage(error?: string, _success?: string): string {
     }
     .hidden { display: none; }
 
+    /* default key note */
+    .default-key-note {
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent-lo);
+      border: 1px solid rgba(240, 165, 0, 0.25);
+      color: var(--accent);
+    }
+
     /* read-only inputs */
     .field input[readonly] {
       opacity: 0.6;
@@ -437,7 +451,6 @@ export function reportPage(error?: string, _success?: string): string {
                   type="number"
                   name="wallet_id"
                   placeholder="123456"
-                  required
                   autocomplete="off"
                   min="1"
                 >
@@ -449,7 +462,6 @@ export function reportPage(error?: string, _success?: string): string {
                   type="password"
                   name="password"
                   placeholder="••••••••"
-                  required
                   autocomplete="off"
                 >
               </div>
@@ -461,6 +473,11 @@ export function reportPage(error?: string, _success?: string): string {
               <span id="auth-status-icon"></span>
               <span id="auth-status-text"></span>
             </div>
+
+            <div class="default-key-note" id="default-key-note">
+              <span class="default-key-note-icon">ℹ</span>
+              <span>หากไม่ Authenticate ระบบจะใช้ Default API Key ในการดึงข้อมูล</span>
+            </div>
           </div>
         </div>
 
@@ -468,7 +485,7 @@ export function reportPage(error?: string, _success?: string): string {
         <div class="card">
           <div class="card-header">
             <div class="card-header-icon">📅</div>
-            <span class="card-header-title">Date Range (Weekly)</span>
+            <span class="card-header-title">Date Range</span>
           </div>
           <div class="card-body">
             <!-- Quick shortcuts -->
@@ -479,7 +496,7 @@ export function reportPage(error?: string, _success?: string): string {
 
             <div class="field-row">
               <div class="field">
-                <label for="from_date">From (จันทร์)</label>
+                <label for="from_date">From</label>
                 <input
                   id="from_date"
                   type="date"
@@ -488,7 +505,7 @@ export function reportPage(error?: string, _success?: string): string {
                 >
               </div>
               <div class="field">
-                <label for="to_date">To (อาทิตย์)</label>
+                <label for="to_date">To</label>
                 <input
                   id="to_date"
                   type="date"
@@ -597,8 +614,7 @@ export function reportPage(error?: string, _success?: string): string {
       const f = fromInput.value
       const t = toInput.value
       if (f && t) {
-        const wk = isoWeek(f)
-        weekInfo.textContent = 'Week ' + wk + ' · ' + fmtTH(f) + ' — ' + fmtTH(t)
+        weekInfo.textContent = fmtTH(f) + ' — ' + fmtTH(t)
       } else {
         weekInfo.textContent = '—'
       }
@@ -607,19 +623,10 @@ export function reportPage(error?: string, _success?: string): string {
     // ─── Snap logic ──────────────────────────────────────────────────
 
     fromInput.addEventListener('change', () => {
-      if (!fromInput.value) return
-      fromInput.value = toMonday(fromInput.value)
-      toInput.value   = toSunday(fromInput.value)
       updateBadge()
     })
 
     toInput.addEventListener('change', () => {
-      if (!toInput.value) return
-      toInput.value = toSunday(toInput.value)
-      // if to < from, move from back to same week's Monday
-      if (fromInput.value && toInput.value < fromInput.value) {
-        fromInput.value = toMonday(toInput.value)
-      }
       updateBadge()
     })
 
@@ -680,6 +687,7 @@ export function reportPage(error?: string, _success?: string): string {
       walletInput.readOnly = true
       passInput.readOnly   = true
       authBtn.textContent  = 'Clear credentials'
+      document.getElementById('default-key-note').classList.add('hidden')
     }
 
     function showAuthError(msg) {
@@ -698,6 +706,7 @@ export function reportPage(error?: string, _success?: string): string {
       localStorage.removeItem('hfm_api_key')
       localStorage.removeItem('hfm_wallet_id')
       apiKeyField.value = ''
+      document.getElementById('default-key-note').classList.remove('hidden')
     }
 
     async function handleAuthenticate() {
@@ -756,17 +765,10 @@ export function reportPage(error?: string, _success?: string): string {
       }
     })()
 
-    // Populate api_key on form submit
-    document.getElementById('export-form').addEventListener('submit', (e) => {
+    // Populate api_key on form submit (allow empty → server uses DEFAULT_API_KEY)
+    document.getElementById('export-form').addEventListener('submit', () => {
       const key = localStorage.getItem('hfm_api_key')
-      if (!key) {
-        e.preventDefault()
-        exportBtn.disabled    = false
-        exportBtn.textContent = 'Export Excel'
-        showAuthError('กรุณา Authenticate ก่อน Export')
-        return
-      }
-      apiKeyField.value = key
+      if (key) apiKeyField.value = key
     })
   </script>
 </body>

@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { buildTradingCard } from "../src/builders/flex-message.builder";
+import { buildTradingCard, buildPaginationCard } from "../src/builders/flex-message.builder";
 import type { HFMPerformanceData } from "../src/types/hfm.types";
 
 const mockData: HFMPerformanceData = {
@@ -266,3 +266,59 @@ describe("buildTradingCard", () => {
     expect(texts.some((t) => t === "11111111")).toBe(true);
   });
 });
+
+describe("buildPaginationCard", () => {
+  test("middle page shows both Next and Previous buttons", () => {
+    const card = buildPaginationCard(
+      { kind: "wallet", id: 98241376 },
+      2,
+      3,
+      12
+    ) as any;
+
+    expect(card.type).toBe("bubble");
+    expect(card.size).toBe("mega");
+    expect(card.header.contents[0].text).toBe("Page Navigation");
+
+    const texts = extractTexts(card);
+    expect(texts.some((t) => t === "Page 2 of 3")).toBe(true);
+    expect(texts.some((t) => t === "Total 12 Accounts")).toBe(true);
+
+    const bodyBox = card.body.contents.find((c: any) => c.type === "box");
+    expect(bodyBox).toBeDefined();
+    expect(bodyBox.contents).toHaveLength(2);
+    expect(bodyBox.contents[0].action.label).toBe("Next Page ➔");
+    expect(bodyBox.contents[0].action.data).toBe("action=page&kind=wallet&id=98241376&page=3");
+    expect(bodyBox.contents[1].action.label).toBe("🠔 Previous Page");
+    expect(bodyBox.contents[1].action.data).toBe("action=page&kind=wallet&id=98241376&page=1");
+  });
+
+  test("first page only shows Next button", () => {
+    const card = buildPaginationCard(
+      { kind: "wallet", id: 98241376 },
+      1,
+      2,
+      7
+    ) as any;
+
+    const bodyBox = card.body.contents.find((c: any) => c.type === "box");
+    expect(bodyBox).toBeDefined();
+    expect(bodyBox.contents).toHaveLength(1);
+    expect(bodyBox.contents[0].action.label).toBe("Next Page ➔");
+  });
+
+  test("last page only shows Previous button", () => {
+    const card = buildPaginationCard(
+      { kind: "wallet", id: 98241376 },
+      2,
+      2,
+      7
+    ) as any;
+
+    const bodyBox = card.body.contents.find((c: any) => c.type === "box");
+    expect(bodyBox).toBeDefined();
+    expect(bodyBox.contents).toHaveLength(1);
+    expect(bodyBox.contents[0].action.label).toBe("🠔 Previous Page");
+  });
+});
+

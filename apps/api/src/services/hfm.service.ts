@@ -108,7 +108,7 @@ export async function fetchPerformance(
       return { ok: false, reason: "not_found" };
     }
 
-    const data: HFMPerformanceData[] = clients;
+    const data: HFMPerformanceData[] = clients.filter((c) => !c.archived);
     if (data.length === 0 || data[0]!.client_id == null) {
       return { ok: false, reason: "not_found" };
     }

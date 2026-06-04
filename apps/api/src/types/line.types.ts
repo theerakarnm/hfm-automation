@@ -40,3 +40,26 @@ export function isTextMessageEvent(
     typeof event.source.userId === "string"
   );
 }
+
+export interface PostbackEvent extends WebhookEvent {
+  type: "postback";
+  replyToken: string;
+  postback: {
+    data: string;
+    params?: Record<string, string>;
+  };
+  source: { type: "user"; userId: string };
+}
+
+export function isPostbackEvent(
+  event: WebhookEvent
+): event is PostbackEvent {
+  return (
+    event.type === "postback" &&
+    event.postback != null &&
+    typeof event.postback.data === "string" &&
+    event.source.type === "user" &&
+    typeof event.source.userId === "string"
+  );
+}
+

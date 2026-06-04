@@ -3,14 +3,16 @@ import { bodyLimit } from "hono/body-limit";
 import { verifyLineSignature } from "../utils/signature";
 import { fetchPerformance, resolveLinkedAccounts, checkConditions, parsePerformanceLookup } from "../services/hfm.service";
 import { replyText, replyFlex, replyTexts, showLoading } from "../services/line.service";
-import { buildTradingCard } from "../builders/flex-message.builder";
+import { buildTradingCard, buildPaginationCard } from "../builders/flex-message.builder";
 import { generateReportForUser, type ReportPeriod } from "../jobs/daily-client-report";
-import { isTextMessageEvent } from "../types/line.types";
+import { isTextMessageEvent, isPostbackEvent } from "../types/line.types";
 import { isWhitelisted } from "../utils/whitelist";
 import { logError } from "../utils/logger";
 import { getDb } from "../db/connection";
 import { recordLineUserRequest } from "../repositories/line-user.repository";
-import type { WebhookBody, TextMessageEvent } from "../types/line.types";
+import type { WebhookBody, TextMessageEvent, PostbackEvent } from "../types/line.types";
+import type { PerformanceLookup } from "../types/hfm.types";
+
 
 const MAX_WEBHOOK_EVENTS = 20;
 
@@ -55,6 +57,8 @@ webhook.post(
       }
       if (isTextMessageEvent(event)) {
         processTextEvent(event).catch((err) => logError("webhook", err));
+      } else if (isPostbackEvent(event)) {
+        processPostbackEvent(event).catch((err) => logError("webhook", err));
       }
     }
 
@@ -119,6 +123,57 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
     return;
   }
 
+  await handleLookupAndReply(replyToken, userId, lookup, 1);
+}
+
+function parseQueryString(query: string): Record<string, string> {
+  const params: Record<string, string> = {};
+  const pairs = query.split("&");
+  for (const pair of pairs) {
+    const [key, value] = pair.split("=");
+    if (key) {
+      params[decodeURIComponent(key)] = decodeURIComponent(value ?? "");
+    }
+  }
+  return params;
+}
+
+async function processPostbackEvent(event: PostbackEvent): Promise<void> {
+  const userId = event.source.userId;
+  const replyToken = event.replyToken;
+  if (!userId) return;
+
+  if (!isWhitelisted(userId)) {
+    await replyText(
+      replyToken,
+      "\u274C \u0E02\u0E2D\u0E2D\u0E20\u0E31\u0E22 \u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E1A\u0E2D\u0E17\u0E19\u0E35\u0E49 \u0E2B\u0E32\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D Support"
+    );
+    return;
+  }
+
+  const queryParams = parseQueryString(event.postback.data);
+  if (queryParams.action === "page") {
+    const kind = queryParams.kind as "wallet" | "account";
+    const id = Number(queryParams.id);
+    const page = Number(queryParams.page ?? 1);
+
+    if (kind && !Number.isNaN(id)) {
+      const lookup: PerformanceLookup = {
+        kind,
+        id,
+        label: kind === "wallet" ? `WL-${id}` : String(id),
+      };
+      await handleLookupAndReply(replyToken, userId, lookup, page);
+    }
+  }
+}
+
+async function handleLookupAndReply(
+  replyToken: string,
+  userId: string,
+  lookup: PerformanceLookup,
+  page: number = 1
+): Promise<void> {
   showLoading(userId).catch((err) => {
     logError("line-loading", err);
   });
@@ -128,11 +183,27 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
     : await resolveLinkedAccounts(lookup.id);
 
   if (result.ok) {
-    const clientsToShow = result.data.slice(0, 10);
+    const totalItems = result.data.length;
+    const itemsPerPage = 5;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+
+    let activePage = page;
+    if (activePage < 1) activePage = 1;
+    if (activePage > totalPages) activePage = totalPages;
+
+    const startIdx = (activePage - 1) * itemsPerPage;
+    const endIdx = activePage * itemsPerPage;
+    const clientsToShow = result.data.slice(startIdx, endIdx);
+
     const bubbles = clientsToShow.map((clientData) => {
       const conditions = checkConditions(clientData);
       return buildTradingCard(clientData, conditions);
     });
+
+    if (totalPages > 1) {
+      const pagCard = buildPaginationCard(lookup, activePage, totalPages, totalItems);
+      bubbles.push(pagCard);
+    }
 
     const walletId = result.data[0]!.client_id;
     const altLabel = `Wallet ${walletId}`;
@@ -141,7 +212,7 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
     } else {
       await replyFlex(replyToken, `Trading Summary \u2014 ${altLabel}`, {
         type: "carousel",
-        contents: bubbles.slice(0, 10),
+        contents: bubbles,
       });
     }
     return;

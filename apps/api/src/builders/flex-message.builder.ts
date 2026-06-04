@@ -325,3 +325,116 @@ export function buildTradingCard(
     },
   };
 }
+
+export function buildPaginationCard(
+  lookup: { kind: "wallet" | "account"; id: number },
+  currentPage: number,
+  totalPages: number,
+  totalItems: number
+): object {
+  const contents: any[] = [
+    {
+      type: "text",
+      text: `Page ${currentPage} of ${totalPages}`,
+      weight: "bold",
+      size: "md",
+      align: "center",
+      color: colors.text,
+    },
+    {
+      type: "text",
+      text: `Total ${totalItems} Accounts`,
+      size: "xs",
+      align: "center",
+      color: colors.muted,
+      margin: "xs",
+    },
+  ];
+
+  const buttons: any[] = [];
+
+  if (currentPage < totalPages) {
+    buttons.push({
+      type: "button",
+      action: {
+        type: "postback",
+        label: "Next Page ➔",
+        data: `action=page&kind=${lookup.kind}&id=${lookup.id}&page=${currentPage + 1}`,
+      },
+      style: "primary",
+      color: colors.green,
+      height: "sm",
+      margin: "md",
+    });
+  }
+
+  if (currentPage > 1) {
+    buttons.push({
+      type: "button",
+      action: {
+        type: "postback",
+        label: "🠔 Previous Page",
+        data: `action=page&kind=${lookup.kind}&id=${lookup.id}&page=${currentPage - 1}`,
+      },
+      style: "secondary",
+      height: "sm",
+      margin: "sm",
+    });
+  }
+
+  if (buttons.length > 0) {
+    contents.push({
+      type: "box",
+      layout: "vertical",
+      spacing: "sm",
+      margin: "lg",
+      contents: buttons,
+    });
+  }
+
+  return {
+    type: "bubble",
+    size: "mega",
+    styles: {
+      header: { backgroundColor: colors.green },
+      footer: { backgroundColor: colors.footer },
+    },
+    header: {
+      type: "box",
+      layout: "vertical",
+      paddingAll: "16px",
+      contents: [
+        {
+          type: "text",
+          text: "Page Navigation",
+          color: colors.white,
+          weight: "bold",
+          size: "md",
+          align: "center",
+        },
+      ],
+    },
+    body: {
+      type: "box",
+      layout: "vertical",
+      paddingAll: "20px",
+      contents,
+    },
+    footer: {
+      type: "box",
+      layout: "vertical",
+      paddingAll: "12px",
+      contents: [
+        {
+          type: "text",
+          text: "Select a page to view more accounts",
+          size: "xs",
+          color: colors.muted,
+          align: "center",
+          wrap: true,
+        },
+      ],
+    },
+  };
+}
+

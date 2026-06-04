@@ -413,6 +413,127 @@ describe("webhook", () => {
     expect(contents.contents).toHaveLength(2);
   });
 
+  test("pagination splits clients in chunks of 5 and appends pagination card, postback navigates correctly", async () => {
+    const { app } = await importWebhook();
+
+    const mockClients = Array.from({ length: 7 }, (_, i) => ({
+      client_id: 98241376,
+      account_id: 1000000 + i,
+      activity_status: "active",
+      trades: 10,
+      volume: 1.5,
+      account_type: "Standard",
+      balance: 5000,
+      account_currency: "USD",
+      equity: 5100,
+      archived: false,
+      subaffiliate: 98241376,
+      account_regdate: "2024-06-01T00:00:00Z",
+      status: "approved",
+    }));
+
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      fetchCalls.push({
+        url,
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+
+      if (url.endsWith("/v2/bot/chat/loading/start")) {
+        return new Response("{}", { status: 202 });
+      }
+
+      if (url.includes("/api/performance/client-performance")) {
+        return new Response(
+          JSON.stringify({
+            clients: mockClients,
+            totals: {},
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const bodyText = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "message",
+          message: { type: "text", id: "msg_page1", text: "98241376" },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "reply_page1",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ],
+    });
+
+    const sigText = computeSig(bodyText, SECRET);
+    const resText = await app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-line-signature": sigText,
+        },
+        body: bodyText,
+      })
+    );
+    expect(resText.status).toBe(200);
+
+    await waitFor(() => fetchCalls.length >= 3);
+    const reply1 = JSON.parse(fetchCalls[2]?.body ?? "{}");
+    expect(reply1.messages[0].contents.type).toBe("carousel");
+    expect(reply1.messages[0].contents.contents).toHaveLength(6);
+    const lastCard1 = reply1.messages[0].contents.contents[5];
+    expect(lastCard1.header.contents[0].text).toBe("Page Navigation");
+    expect(lastCard1.body.contents.find((c: any) => c.type === "box").contents[0].action.data).toContain("page=2");
+
+    fetchCalls.length = 0;
+
+    const bodyPostback = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "postback",
+          postback: { data: "action=page&kind=wallet&id=98241376&page=2" },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "reply_page2",
+          timestamp: 1716000000001,
+          mode: "active",
+        },
+      ],
+    });
+
+    const sigPostback = computeSig(bodyPostback, SECRET);
+    const resPostback = await app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-line-signature": sigPostback,
+        },
+        body: bodyPostback,
+      })
+    );
+    expect(resPostback.status).toBe(200);
+
+    await waitFor(() => fetchCalls.length >= 3);
+    const reply2 = JSON.parse(fetchCalls[2]?.body ?? "{}");
+    expect(reply2.messages[0].contents.type).toBe("carousel");
+    expect(reply2.messages[0].contents.contents).toHaveLength(3);
+    const lastCard2 = reply2.messages[0].contents.contents[2];
+    expect(lastCard2.header.contents[0].text).toBe("Page Navigation");
+    expect(lastCard2.body.contents.find((c: any) => c.type === "box").contents[0].action.data).toContain("page=1");
+  });
+
+
   test("invalid input returns format error message", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({

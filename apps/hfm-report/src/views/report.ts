@@ -538,6 +538,7 @@ export function reportPage(error?: string, _success?: string): string {
                   <option value="wallet_id">Wallet ID</option>
                   <option value="account_id">Account ID</option>
                   <option value="account_type">Account Type</option>
+                  <option value="deposit">Deposit</option>
                   <option value="trading_lots">Trading Lots</option>
                 </select>
               </div>
@@ -552,6 +553,27 @@ export function reportPage(error?: string, _success?: string): string {
           </div>
         </div>
 
+        <!-- Min Deposit Filter -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-header-icon">💰</div>
+            <span class="card-header-title">Deposit Filter</span>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label for="min_deposit">Minimum Deposit</label>
+              <input
+                id="min_deposit"
+                type="number"
+                name="min_deposit"
+                placeholder="e.g. 200 (leave empty for all)"
+                min="0"
+                step="any"
+              >
+            </div>
+          </div>
+        </div>
+
         <!-- Export -->
         <button class="btn-export" type="submit" id="export-btn">
           ↓ Export to Excel (.xlsx)
@@ -560,7 +582,7 @@ export function reportPage(error?: string, _success?: string): string {
       </form>
 
       <div class="info-row">
-        <span>Columns: Wallet ID, Account ID, Account Type, Trading Lots</span>
+        <span>Columns: Wallet ID, Account ID, Account Type, Deposit, Trading Lots</span>
         <span class="info-dot">·</span>
         <span>Max session 8 hrs</span>
       </div>

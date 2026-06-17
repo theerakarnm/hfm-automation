@@ -3,7 +3,7 @@ import type { DrizzleDb } from "../db/connection";
 import { getDb } from "../db/connection";
 import { clientSnapshots, dailyReportNotifications } from "../db/schema";
 import type { HFMClientRow, HFMClientsResult } from "../types/hfm.types";
-import { countByDate, insertMany, purgeOlderThan } from "../repositories/snapshot.repository";
+import { countByDate, insertMany, purgeOlderThan, getLatestSnapshotDateBefore } from "../repositories/snapshot.repository";
 import {
   insertRequestSnapshot,
   getLatestRequestSnapshotBefore,
@@ -486,23 +486,42 @@ export async function runDailyClientReport(options: RunDailyClientReportOptions 
   }
 
   const yesterday = getPreviousIctDateString(now);
+  let baselineDate = yesterday;
+  let baselineLabel = "Yesterday";
+
   const yesterdayExists = (await countByDate(db, yesterday)) > 0;
+  if (!yesterdayExists) {
+    const fallbackDate = await getLatestSnapshotDateBefore(db, today);
+    if (fallbackDate) {
+      baselineDate = fallbackDate;
+      baselineLabel = `Baseline (${formatShortDate(fallbackDate)})`;
+      console.warn(
+        `[cron] daily-client-report: no yesterday snapshot for ${yesterday}, using fallback ${fallbackDate}`,
+      );
+    } else {
+      console.warn(
+        `[cron] daily-client-report: no baseline snapshot found before ${today}, skipping notification`,
+      );
+      await purgeOlderThan(db, 90, today);
+      return;
+    }
+  }
 
   const uids = await getActiveUids(db);
   if (uids.length === 0) {
     console.warn("[cron] daily-client-report has no active LINE recipients");
-  } else if (yesterdayExists && snapshotOk) {
+  } else if (snapshotOk) {
     const { label: targetLabel } = getTargetWallet();
     const todayWalletIds = await getWalletIdsFromNightlySnapshot(db, today);
-    const yesterdayWalletIds = await getWalletIdsFromNightlySnapshot(db, yesterday);
+    const baselineWalletIds = await getWalletIdsFromNightlySnapshot(db, baselineDate);
     const todayCount = todayWalletIds.size;
-    const yesterdayCount = yesterdayWalletIds.size;
-    const missing = findMissingFromSets(yesterdayWalletIds, todayWalletIds);
-    const newW = findNewFromSets(yesterdayWalletIds, todayWalletIds);
+    const baselineCount = baselineWalletIds.size;
+    const missing = findMissingFromSets(baselineWalletIds, todayWalletIds);
+    const newW = findNewFromSets(baselineWalletIds, todayWalletIds);
     const message = buildDayReportMessage({
-      baselineLabel: "Yesterday",
-      baselineDate: yesterday,
-      baselineCount: yesterdayCount,
+      baselineLabel,
+      baselineDate,
+      baselineCount,
       currentCount: todayCount,
       targetWalletLabel: targetLabel,
       missingIds: missing,
@@ -511,7 +530,7 @@ export async function runDailyClientReport(options: RunDailyClientReportOptions 
     await pushAll(uids, message);
     await markDailyReportNotificationSent(db, today);
   } else {
-    console.warn(`[cron] daily-client-report: no yesterday snapshot for ${yesterday}, skipping notification`);
+    console.warn(`[cron] daily-client-report: today snapshot failed, skipping notification`);
   }
 
   await purgeOlderThan(db, 90, today);

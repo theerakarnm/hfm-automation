@@ -1,4 +1,4 @@
-import { eq, lt, sql, count } from "drizzle-orm";
+import { eq, lt, sql, count, desc } from "drizzle-orm";
 import type { DrizzleDb } from "../db/connection";
 import { clientSnapshots } from "../db/schema";
 import type { HFMPerformanceData } from "../types/hfm.types";
@@ -35,6 +35,19 @@ export async function insertMany(
         .onConflictDoNothing();
     }
   }
+}
+
+export async function getLatestSnapshotDateBefore(
+  db: DrizzleDb,
+  beforeDate: string,
+): Promise<string | null> {
+  const rows = await db
+    .selectDistinct({ date: clientSnapshots.snapshotDate })
+    .from(clientSnapshots)
+    .where(lt(clientSnapshots.snapshotDate, beforeDate))
+    .orderBy(desc(clientSnapshots.snapshotDate))
+    .limit(1);
+  return rows[0]?.date ?? null;
 }
 
 export async function purgeOlderThan(

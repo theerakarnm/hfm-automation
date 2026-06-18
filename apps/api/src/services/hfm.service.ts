@@ -12,6 +12,24 @@ import type {
 
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 
+// Liveness probe for the HFM upstream API. Pings the wallet/balance endpoint
+// and reports only up/down — used by the /internal/health route and the
+// hfm-healthcheck cron. Any non-2xx response, timeout, or thrown error => down.
+export async function checkHfmApiHealthy(): Promise<boolean> {
+  try {
+    const baseUrl =
+      process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
+    const res = await fetch(`${baseUrl}/api/wallet/balance`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
+      signal: AbortSignal.timeout(5_000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function extractWalletNumber(walletId: string): number | null {
   const numericPart = walletId.replace(/^WL-/i, "");
   const num = Number(numericPart);

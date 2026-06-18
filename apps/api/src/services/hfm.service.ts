@@ -184,7 +184,7 @@ export function normalizeClientRow(row: HFMClientRow): HFMPerformanceData {
   };
 }
 
-export async function fetchClients(timeoutMs = 60_000): Promise<HFMClientsResult> {
+export async function fetchClients(timeoutMs = 120_000): Promise<HFMClientsResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -201,7 +201,10 @@ export async function fetchClients(timeoutMs = 60_000): Promise<HFMClientsResult
     }
 
     const body = await readJsonResponse<{ data: HFMClientRow[] }>(res);
-    if (!Array.isArray(body.data)) {
+    // HFM /api/clients/ intermittently returns 200 with an empty `data: []`.
+    // Treat that as a failure so the caller retries instead of saving an empty snapshot.
+    if (!Array.isArray(body.data) || body.data.length === 0) {
+      logError("hfm-service", "fetchClients returned empty client list");
       return { ok: false, reason: "server_error" };
     }
 

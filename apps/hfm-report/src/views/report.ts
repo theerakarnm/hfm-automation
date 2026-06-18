@@ -60,6 +60,33 @@ export function reportPage(error?: string, _success?: string): string {
       flex-shrink: 0;
     }
 
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nav-tabs { display: flex; gap: 4px; }
+    .nav-tab {
+      font-family: var(--font);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 5px;
+      padding: 6px 12px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .nav-tab:hover { color: var(--text); border-color: var(--border); }
+    .nav-tab.active {
+      color: var(--accent);
+      background: var(--accent-lo);
+      border-color: rgba(240, 165, 0, 0.35);
+    }
+
     .topbar-left {
       display: flex;
       align-items: center;
@@ -418,9 +445,15 @@ export function reportPage(error?: string, _success?: string): string {
       <span class="topbar-divider">/</span>
       <span class="topbar-page">Client Performance Export</span>
     </div>
-    <form method="POST" action="/logout">
-      <button class="btn-logout" type="submit">Sign Out</button>
-    </form>
+    <div class="topbar-right">
+      <nav class="nav-tabs">
+        <a class="nav-tab active" href="/report">Performance Export</a>
+        <a class="nav-tab" href="/wallet-comparison">Wallet Comparison</a>
+      </nav>
+      <form method="POST" action="/logout">
+        <button class="btn-logout" type="submit">Sign Out</button>
+      </form>
+    </div>
   </header>
 
   <main class="main">

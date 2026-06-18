@@ -2,6 +2,14 @@ import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { loginPage } from "./views/login";
 import { reportPage } from "./views/report";
+import { walletComparisonPage, type WalletComparisonResult } from "./views/wallet-comparison";
+import { getDb } from "./db/connection";
+import {
+  countByDate,
+  getWalletIdsByDate,
+  getNearestSnapshotDateBefore,
+} from "./repositories/snapshot.repository";
+import { compareWalletSets } from "./lib/wallet-compare";
 import * as XLSX from "xlsx";
 import { ContentfulStatusCode } from "hono/utils/http-status";
 
@@ -156,6 +164,131 @@ app.post("/api/authenticate", async (c) => {
 
 /** Report page (protected) */
 app.get("/report", guard, (c) => c.html(reportPage(c.req.query("error"))));
+
+/** Wallet comparison page (protected) */
+app.get("/wallet-comparison", guard, (c) =>
+  c.html(walletComparisonPage({ error: c.req.query("error") })),
+);
+
+/** Wallet comparison handler (protected) */
+app.post("/wallet-comparison", guard, async (c) => {
+  const body = await c.req.parseBody<{ from_date: string; to_date: string }>();
+  const { from_date, to_date } = body;
+
+  if (!from_date || !to_date) {
+    return c.html(walletComparisonPage({ error: "กรุณาเลือกช่วงวันที่" }));
+  }
+  if (from_date > to_date) {
+    return c.html(
+      walletComparisonPage({
+        error: "วันที่เริ่มต้นต้องมาก่อนวันที่สิ้นสุด",
+        fromDefault: from_date,
+        toDefault: to_date,
+      }),
+    );
+  }
+
+  try {
+    const db = getDb();
+
+    let fromDate = from_date;
+    let fromSnapped = false;
+    if ((await countByDate(db, from_date)) === 0) {
+      const nearest = await getNearestSnapshotDateBefore(db, from_date);
+      if (!nearest) {
+        return c.html(
+          walletComparisonPage({
+            error: `ไม่พบ snapshot ก่อนหรือในวันที่ ${from_date}`,
+            fromDefault: from_date,
+            toDefault: to_date,
+          }),
+        );
+      }
+      fromDate = nearest;
+      fromSnapped = true;
+    }
+
+    let toDate = to_date;
+    let toSnapped = false;
+    if ((await countByDate(db, to_date)) === 0) {
+      const nearest = await getNearestSnapshotDateBefore(db, to_date);
+      if (!nearest) {
+        return c.html(
+          walletComparisonPage({
+            error: `ไม่พบ snapshot ก่อนหรือในวันที่ ${to_date}`,
+            fromDefault: from_date,
+            toDefault: to_date,
+          }),
+        );
+      }
+      toDate = nearest;
+      toSnapped = true;
+    }
+
+    if (fromDate > toDate) {
+      return c.html(
+        walletComparisonPage({
+          error: "หลัง snap วันที่แล้ว from อยู่หลัง to กรุณาเลือกช่วงใหม่",
+          fromDefault: from_date,
+          toDefault: to_date,
+        }),
+      );
+    }
+
+    const fromIds = await getWalletIdsByDate(db, fromDate);
+    const toIds = await getWalletIdsByDate(db, toDate);
+
+    if (fromIds.size === 0 || toIds.size === 0) {
+      return c.html(
+        walletComparisonPage({
+          error: `snapshot ว่าง (from=${fromIds.size}, to=${toIds.size})`,
+          fromDefault: from_date,
+          toDefault: to_date,
+        }),
+      );
+    }
+
+    const result = compareWalletSets({
+      fromLabel: "From",
+      fromDate,
+      fromCount: fromIds.size,
+      toLabel: "To",
+      toDate,
+      toCount: toIds.size,
+      fromIds,
+      toIds,
+    });
+
+    const payload: WalletComparisonResult = {
+      result,
+      fromRequested: from_date,
+      toRequested: to_date,
+      fromSnapped,
+      toSnapped,
+    };
+
+    console.log(
+      `[wallet-compare] from=${fromDate}${fromSnapped ? "(snapped)" : ""} to=${toDate}${toSnapped ? "(snapped)" : ""} fromCount=${fromIds.size} toCount=${toIds.size} missing=${result.missingIds.length} new=${result.newIds.length}`,
+    );
+
+    return c.html(
+      walletComparisonPage({
+        result: payload,
+        fromDefault: from_date,
+        toDefault: to_date,
+      }),
+    );
+  } catch (err) {
+    console.error("[wallet-compare] error:", err);
+    return c.html(
+      walletComparisonPage({
+        error: "เกิดข้อผิดพลาดในการดึง snapshot — ตรวจ DATABASE_URL และการเชื่อมต่อ Postgres",
+        fromDefault: from_date,
+        toDefault: to_date,
+      }),
+    );
+  }
+});
 
 /** Export handler (protected) */
 app.post("/report/export", guard, async (c) => {

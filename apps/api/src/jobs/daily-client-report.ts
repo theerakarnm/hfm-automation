@@ -252,20 +252,28 @@ async function ensureTodaySnapshot(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     const result = await fetchCurrent();
+    let reason: string;
     if (result.ok) {
       const normalized = dedupeByCompositeKey(result.data).map(normalizeClientRow);
-      await insertMany(db, today, normalized);
-      return true;
+      // Never mark the day as done on an empty fetch — return false so the
+      // notification stays unmarked and a later run can retry this date.
+      if (normalized.length > 0) {
+        await insertMany(db, today, normalized);
+        return true;
+      }
+      reason = "empty client list";
+    } else {
+      reason = result.reason;
     }
     if (attempt < maxRetries) {
       const delayMs = attempt * 5_000;
       console.warn(
-        `[cron] ensureTodaySnapshot attempt ${attempt}/${maxRetries} failed (${result.reason}), retrying in ${delayMs / 1000}s...`,
+        `[cron] ensureTodaySnapshot attempt ${attempt}/${maxRetries} failed (${reason}), retrying in ${delayMs / 1000}s...`,
       );
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     } else {
       console.error(
-        `[cron] ensureTodaySnapshot failed after ${maxRetries} attempts: ${result.reason}`,
+        `[cron] ensureTodaySnapshot failed after ${maxRetries} attempts: ${reason}`,
       );
     }
   }

@@ -1,5 +1,5 @@
 import { test, expect, describe, afterEach } from "bun:test";
-import { fetchPerformance, extractWalletNumber, checkConditions, fetchAllClients, fetchClientsByRange, parsePerformanceLookup, resolveLinkedAccounts } from "../src/services/hfm.service";
+import { fetchPerformance, extractWalletNumber, checkConditions, fetchClients, fetchAllClients, fetchClientsByRange, parsePerformanceLookup, resolveLinkedAccounts } from "../src/services/hfm.service";
 import type { HFMClientsPerformanceResponse } from "../src/types/hfm.types";
 
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -451,5 +451,36 @@ describe("resolveLinkedAccounts", () => {
       expect(result.data).toHaveLength(1);
       expect(result.data[0]!.account_id).toBe(111);
     }
+  });
+});
+
+describe("fetchClients", () => {
+  afterEach(() => {
+    globalThis.fetch = ORIGINAL_FETCH;
+  });
+
+  test("empty data array returns failure (prevents empty snapshot)", async () => {
+    globalThis.fetch = mockFetch(200, { data: [] });
+    const result = await fetchClients(5_000);
+    expect(result.ok).toBe(false);
+  });
+
+  test("malformed body returns failure", async () => {
+    globalThis.fetch = mockFetch(200, { not_data: true });
+    const result = await fetchClients(5_000);
+    expect(result.ok).toBe(false);
+  });
+
+  test("non-200 status returns failure", async () => {
+    globalThis.fetch = mockFetch(500, { data: [{ id: 1, wallet: 111 }] });
+    const result = await fetchClients(5_000);
+    expect(result.ok).toBe(false);
+  });
+
+  test("non-empty data returns ok with rows", async () => {
+    globalThis.fetch = mockFetch(200, { data: [{ id: 1, wallet: 111 }] });
+    const result = await fetchClients(5_000);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data).toHaveLength(1);
   });
 });

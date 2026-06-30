@@ -347,6 +347,8 @@ app.post("/report/export", guard, async (c) => {
     // ── Step 2: Build XLSX ──
     const rows = clients.map((cl) => ({
       "Wallet ID": cl.client_id,
+      Name: cl.full_name ?? "",
+      Email: cl.email ?? "",
       "Account ID": cl.account_id,
       "Account Type": cl.account_type,
       Deposit: cl.deposits ?? 0,
@@ -381,6 +383,8 @@ app.post("/report/export", guard, async (c) => {
     const ws = XLSX.utils.json_to_sheet(filtered);
     ws["!cols"] = [
       { wch: 14 },
+      { wch: 28 },
+      { wch: 28 },
       { wch: 14 },
       { wch: 18 },
       { wch: 16 },

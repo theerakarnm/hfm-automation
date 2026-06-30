@@ -24,11 +24,15 @@ export async function initDb(db?: DrizzleDb | PostgresJsDatabase<Record<string, 
       id              SERIAL PRIMARY KEY,
       snapshot_date   TEXT NOT NULL,
       client_id       INTEGER NOT NULL,
+      name            TEXT,
+      email           TEXT,
       created_at      TIMESTAMP NOT NULL DEFAULT now(),
       UNIQUE(snapshot_date, client_id)
     );
     CREATE INDEX IF NOT EXISTS idx_snapshot_date
       ON client_snapshots(snapshot_date);
+    ALTER TABLE client_snapshots ADD COLUMN IF NOT EXISTS name TEXT;
+    ALTER TABLE client_snapshots ADD COLUMN IF NOT EXISTS email TEXT;
 
     CREATE TABLE IF NOT EXISTS notify_recipients (
       id         SERIAL PRIMARY KEY,

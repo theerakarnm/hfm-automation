@@ -25,6 +25,8 @@ export async function createTestDb() {
       id              SERIAL PRIMARY KEY,
       snapshot_date   TEXT NOT NULL,
       client_id       INTEGER NOT NULL,
+      name            TEXT,
+      email           TEXT,
       created_at      TIMESTAMP NOT NULL DEFAULT now(),
       UNIQUE(snapshot_date, client_id)
     );

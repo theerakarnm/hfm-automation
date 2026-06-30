@@ -22,11 +22,21 @@ export async function insertMany(
 
   for (let i = 0; i < clients.length; i += CHUNK_SIZE) {
     const chunk = clients.slice(i, i + CHUNK_SIZE);
-    const values: { snapshotDate: string; clientId: number }[] = [];
+    const values: {
+      snapshotDate: string;
+      clientId: number;
+      name: string | null;
+      email: string | null;
+    }[] = [];
     for (const client of chunk) {
       if (seen.has(client.client_id)) continue;
       seen.add(client.client_id);
-      values.push({ snapshotDate: date, clientId: client.client_id });
+      values.push({
+        snapshotDate: date,
+        clientId: client.client_id,
+        name: client.full_name ?? null,
+        email: client.email ?? null,
+      });
     }
     if (values.length > 0) {
       await db

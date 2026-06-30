@@ -1,9 +1,10 @@
 import { expect, test, beforeEach, afterEach } from "bun:test";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { sql } from "drizzle-orm";
+import { sql, and, eq } from "drizzle-orm";
 import { initDb } from "../src/db/connection";
 import { countByDate, insertMany, purgeOlderThan } from "../src/repositories/snapshot.repository";
+import { clientSnapshots } from "../src/db/schema";
 import type { HFMPerformanceData } from "../src/types/hfm.types";
 import type { DrizzleDb } from "../src/db/connection";
 
@@ -46,6 +47,7 @@ async function clearTables() {
 beforeEach(async () => {
   client = postgres(TEST_DATABASE_URL, { max: 1 });
   db = drizzle(client);
+  await initDb(db);
   await clearTables();
 });
 
@@ -56,6 +58,39 @@ afterEach(async () => {
 test("insertMany stores wallet IDs and deduplicates", async () => {
   await insertMany(db, "2026-04-26", [clientA, clientA]);
   expect(await countByDate(db, "2026-04-26")).toBe(1);
+});
+
+test("insertMany persists customer name and email", async () => {
+  const withEmail: HFMPerformanceData = { ...clientA, email: "somchai@example.com" };
+  await insertMany(db, "2026-04-26", [withEmail]);
+
+  const rows = await db
+    .select({ name: clientSnapshots.name, email: clientSnapshots.email })
+    .from(clientSnapshots)
+    .where(
+      and(
+        eq(clientSnapshots.snapshotDate, "2026-04-26"),
+        eq(clientSnapshots.clientId, withEmail.client_id),
+      ),
+    );
+
+  expect(rows[0]).toEqual({ name: "Somchai Jaidee", email: "somchai@example.com" });
+});
+
+test("insertMany stores null email when HFM provides none", async () => {
+  await insertMany(db, "2026-04-26", [clientA]);
+
+  const rows = await db
+    .select({ name: clientSnapshots.name, email: clientSnapshots.email })
+    .from(clientSnapshots)
+    .where(
+      and(
+        eq(clientSnapshots.snapshotDate, "2026-04-26"),
+        eq(clientSnapshots.clientId, clientA.client_id),
+      ),
+    );
+
+  expect(rows[0]).toEqual({ name: "Somchai Jaidee", email: null });
 });
 
 test("insertMany is idempotent for same date and client_id", async () => {

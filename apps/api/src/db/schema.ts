@@ -15,6 +15,8 @@ export const clientSnapshots = pgTable(
     id: serial("id").primaryKey(),
     snapshotDate: text("snapshot_date").notNull(),
     clientId: integer("client_id").notNull(),
+    name: text("name"),
+    email: text("email"),
     createdAt: timestamp("created_at", { mode: "string" })
       .notNull()
       .default(sql`now()`),

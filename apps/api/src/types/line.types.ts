@@ -19,6 +19,10 @@ export interface WebhookEvent {
     id: string;
     text?: string;
   };
+  postback?: {
+    data: string;
+    params?: Record<string, string>;
+  };
 }
 
 export interface TextMessageEvent extends WebhookEvent {

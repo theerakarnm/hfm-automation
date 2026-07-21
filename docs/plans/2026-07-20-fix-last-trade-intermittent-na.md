@@ -177,7 +177,7 @@ This fix is verified: adding the optional field makes `bunx tsc --noEmit` exit 0
 Stage only `line.types.ts` for this commit.
 
 **Steps:**
-- [ ] Step 1: Add an optional `postback` field to `WebhookEvent`, directly after the `message?` field, mirroring the shape already declared on `PostbackEvent`:
+- [x] Step 1: Add an optional `postback` field to `WebhookEvent`, directly after the `message?` field, mirroring the shape already declared on `PostbackEvent`:
       ```ts
       message?: {
         type: string;
@@ -189,8 +189,8 @@ Stage only `line.types.ts` for this commit.
         params?: Record<string, string>;
       };
       ```
-- [ ] Step 2: Verify - Run: `bun run typecheck` - Expected: 0 errors.
-- [ ] Step 3: Commit - `git add apps/api/src/types/line.types.ts && git commit -m "fix: declare optional postback on WebhookEvent base type"`
+- [x] Step 2: Verify - Run: `bun run typecheck` - Expected: 0 errors.
+- [x] Step 3: Commit - `git add apps/api/src/types/line.types.ts && git commit -m "fix: declare optional postback on WebhookEvent base type"`
 
 ---
 

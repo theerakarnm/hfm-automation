@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { verifyLineSignature } from "../utils/signature";
-import { fetchPerformance, resolveLinkedAccounts, checkConditions, parsePerformanceLookup } from "../services/hfm.service";
+import { fetchPerformance, resolveLinkedAccounts, checkConditions, parsePerformanceLookup, fetchClients } from "../services/hfm.service";
 import { replyText, replyFlex, replyTexts, showLoading } from "../services/line.service";
 import { buildTradingCard, buildPaginationCard } from "../builders/flex-message.builder";
 import { generateReportForUser, type ReportPeriod } from "../jobs/daily-client-report";
@@ -195,9 +195,18 @@ async function handleLookupAndReply(
     const endIdx = activePage * itemsPerPage;
     const clientsToShow = result.data.slice(startIdx, endIdx);
 
+    const clientsResult = await fetchClients();
+    const lastTradeByAccountId = clientsResult.ok
+      ? new Map(clientsResult.data.map((row) => [row.id, row.last_trade]))
+      : new Map<number, string | null>();
+
     const bubbles = clientsToShow.map((clientData) => {
       const conditions = checkConditions(clientData);
-      return buildTradingCard(clientData, conditions);
+      const enrichedClientData = {
+        ...clientData,
+        last_trade: lastTradeByAccountId.get(clientData.account_id) ?? null,
+      };
+      return buildTradingCard(enrichedClientData, conditions);
     });
 
     if (totalPages > 1) {

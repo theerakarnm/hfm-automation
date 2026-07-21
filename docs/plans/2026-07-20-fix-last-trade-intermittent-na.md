@@ -204,13 +204,14 @@ This commit captures only the already-present feature code so the later fix hist
 If the user opted to squash or amend instead (see Preflight caveat), follow that instead of creating a new commit.
 
 **Steps:**
-- [ ] Step 1: Confirm the three files above are the only ones MODIFIED (staging happens in Step 4) and that they contain the feature code, not fix code: `git status` and `git diff --stat`.
+- [x] Step 1: Confirm the three files above are the only ones MODIFIED (staging happens in Step 4) and that they contain the feature code, not fix code: `git status` and `git diff --stat`.
       Untracked entries such as `docs/plans/` are expected and stay untracked.
-- [ ] Step 2: Verify - Run: `bun run typecheck` - Expected: 0 errors.
-- [ ] Step 3: Note the pre-fix `bun test` baseline for later comparison: `bun test` - Expected: record pass/fail counts; do not fix failures here.
+- [x] Step 2: Verify - Run: `bun run typecheck` - Expected: 0 errors.
+- [x] Step 3: Note the pre-fix `bun test` baseline for later comparison: `bun test` - Expected: record pass/fail counts; do not fix failures here.
       Two known failure groups may appear: (a) if `hfm_test` Postgres is down per Preflight, every DB-backed suite fails with postgres errors; (b) if the DB is UP, exactly 3 lookup-path tests in `tests/webhook.test.ts` fail ("valid text message event shows loading before fetching HFM" at line 198, "T-prefix account lookup..." at line 290, "pagination splits clients..." at line 416) because the WIP inserts a `/api/clients/` fetch that shifts their asserted `fetchCalls` indices.
       Group (b) is EXPECTED here and is repaired by Task 4's test updates.
-- [ ] Step 4: Commit - `git add apps/api/src/routes/webhook.ts apps/api/src/types/hfm.types.ts apps/api/src/builders/flex-message.builder.ts && git commit -m "feat: show Last Trade on trading lookup cards"`
+      > Deviation: Baseline recorded as 170 pass / 5 fail. 3 failures are the expected group-(b) webhook tests. The other 2 (`tests/sqlite.service.test.ts`: "client_snapshots has UNIQUE constraint..." and "initDb is idempotent...") are PRE-EXISTING on base `main` (verified by stashing the WIP + running standalone against a fresh `hfm_test`), unrelated to this plan which never touches `initDb`/schema. Flagged for the user in the final report; not fixed in-scope.
+- [x] Step 4: Commit - `git add apps/api/src/routes/webhook.ts apps/api/src/types/hfm.types.ts apps/api/src/builders/flex-message.builder.ts && git commit -m "feat: show Last Trade on trading lookup cards"`
 
 ---
 

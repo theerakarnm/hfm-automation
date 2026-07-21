@@ -18,6 +18,15 @@ const fmtDate = (iso: string): string => {
   return dayjs.utc(iso).format("DD MMM YYYY");
 };
 
+const fmtLastTrade = (
+  raw: string | null | undefined
+): { text: string; color?: string } => {
+  if (!raw) {
+    return { text: "N/A", color: "#DC2626" };
+  }
+  return { text: dayjs.utc(raw).format("DD/MM/YYYY HH:mm") };
+};
+
 const displayCurrencyLabel = (raw: string): string => raw;
 
 const colors = {
@@ -193,6 +202,7 @@ export function buildTradingCard(
   const matchAllBadge = getMatchAllMeta(conditions.matchAll);
   const walletIdValue = String(data.client_id);
   const accountIdValue = String(data.account_id);
+  const lastTrade = fmtLastTrade(data.last_trade);
 
   return {
     type: "bubble",
@@ -286,6 +296,7 @@ export function buildTradingCard(
             metricCard("Volume", fmtVolume(data.volume)),
           ],
         },
+        detailCard("Last Trade", lastTrade.text, { color: lastTrade.color }),
         {
           type: "box",
           layout: "horizontal",

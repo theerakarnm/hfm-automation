@@ -28,6 +28,7 @@ export interface HFMPerformanceData {
   rejected_rebates?: number;
   tier?: number;
   balance: number;
+  last_trade?: string | null;
 }
 
 export interface ConditionCheck {

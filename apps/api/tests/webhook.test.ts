@@ -5,6 +5,11 @@ import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
 import { initDb, resetDbForTests } from "../src/db/connection";
+import {
+  getLastTradeMap,
+  resetLastTradeCache,
+} from "../src/services/last-trade.service";
+import type { HFMClientRow } from "../src/types/hfm.types";
 
 const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? "postgresql://jametirakarn@localhost:5432/hfm_test";
@@ -56,9 +61,11 @@ describe("webhook", () => {
     process.env.HFM_API_KEY = "test_hfm_key";
     process.env.HFM_API_BASE_URL = "https://api.hfaffiliates.com";
     await setupTestDb();
+    resetLastTradeCache();
   });
 
   afterEach(() => {
+    resetLastTradeCache();
     globalThis.fetch = ORIGINAL_FETCH;
     delete process.env.LINE_WHITELIST_UIDS;
     delete process.env.LINE_WHITELIST_ENABLED;
@@ -259,6 +266,13 @@ describe("webhook", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
+    await getLastTradeMap({
+      fetchClientsFn: async () => ({
+        ok: true,
+        data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
+      }),
+    });
+
     const res = app.fetch(
       new Request("http://localhost/webhook", {
         method: "POST",
@@ -285,6 +299,7 @@ describe("webhook", () => {
       "/api/performance/client-performance?wallets=98241376"
     );
     expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/reply");
+    expect(fetchCalls[2]?.body).toContain("18/07/2026 09:30");
   });
 
   test("T-prefix account lookup resolves wallet via client_id and returns all linked accounts", async () => {
@@ -389,6 +404,10 @@ describe("webhook", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
+    await getLastTradeMap({
+      fetchClientsFn: async () => ({ ok: true, data: [] as HFMClientRow[] }),
+    });
+
     const res = app.fetch(
       new Request("http://localhost/webhook", {
         method: "POST",
@@ -459,6 +478,10 @@ describe("webhook", () => {
 
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
+
+    await getLastTradeMap({
+      fetchClientsFn: async () => ({ ok: true, data: [] as HFMClientRow[] }),
+    });
 
     const bodyText = JSON.stringify({
       destination: "U123",

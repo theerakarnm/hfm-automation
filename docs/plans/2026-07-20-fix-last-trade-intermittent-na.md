@@ -469,22 +469,22 @@ The fix below avoids that entirely by PRE-WARMING the cache with an injected `fe
 Pre-warm INSIDE each lookup test (after installing its fetch mock, before `app.fetch`), not in `beforeEach`, so each test controls its own rows.
 
 **Steps:**
-- [ ] Step 1: In `webhook.ts`, add the service import near the other service imports (after line 5).
+- [x] Step 1: In `webhook.ts`, add the service import near the other service imports (after line 5).
       ```ts
       import { getLastTradeMap } from "../services/last-trade.service";
       ```
-- [ ] Step 2: In `webhook.ts`, drop `fetchClients` from the `hfm.service` import so line 4 reads:
+- [x] Step 2: In `webhook.ts`, drop `fetchClients` from the `hfm.service` import so line 4 reads:
       ```ts
       import { fetchPerformance, resolveLinkedAccounts, checkConditions, parsePerformanceLookup } from "../services/hfm.service";
       ```
-- [ ] Step 3: In `webhook.ts`, replace the raw fetch-and-build block at lines 198-201 with the cached lookup.
+- [x] Step 3: In `webhook.ts`, replace the raw fetch-and-build block at lines 198-201 with the cached lookup.
       Preserve the existing empty-map fallback so a `null` return still renders "N/A" exactly as today (no behavior change on true failure).
       ```ts
       const lastTradeByAccountId =
         (await getLastTradeMap()) ?? new Map<number, string | null>();
       ```
       Leave the `bubbles` mapping at lines 203-210 untouched; it still calls `lastTradeByAccountId.get(clientData.account_id)`.
-- [ ] Step 4: In `tests/webhook.test.ts`, add the service imports after the existing imports (line 7):
+- [x] Step 4: In `tests/webhook.test.ts`, add the service imports after the existing imports (line 7):
       ```ts
       import {
         getLastTradeMap,
@@ -493,7 +493,7 @@ Pre-warm INSIDE each lookup test (after installing its fetch mock, before `app.f
       import type { HFMClientRow } from "../src/types/hfm.types";
       ```
       Add `resetLastTradeCache();` as the last line of the `beforeEach` (after `await setupTestDb();`) and as the first line of the `afterEach`.
-- [ ] Step 5: In the test `"valid text message event shows loading before fetching HFM"`, directly after the `globalThis.fetch = ...` mock assignment and before `app.fetch(...)`, pre-warm the cache with a row matching the mocked `account_id` 78451293:
+- [x] Step 5: In the test `"valid text message event shows loading before fetching HFM"`, directly after the `globalThis.fetch = ...` mock assignment and before `app.fetch(...)`, pre-warm the cache with a row matching the mocked `account_id` 78451293:
       ```ts
       await getLastTradeMap({
         fetchClientsFn: async () => ({
@@ -507,7 +507,7 @@ Pre-warm INSIDE each lookup test (after installing its fetch mock, before `app.f
       expect(fetchCalls[2]?.body).toContain("18/07/2026 09:30");
       ```
       (`fmtLastTrade` formats with `dayjs.utc(raw).format("DD/MM/YYYY HH:mm")`.)
-- [ ] Step 6: In the tests `"T-prefix account lookup resolves wallet via client_id and returns all linked accounts"` and `"pagination splits clients in chunks of 5 and appends pagination card, postback navigates correctly"`, add the same pre-warm call directly after their `globalThis.fetch = ...` mock assignments, but with empty rows (their assertions do not inspect Last Trade; an empty map renders "N/A" exactly as before):
+- [x] Step 6: In the tests `"T-prefix account lookup resolves wallet via client_id and returns all linked accounts"` and `"pagination splits clients in chunks of 5 and appends pagination card, postback navigates correctly"`, add the same pre-warm call directly after their `globalThis.fetch = ...` mock assignments, but with empty rows (their assertions do not inspect Last Trade; an empty map renders "N/A" exactly as before):
       ```ts
       await getLastTradeMap({
         fetchClientsFn: async () => ({ ok: true, data: [] as HFMClientRow[] }),
@@ -515,8 +515,9 @@ Pre-warm INSIDE each lookup test (after installing its fetch mock, before `app.f
       ```
       In the pagination test the single pre-warm before the first `app.fetch` also covers the postback dispatch later in the test (same 5-minute TTL window).
       Leave every existing assertion in all 3 tests untouched.
-- [ ] Step 7: Verify - Run: `bun run typecheck && bun test tests/last-trade.service.test.ts && bun test tests/webhook.test.ts` - Expected: typecheck 0 errors (proves `fetchClients` is not left dangling and the new import resolves); service tests 6 pass, 0 fail; `webhook.test.ts` 13 pass, 0 fail when `hfm_test` Postgres is up - if the DB is down (Preflight), all 13 fail with postgres `auth_failed`/connection errors, which is the declared DB-down branch, not a regression of this task.
-- [ ] Step 8: Commit - `git add apps/api/src/routes/webhook.ts apps/api/tests/webhook.test.ts && git commit -m "fix: use cached last-trade service in LINE lookup path"`
+- [x] Step 7: Verify - Run: `bun run typecheck && bun test tests/last-trade.service.test.ts && bun test tests/webhook.test.ts` - Expected: typecheck 0 errors (proves `fetchClients` is not left dangling and the new import resolves); service tests 6 pass, 0 fail; `webhook.test.ts` 13 pass, 0 fail when `hfm_test` Postgres is up - if the DB is down (Preflight), all 13 fail with postgres `auth_failed`/connection errors, which is the declared DB-down branch, not a regression of this task.
+      > Result: typecheck 0 errors; 19 pass / 0 fail across both files (6 service + 13 webhook). The 3 group-(b) webhook tests are repaired.
+- [x] Step 8: Commit - `git add apps/api/src/routes/webhook.ts apps/api/tests/webhook.test.ts && git commit -m "fix: use cached last-trade service in LINE lookup path"`
 
 ## End-to-end verification
 

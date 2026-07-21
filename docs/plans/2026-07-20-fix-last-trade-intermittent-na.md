@@ -232,7 +232,7 @@ If the user opted to squash or amend instead (see Preflight caveat), follow that
 The single-flight guard must be checked AFTER the freshness check, and the in-flight promise must be cleared in a `.finally()` so a failed refresh does not wedge every future call.
 
 **Steps:**
-- [ ] Step 1: Write the DB-free test file first, then pin the red state.
+- [x] Step 1: Write the DB-free test file first, then pin the red state.
       Verify - Run: `bun test tests/last-trade.service.test.ts` - Expected: fails (unresolved import of `../src/services/last-trade.service`).
       ```ts
       import { expect, test, describe, beforeEach, mock } from "bun:test";
@@ -347,7 +347,7 @@ The single-flight guard must be checked AFTER the freshness check, and the in-fl
         });
       });
       ```
-- [ ] Step 2: Implement the service.
+- [x] Step 2: Implement the service.
       ```ts
       import { fetchClients } from "./hfm.service";
       import { logError } from "../utils/logger";
@@ -445,8 +445,8 @@ The single-flight guard must be checked AFTER the freshness check, and the in-fl
         return null;
       }
       ```
-- [ ] Step 3: Verify - Run: `bun test tests/last-trade.service.test.ts && bun run typecheck` - Expected: 6 pass, 0 fail; typecheck 0 errors.
-- [ ] Step 4: Commit - `git add apps/api/src/services/last-trade.service.ts apps/api/tests/last-trade.service.test.ts && git commit -m "fix: add retrying cached last-trade lookup service"`
+- [x] Step 3: Verify - Run: `bun test tests/last-trade.service.test.ts && bun run typecheck` - Expected: 6 pass, 0 fail; typecheck 0 errors.
+- [x] Step 4: Commit - `git add apps/api/src/services/last-trade.service.ts apps/api/tests/last-trade.service.test.ts && git commit -m "fix: add retrying cached last-trade lookup service"`
 
 ---
 

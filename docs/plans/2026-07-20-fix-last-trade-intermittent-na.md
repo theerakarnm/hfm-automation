@@ -521,8 +521,12 @@ Pre-warm INSIDE each lookup test (after installing its fetch mock, before `app.f
 
 ## End-to-end verification
 
-- [ ] Run: `bun run typecheck` (from `apps/api`) - Expected: 0 errors.
-- [ ] Run: `bun test tests/last-trade.service.test.ts` (from `apps/api`) - Expected: 6 pass, 0 fail.
-- [ ] Run: `bun test` (from `apps/api`) - Expected: no NEW failures versus the Task 2 Step 3 baseline, and if `hfm_test` Postgres is up, the 3 lookup-path tests in `tests/webhook.test.ts` that failed in the group-(b) baseline now pass (DB-dependent suites require the Postgres from Preflight; a pre-existing DB-down failure is not a regression).
+- [x] Run: `bun run typecheck` (from `apps/api`) - Expected: 0 errors.
+      > Result: 0 errors.
+- [x] Run: `bun test tests/last-trade.service.test.ts` (from `apps/api`) - Expected: 6 pass, 0 fail.
+      > Result: 6 pass, 0 fail.
+- [x] Run: `bun test` (from `apps/api`) - Expected: no NEW failures versus the Task 2 Step 3 baseline, and if `hfm_test` Postgres is up, the 3 lookup-path tests in `tests/webhook.test.ts` that failed in the group-(b) baseline now pass (DB-dependent suites require the Postgres from Preflight; a pre-existing DB-down failure is not a regression).
+      > Result: 179 pass / 2 fail (baseline was 170 / 5). The 3 group-(b) webhook tests now pass; the 6 new service tests pass. The only remaining 2 failures are the pre-existing, unrelated `tests/sqlite.service.test.ts` cases documented in Task 2 Step 3. No NEW failures.
 - [ ] Manual (user-performed, needs LINE + HFM creds in `.env` and a running dev server via `bun run dev`): send a wallet id or `T`-prefixed trading account number to the LINE bot and confirm the card shows a Last Trade date, then resend the same query several times and confirm it stays a date every time (no intermittent "N/A").
       Expected: Last Trade renders a real date consistently across repeated sends.
+      > Not run: user-performed live check; creds present but requires a running dev server + live LINE bot.

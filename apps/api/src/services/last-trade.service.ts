@@ -71,9 +71,7 @@ async function refresh(
     }
     logError(
       "last-trade",
-      new Error(
-        `getLastTradeMap attempt ${attempt}/${MAX_ATTEMPTS} failed (${result.reason})`,
-      ),
+      `getLastTradeMap attempt ${attempt}/${MAX_ATTEMPTS} failed (${result.reason})`,
     );
     if (attempt < MAX_ATTEMPTS) {
       await sleep(BACKOFF_MS[attempt - 1]!);
@@ -81,15 +79,9 @@ async function refresh(
   }
 
   if (cache) {
-    logError(
-      "last-trade",
-      new Error("getLastTradeMap fetch failed; serving stale cache"),
-    );
+    logError("last-trade", "getLastTradeMap fetch failed; serving stale cache");
     return cache.map;
   }
-  logError(
-    "last-trade",
-    new Error("getLastTradeMap fetch failed; no cache available"),
-  );
+  logError("last-trade", "getLastTradeMap fetch failed; no cache available");
   return null;
 }

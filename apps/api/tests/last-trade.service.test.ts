@@ -1,12 +1,29 @@
 import { expect, test, describe, beforeEach, mock } from "bun:test";
 import {
   getLastTradeMap,
+  getLastTradeMapWithin,
   resetLastTradeCache,
 } from "../src/services/last-trade.service";
 import type { HFMClientsResult, HFMClientRow } from "../src/types/hfm.types";
 
 function makeRow(overrides: Partial<HFMClientRow>): HFMClientRow {
   return { id: 0, wallet: 0, last_trade: null, ...overrides } as HFMClientRow;
+}
+
+async function waitForCalls(
+  m: { mock: { calls: unknown[] } },
+  n: number,
+  timeoutMs = 500,
+): Promise<void> {
+  const startedAt = Date.now();
+  while (m.mock.calls.length < n) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(
+        `Timed out waiting for ${n} calls (got ${m.mock.calls.length})`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
 
 describe("getLastTradeMap", () => {
@@ -54,7 +71,7 @@ describe("getLastTradeMap", () => {
     expect(fetchClientsFn).toHaveBeenCalledTimes(3);
   });
 
-  test("serves stale cache when a later refresh fully fails", async () => {
+  test("serves stale cache immediately and refreshes in the background", async () => {
     let now = 0;
     const nowMs = () => now;
     const okFetch = mock(
@@ -71,9 +88,14 @@ describe("getLastTradeMap", () => {
       async (): Promise<HFMClientsResult> => ({ ok: false, reason: "server_error" }),
     );
     const sleepFn = mock(async (_ms: number) => {});
+
+    const startedAt = Date.now();
     const second = await getLastTradeMap({ fetchClientsFn: failFetch, sleepFn, nowMs });
+    const elapsed = Date.now() - startedAt;
+
     expect(second!.get(101)).toBe("A");
-    expect(failFetch).toHaveBeenCalledTimes(3);
+    expect(elapsed).toBeLessThan(50); // returned without waiting on the ladder
+    await waitForCalls(failFetch, 3); // ladder still ran in the background
   });
 
   test("does not refetch while the cache is fresh", async () => {
@@ -106,6 +128,66 @@ describe("getLastTradeMap", () => {
     const [m1, m2] = await Promise.all([p1, p2]);
     expect(m1!.get(101)).toBe("A");
     expect(m2).toBe(m1);
+    expect(fetchClientsFn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("getLastTradeMapWithin", () => {
+  beforeEach(() => {
+    resetLastTradeCache();
+  });
+
+  test("returns the map when the fetch finishes inside the deadline", async () => {
+    const fetchClientsFn = mock(
+      async (): Promise<HFMClientsResult> => ({
+        ok: true,
+        data: [makeRow({ id: 101, last_trade: "A" })],
+      }),
+    );
+    const map = await getLastTradeMapWithin(500, { fetchClientsFn });
+    expect(map!.get(101)).toBe("A");
+  });
+
+  test("returns null at the deadline instead of blocking on a slow fetch", async () => {
+    const fetchClientsFn = mock(
+      () =>
+        new Promise<HFMClientsResult>((resolve) =>
+          setTimeout(
+            () => resolve({ ok: true, data: [makeRow({ id: 101, last_trade: "A" })] }),
+            400,
+          ),
+        ),
+    );
+    const startedAt = Date.now();
+    const map = await getLastTradeMapWithin(50, { fetchClientsFn });
+    const elapsed = Date.now() - startedAt;
+    expect(map).toBeNull();
+    expect(elapsed).toBeLessThan(300);
+
+    // Let the background refresh settle before the next test runs. It is
+    // currently benign (it writes the same 101 -> "A" payload the next test
+    // asserts), so removing this does not turn the suite red today - it is
+    // kept so a future reordering cannot make module-level cache state leak
+    // across a test boundary.
+    await new Promise((resolve) => setTimeout(resolve, 450));
+  });
+
+  test("background refresh still warms the cache after the deadline fires", async () => {
+    const fetchClientsFn = mock(
+      () =>
+        new Promise<HFMClientsResult>((resolve) =>
+          setTimeout(
+            () => resolve({ ok: true, data: [makeRow({ id: 101, last_trade: "A" })] }),
+            100,
+          ),
+        ),
+    );
+    expect(await getLastTradeMapWithin(20, { fetchClientsFn })).toBeNull();
+    await waitForCalls(fetchClientsFn, 1);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    const warm = await getLastTradeMapWithin(50, { fetchClientsFn });
+    expect(warm!.get(101)).toBe("A");
     expect(fetchClientsFn).toHaveBeenCalledTimes(1);
   });
 });

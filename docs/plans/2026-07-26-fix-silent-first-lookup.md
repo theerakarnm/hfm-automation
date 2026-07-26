@@ -286,13 +286,13 @@ Every command below was executed while writing this plan; the pasted output is r
 
 **Steps:**
 
-- [ ] Step 1: Create the branch.
+- [x] Step 1: Create the branch.
       ```bash
       cd /Users/jametirakarn/Desktop/Theerakarnm/HFM-Automation
       git checkout -b fix/silent-first-lookup
       ```
 
-- [ ] Step 2: In `apps/api/src/services/last-trade.service.ts`, replace the body of `getLastTradeMap` (from `export async function getLastTradeMap(` down to the closing `}` immediately before `async function refresh`) with the stale-while-revalidate version. Keep the existing doc comment above it unchanged.
+- [x] Step 2: In `apps/api/src/services/last-trade.service.ts`, replace the body of `getLastTradeMap` (from `export async function getLastTradeMap(` down to the closing `}` immediately before `async function refresh`) with the stale-while-revalidate version. Keep the existing doc comment above it unchanged.
       ```ts
       export async function getLastTradeMap(
         options: GetLastTradeMapOptions = {},
@@ -326,7 +326,7 @@ Every command below was executed while writing this plan; the pasted output is r
       }
       ```
 
-- [ ] Step 3: In the same file, append `getLastTradeMapWithin` immediately after `getLastTradeMap` and before `async function refresh`.
+- [x] Step 3: In the same file, append `getLastTradeMapWithin` immediately after `getLastTradeMap` and before `async function refresh`.
       ```ts
       // Same contract as getLastTradeMap but never blocks the caller longer than
       // deadlineMs. On a cold cache the retry ladder can run for ~48s, which does
@@ -361,7 +361,7 @@ Every command below was executed while writing this plan; the pasted output is r
       }
       ```
 
-- [ ] Step 4: In `apps/api/tests/last-trade.service.test.ts`, add a poll helper directly below the existing `makeRow` function (anchor: `function makeRow(overrides`).
+- [x] Step 4: In `apps/api/tests/last-trade.service.test.ts`, add a poll helper directly below the existing `makeRow` function (anchor: `function makeRow(overrides`).
       ```ts
       async function waitForCalls(
         m: { mock: { calls: unknown[] } },
@@ -380,7 +380,7 @@ Every command below was executed while writing this plan; the pasted output is r
       }
       ```
 
-- [ ] Step 5: In the same test file, replace the whole existing test `test("serves stale cache when a later refresh fully fails", ...)` (anchor: `serves stale cache when a later refresh fully fails`) with the stale-while-revalidate version.
+- [x] Step 5: In the same test file, replace the whole existing test `test("serves stale cache when a later refresh fully fails", ...)` (anchor: `serves stale cache when a later refresh fully fails`) with the stale-while-revalidate version.
       ```ts
       test("serves stale cache immediately and refreshes in the background", async () => {
         let now = 0;
@@ -410,7 +410,7 @@ Every command below was executed while writing this plan; the pasted output is r
       });
       ```
 
-- [ ] Step 6: In the same test file, append a new `describe` block for `getLastTradeMapWithin` after the closing `});` of the existing `describe("getLastTradeMap", ...)`. Add `getLastTradeMapWithin` to the import list at the top of the file.
+- [x] Step 6: In the same test file, append a new `describe` block for `getLastTradeMapWithin` after the closing `});` of the existing `describe("getLastTradeMap", ...)`. Add `getLastTradeMapWithin` to the import list at the top of the file.
       ```ts
       describe("getLastTradeMapWithin", () => {
         beforeEach(() => {
@@ -473,9 +473,9 @@ Every command below was executed while writing this plan; the pasted output is r
       });
       ```
 
-- [ ] Step 7: Verify - Run: `cd apps/api && bun test tests/last-trade.service.test.ts` - Expected: `9 pass, 0 fail`.
+- [x] Step 7: Verify - Run: `cd apps/api && bun test tests/last-trade.service.test.ts` - Expected: `9 pass, 0 fail`.
 
-- [ ] Step 8: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+- [x] Step 8: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
 
 - [ ] Step 9: Commit - `git commit -m "fix: serve last-trade cache stale-while-revalidate and add a bounded lookup"`
 

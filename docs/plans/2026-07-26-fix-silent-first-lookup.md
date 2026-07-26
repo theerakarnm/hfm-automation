@@ -654,7 +654,7 @@ LINE push messages count against the channel's monthly message quota while repli
 
 **Steps:**
 
-- [ ] Step 1: In `apps/api/src/services/line.service.ts`, append after the `replyFlex` export (anchor: `export const replyFlex`) and before `export async function pushToAll`.
+- [x] Step 1: In `apps/api/src/services/line.service.ts`, append after the `replyFlex` export (anchor: `export const replyFlex`) and before `export async function pushToAll`.
       ```ts
       // Replies with the reply token, falling back to a push when the reply is
       // rejected (expired token, LINE 4xx) so the customer is never left with
@@ -687,7 +687,7 @@ LINE push messages count against the channel's monthly message quota while repli
       ) => replyOrPush(replyToken, userId, { type: "flex", altText, contents });
       ```
 
-- [ ] Step 2: In `apps/api/tests/line.service.test.ts`, extend the import on line 2 to `import { pushToAll, replyOrPushText, replyOrPushFlex } from "../src/services/line.service";` and append a new `describe` block after the closing `});` of `describe("pushToAll", ...)`.
+- [x] Step 2: In `apps/api/tests/line.service.test.ts`, extend the import on line 2 to `import { pushToAll, replyOrPushText, replyOrPushFlex } from "../src/services/line.service";` and append a new `describe` block after the closing `});` of `describe("pushToAll", ...)`.
       ```ts
       describe("replyOrPush", () => {
         afterEach(() => {
@@ -740,11 +740,11 @@ LINE push messages count against the channel's monthly message quota while repli
       });
       ```
 
-- [ ] Step 3: Verify - Run: `cd apps/api && bun test tests/line.service.test.ts` - Expected: `7 pass, 0 fail` (4 pre-existing plus 3 new).
+- [x] Step 3: Verify - Run: `cd apps/api && bun test tests/line.service.test.ts` - Expected: `7 pass, 0 fail` (4 pre-existing plus 3 new).
 
-- [ ] Step 4: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+- [x] Step 4: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
 
-- [ ] Step 5: Commit - `git commit -m "feat: add replyOrPushText and replyOrPushFlex LINE senders"`
+- [x] Step 5: Commit - `git commit -m "feat: add replyOrPushText and replyOrPushFlex LINE senders"`
 
 ---
 

@@ -75,7 +75,10 @@ webhook.post(
     for (const event of eventsToProcess) {
       const uid = event.source?.userId;
       if (uid) {
-        await recordLineUserRequest(db, uid, event.type);
+        // Telemetry only - a database hiccup must never stop the customer's reply.
+        recordLineUserRequest(db, uid, event.type).catch((err) =>
+          logError("line-user", err),
+        );
       }
       if (isTextMessageEvent(event)) {
         const { replyToken } = event;

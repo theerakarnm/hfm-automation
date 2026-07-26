@@ -1159,7 +1159,7 @@ The two negative tests in that file (`does NOT collect UID when signature is inv
 
 **Steps:**
 
-- [ ] Step 1: In `apps/api/src/routes/webhook.ts`, replace the telemetry write inside the event loop (anchor: `await recordLineUserRequest`).
+- [x] Step 1: In `apps/api/src/routes/webhook.ts`, replace the telemetry write inside the event loop (anchor: `await recordLineUserRequest`).
       ```ts
             const uid = event.source?.userId;
             if (uid) {
@@ -1170,7 +1170,7 @@ The two negative tests in that file (`does NOT collect UID when signature is inv
             }
       ```
 
-- [ ] Step 2: In `apps/api/tests/line-uids.test.ts`, make the three positive assertions wait for the now-asynchronous write. Add this helper directly below `function computeSig(...)` (anchor: `function computeSig`).
+- [x] Step 2: In `apps/api/tests/line-uids.test.ts`, make the three positive assertions wait for the now-asynchronous write. Add this helper directly below `function computeSig(...)` (anchor: `function computeSig`).
       ```ts
       // The webhook records line_users fire-and-forget, so the row lands shortly
       // after the response. Returns whatever it has at the timeout so the
@@ -1196,9 +1196,9 @@ The two negative tests in that file (`does NOT collect UID when signature is inv
 
       Leave `does NOT collect UID when signature is invalid` and `skips events without userId (group source)` exactly as they are.
 
-- [ ] Step 3: Verify - Run: `cd apps/api && bun test tests/line-uids.test.ts` - Expected: `8 pass, 0 fail`. Run it **five times in a row** and confirm it is green every time. Three runs is not enough evidence here: before the fix this file's failure count itself varies run to run (measured 3, 3, 3, then 1 failure across four runs), so a single lucky pass proves nothing.
+- [x] Step 3: Verify - Run: `cd apps/api && bun test tests/line-uids.test.ts` - Expected: `8 pass, 0 fail`. Run it **five times in a row** and confirm it is green every time. Three runs is not enough evidence here: before the fix this file's failure count itself varies run to run (measured 3, 3, 3, then 1 failure across four runs), so a single lucky pass proves nothing.
 
-- [ ] Step 4: In `apps/api/tests/webhook.test.ts`, append a test after the ones added in Task 4.
+- [x] Step 4: In `apps/api/tests/webhook.test.ts`, append a test after the ones added in Task 4.
       ```ts
       test("a database failure does not stop the lookup reply", async () => {
         const { app } = await importWebhook();
@@ -1256,11 +1256,11 @@ The two negative tests in that file (`does NOT collect UID when signature is inv
       });
       ```
 
-- [ ] Step 5: Verify - Run: `cd apps/api && bun test tests/webhook.test.ts` - Expected: `19 pass, 0 fail`.
+- [x] Step 5: Verify - Run: `cd apps/api && bun test tests/webhook.test.ts` - Expected: `19 pass, 0 fail`.
 
-- [ ] Step 6: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+- [x] Step 6: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
 
-- [ ] Step 7: Commit - `git commit -m "fix: make the line_users telemetry write non-blocking"`
+- [x] Step 7: Commit - `git commit -m "fix: make the line_users telemetry write non-blocking"`
 
 ---
 

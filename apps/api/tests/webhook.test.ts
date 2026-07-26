@@ -675,6 +675,61 @@ describe("webhook", () => {
     expect(pushes).toHaveLength(0);
   });
 
+  test("a database failure does not stop the lookup reply", async () => {
+    const { app } = await importWebhook();
+    process.env.DATABASE_URL = "postgresql://nobody@127.0.0.1:1/none";
+    resetDbForTests();
+
+    const body = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "message",
+          message: { type: "text", id: "123", text: "98241376" },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "token123",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ],
+    });
+    const sig = computeSig(body, SECRET);
+
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      fetchCalls.push({
+        url,
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      if (url.includes("/api/performance/client-performance")) {
+        return new Response("upstream boom", { status: 500 });
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const response = await app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-line-signature": sig },
+        body,
+      })
+    );
+    expect(response.status).toBe(200);
+
+    await waitFor(
+      () => fetchCalls.some((c) => c.url === "https://api.line.me/v2/bot/message/reply"),
+      2000
+    );
+    const reply = fetchCalls.find(
+      (c) => c.url === "https://api.line.me/v2/bot/message/reply"
+    );
+    expect(reply?.body).toContain("HFM API");
+  });
+
   test("T-prefix account lookup resolves wallet via client_id and returns all linked accounts", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({

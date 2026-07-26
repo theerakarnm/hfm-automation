@@ -3,7 +3,7 @@ import { bodyLimit } from "hono/body-limit";
 import { verifyLineSignature } from "../utils/signature";
 import { fetchPerformance, resolveLinkedAccounts, checkConditions, parsePerformanceLookup } from "../services/hfm.service";
 import { replyText, replyFlex, replyTexts, showLoading } from "../services/line.service";
-import { getLastTradeMap } from "../services/last-trade.service";
+import { getLastTradeMapWithin } from "../services/last-trade.service";
 import { buildTradingCard, buildPaginationCard } from "../builders/flex-message.builder";
 import { generateReportForUser, type ReportPeriod } from "../jobs/daily-client-report";
 import { isTextMessageEvent, isPostbackEvent } from "../types/line.types";
@@ -16,6 +16,15 @@ import type { PerformanceLookup } from "../types/hfm.types";
 
 
 const MAX_WEBHOOK_EVENTS = 20;
+
+// The HFM /api/clients/ endpoint needs ~7.4s when healthy and up to 48s
+// through its retry ladder. LINE reply tokens expire after 60s, so the
+// reply must never wait on it - past this deadline the card renders with
+// whatever cache exists and the refresh continues in the background.
+// Read per call: Bun caches the module, so a module-load read cannot be
+// overridden by tests that re-import this route.
+const lastTradeDeadlineMs = (): number =>
+  Number(process.env.LAST_TRADE_DEADLINE_MS) || 8_000;
 
 const webhook = new Hono();
 
@@ -197,7 +206,8 @@ async function handleLookupAndReply(
     const clientsToShow = result.data.slice(startIdx, endIdx);
 
     const lastTradeByAccountId =
-      (await getLastTradeMap()) ?? new Map<number, string | null>();
+      (await getLastTradeMapWithin(lastTradeDeadlineMs())) ??
+      new Map<number, string | null>();
 
     const bubbles = clientsToShow.map((clientData) => {
       const conditions = checkConditions(clientData);

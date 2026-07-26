@@ -477,7 +477,7 @@ Every command below was executed while writing this plan; the pasted output is r
 
 - [x] Step 8: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
 
-- [ ] Step 9: Commit - `git commit -m "fix: serve last-trade cache stale-while-revalidate and add a bounded lookup"`
+- [x] Step 9: Commit - `git commit -m "fix: serve last-trade cache stale-while-revalidate and add a bounded lookup"`
 
 ---
 
@@ -501,12 +501,12 @@ An 8s wait would make the new test slow, so the value is overridable by env; the
 
 **Steps:**
 
-- [ ] Step 1: In `apps/api/src/routes/webhook.ts`, change the import on line 6 from `getLastTradeMap` to `getLastTradeMapWithin`.
+- [x] Step 1: In `apps/api/src/routes/webhook.ts`, change the import on line 6 from `getLastTradeMap` to `getLastTradeMapWithin`.
       ```ts
       import { getLastTradeMapWithin } from "../services/last-trade.service";
       ```
 
-- [ ] Step 2: In the same file, add the deadline accessor directly below `const MAX_WEBHOOK_EVENTS = 20;`. Note this is a **function**, not a const - see the Gotcha.
+- [x] Step 2: In the same file, add the deadline accessor directly below `const MAX_WEBHOOK_EVENTS = 20;`. Note this is a **function**, not a const - see the Gotcha.
       ```ts
       // The HFM /api/clients/ endpoint needs ~7.4s when healthy and up to 48s
       // through its retry ladder. LINE reply tokens expire after 60s, so the
@@ -518,21 +518,21 @@ An 8s wait would make the new test slow, so the value is overridable by env; the
         Number(process.env.LAST_TRADE_DEADLINE_MS) || 8_000;
       ```
 
-- [ ] Step 3: In the same file, replace the `lastTradeByAccountId` assignment (anchor: `const lastTradeByAccountId`, inside `handleLookupAndReply`).
+- [x] Step 3: In the same file, replace the `lastTradeByAccountId` assignment (anchor: `const lastTradeByAccountId`, inside `handleLookupAndReply`).
       ```ts
           const lastTradeByAccountId =
             (await getLastTradeMapWithin(lastTradeDeadlineMs())) ??
             new Map<number, string | null>();
       ```
 
-- [ ] Step 4: In `apps/api/.env.example`, append below `PORT=3000`.
+- [x] Step 4: In `apps/api/.env.example`, append below `PORT=3000`.
       ```
       # Max ms the LINE reply path waits for the HFM /api/clients/ last-trade map
       # before rendering the card without it. Default 8000.
       LAST_TRADE_DEADLINE_MS=
       ```
 
-- [ ] Step 5: In `apps/api/tests/webhook.test.ts`, add a test that a hanging `/api/clients/` still produces a card. Place it after the existing wallet-lookup test (anchor: `18/07/2026 09:30`). Note this test deliberately does **not** pre-seed the cache, and it sets the deadline override before `importWebhook()`.
+- [x] Step 5: In `apps/api/tests/webhook.test.ts`, add a test that a hanging `/api/clients/` still produces a card. Place it after the existing wallet-lookup test (anchor: `18/07/2026 09:30`). Note this test deliberately does **not** pre-seed the cache, and it sets the deadline override before `importWebhook()`.
       ```ts
       test("replies with the card even when the last-trade fetch hangs", async () => {
         process.env.LAST_TRADE_DEADLINE_MS = "200";
@@ -625,13 +625,13 @@ An 8s wait would make the new test slow, so the value is overridable by env; the
       });
       ```
 
-- [ ] Step 6: In `apps/api/tests/webhook.test.ts`, add `delete process.env.LAST_TRADE_DEADLINE_MS;` to the existing `afterEach` block (anchor: `delete process.env.TARGET_WALLET;`) so the override never leaks into other tests.
+- [x] Step 6: In `apps/api/tests/webhook.test.ts`, add `delete process.env.LAST_TRADE_DEADLINE_MS;` to the existing `afterEach` block (anchor: `delete process.env.TARGET_WALLET;`) so the override never leaks into other tests.
 
-- [ ] Step 7: Verify - Run: `cd apps/api && bun test tests/webhook.test.ts` - Expected: `14 pass, 0 fail` (13 pre-existing plus the new one). Requires the Postgres test database from Preflight.
+- [x] Step 7: Verify - Run: `cd apps/api && bun test tests/webhook.test.ts` - Expected: `14 pass, 0 fail` (13 pre-existing plus the new one). Requires the Postgres test database from Preflight.
 
-- [ ] Step 8: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+- [x] Step 8: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
 
-- [ ] Step 9: Commit - `git commit -m "fix: cap the last-trade wait so the LINE reply always beats the token expiry"`
+- [x] Step 9: Commit - `git commit -m "fix: cap the last-trade wait so the LINE reply always beats the token expiry"`
 
 ---
 

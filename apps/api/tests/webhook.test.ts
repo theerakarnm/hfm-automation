@@ -71,6 +71,7 @@ describe("webhook", () => {
     delete process.env.LINE_WHITELIST_ENABLED;
     delete process.env.DATABASE_URL;
     delete process.env.TARGET_WALLET;
+    delete process.env.LAST_TRADE_DEADLINE_MS;
     resetDbForTests();
   });
 
@@ -300,6 +301,96 @@ describe("webhook", () => {
     );
     expect(fetchCalls[2]?.url).toBe("https://api.line.me/v2/bot/message/reply");
     expect(fetchCalls[2]?.body).toContain("18/07/2026 09:30");
+  });
+
+  test("replies with the card even when the last-trade fetch hangs", async () => {
+    process.env.LAST_TRADE_DEADLINE_MS = "200";
+    const { app } = await importWebhook();
+    const body = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "message",
+          message: { type: "text", id: "123", text: "98241376" },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "token123",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ],
+    });
+    const sig = computeSig(body, SECRET);
+
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      fetchCalls.push({
+        url,
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+
+      if (url.includes("/api/clients/")) {
+        // Never resolves - the deadline must win.
+        return new Promise<Response>(() => {});
+      }
+
+      if (url.includes("/api/performance/client-performance")) {
+        return new Response(
+          JSON.stringify({
+            clients: [
+              {
+                client_id: 98241376,
+                account_id: 78451293,
+                full_name: "Test Client",
+                activity_status: "active",
+                trades: 5,
+                volume: 0.05,
+                account_type: "Premium",
+                deposits: 100,
+                withdrawals: 0,
+                account_currency: "USD",
+                equity: 32.88,
+                archived: null,
+                subaffiliate: 30506525,
+                account_regdate: "2026-07-22",
+                status: "approved",
+                balance: 32.88,
+                commission: 0,
+              },
+            ],
+            totals: {},
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const response = await app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-line-signature": sig,
+        },
+        body,
+      })
+    );
+    expect(response.status).toBe(200);
+
+    await waitFor(
+      () => fetchCalls.some((c) => c.url === "https://api.line.me/v2/bot/message/reply"),
+      2000
+    );
+    const reply = fetchCalls.find(
+      (c) => c.url === "https://api.line.me/v2/bot/message/reply"
+    );
+    expect(reply?.body).toContain("Trading Account Summary");
+    expect(reply?.body).toContain("N/A");
   });
 
   test("T-prefix account lookup resolves wallet via client_id and returns all linked accounts", async () => {

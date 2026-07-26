@@ -393,6 +393,288 @@ describe("webhook", () => {
     expect(reply?.body).toContain("N/A");
   });
 
+  test("HFM server error replies with the HFM-down notice instead of silence", async () => {
+    const { app } = await importWebhook();
+    const body = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "message",
+          message: { type: "text", id: "123", text: "98241376" },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "token123",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ],
+    });
+    const sig = computeSig(body, SECRET);
+
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      fetchCalls.push({
+        url,
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      if (url.includes("/api/performance/client-performance")) {
+        return new Response("upstream boom", { status: 500 });
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const response = await app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-line-signature": sig },
+        body,
+      })
+    );
+    expect(response.status).toBe(200);
+
+    await waitFor(
+      () => fetchCalls.some((c) => c.url === "https://api.line.me/v2/bot/message/reply"),
+      2000
+    );
+    const reply = fetchCalls.find(
+      (c) => c.url === "https://api.line.me/v2/bot/message/reply"
+    );
+    // "HFM API" appears verbatim inside the Thai server_error notice.
+    expect(reply?.body).toContain("HFM API");
+  });
+
+  test("an expired reply token falls back to pushing the card", async () => {
+    const { app } = await importWebhook();
+    const body = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "message",
+          message: { type: "text", id: "123", text: "98241376" },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "expired",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ],
+    });
+    const sig = computeSig(body, SECRET);
+
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      fetchCalls.push({
+        url,
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      if (url.endsWith("/message/reply")) {
+        return new Response("Invalid reply token", { status: 400 });
+      }
+      if (url.includes("/api/performance/client-performance")) {
+        return new Response(
+          JSON.stringify({
+            clients: [
+              {
+                client_id: 98241376,
+                account_id: 78451293,
+                full_name: "Test Client",
+                activity_status: "active",
+                trades: 5,
+                volume: 0.05,
+                account_type: "Premium",
+                deposits: 100,
+                withdrawals: 0,
+                account_currency: "USD",
+                equity: 32.88,
+                archived: null,
+                subaffiliate: 30506525,
+                account_regdate: "2026-07-22",
+                status: "approved",
+                balance: 32.88,
+                commission: 0,
+              },
+            ],
+            totals: {},
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    await getLastTradeMap({
+      fetchClientsFn: async () => ({
+        ok: true,
+        data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
+      }),
+    });
+
+    const response = await app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-line-signature": sig },
+        body,
+      })
+    );
+    expect(response.status).toBe(200);
+
+    await waitFor(
+      () => fetchCalls.some((c) => c.url === "https://api.line.me/v2/bot/message/push"),
+      2000
+    );
+    const pushed = fetchCalls.find(
+      (c) => c.url === "https://api.line.me/v2/bot/message/push"
+    );
+    expect(JSON.parse(pushed!.body!).to).toBe("Uabc123");
+    expect(pushed?.body).toContain("Trading Account Summary");
+  });
+
+  test("a total send failure still pushes the try-again notice", async () => {
+    const { app } = await importWebhook();
+    const body = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "message",
+          message: { type: "text", id: "123", text: "98241376" },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "expired",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ],
+    });
+    const sig = computeSig(body, SECRET);
+
+    const pushedTexts: string[] = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      const raw = typeof init?.body === "string" ? init.body : undefined;
+
+      if (url.endsWith("/message/reply")) {
+        return new Response("Invalid reply token", { status: 400 });
+      }
+      if (url.endsWith("/message/push")) {
+        const msg = JSON.parse(raw ?? "{}").messages?.[0];
+        if (msg?.type === "flex") {
+          // Push of the card also rejected - drives the dispatcher catch-all.
+          return new Response("Invalid flex payload", { status: 400 });
+        }
+        pushedTexts.push(msg?.text ?? "");
+        return new Response("{}", { status: 200 });
+      }
+      if (url.includes("/api/performance/client-performance")) {
+        return new Response(
+          JSON.stringify({
+            clients: [
+              {
+                client_id: 98241376,
+                account_id: 78451293,
+                full_name: "Test Client",
+                activity_status: "active",
+                trades: 5,
+                volume: 0.05,
+                account_type: "Premium",
+                deposits: 100,
+                withdrawals: 0,
+                account_currency: "USD",
+                equity: 32.88,
+                archived: null,
+                subaffiliate: 30506525,
+                account_regdate: "2026-07-22",
+                status: "approved",
+                balance: 32.88,
+                commission: 0,
+              },
+            ],
+            totals: {},
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    await getLastTradeMap({
+      fetchClientsFn: async () => ({
+        ok: true,
+        data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
+      }),
+    });
+
+    const response = await app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-line-signature": sig },
+        body,
+      })
+    );
+    expect(response.status).toBe(200);
+
+    await waitFor(() => pushedTexts.length > 0, 2000);
+    // Decodes to "please send the Wallet ID again".
+    expect(pushedTexts[0]).toContain(
+      "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E2A\u0E48\u0E07 Wallet ID \u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07"
+    );
+  });
+
+  test("a non-whitelisted user gets no retry notice when their rejection fails", async () => {
+    process.env.LINE_WHITELIST_UIDS = "Usomeone_else";
+    const { app } = await importWebhook();
+    const body = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "message",
+          message: { type: "text", id: "123", text: "98241376" },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "expired",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ],
+    });
+    const sig = computeSig(body, SECRET);
+
+    const pushes: string[] = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      if (url.endsWith("/message/reply")) {
+        // Even the rejection notice fails, so the catch-all runs.
+        return new Response("Invalid reply token", { status: 400 });
+      }
+      if (url.endsWith("/message/push")) {
+        pushes.push(typeof init?.body === "string" ? init.body : "");
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const response = await app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-line-signature": sig },
+        body,
+      })
+    );
+    expect(response.status).toBe(200);
+
+    // Absence assertion: give the handler and its catch-all time to finish.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(pushes).toHaveLength(0);
+  });
+
   test("T-prefix account lookup resolves wallet via client_id and returns all linked accounts", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({

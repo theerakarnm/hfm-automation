@@ -2,7 +2,13 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { verifyLineSignature } from "../utils/signature";
 import { fetchPerformance, resolveLinkedAccounts, checkConditions, parsePerformanceLookup } from "../services/hfm.service";
-import { replyText, replyFlex, replyTexts, showLoading } from "../services/line.service";
+import {
+  replyText,
+  replyTexts,
+  showLoading,
+  replyOrPushText,
+  replyOrPushFlex,
+} from "../services/line.service";
 import { getLastTradeMapWithin } from "../services/last-trade.service";
 import { buildTradingCard, buildPaginationCard } from "../builders/flex-message.builder";
 import { generateReportForUser, type ReportPeriod } from "../jobs/daily-client-report";
@@ -25,6 +31,12 @@ const MAX_WEBHOOK_EVENTS = 20;
 // overridden by tests that re-import this route.
 const lastTradeDeadlineMs = (): number =>
   Number(process.env.LAST_TRADE_DEADLINE_MS) || 8_000;
+
+// Last-resort notice. Anything that reaches the dispatcher's catch has
+// already failed to reply, so the customer must at least be told to retry
+// rather than be left staring at silence.
+const RETRY_MESSAGE =
+  "\u26A0\uFE0F \u0E23\u0E30\u0E1A\u0E1A\u0E02\u0E31\u0E14\u0E02\u0E49\u0E2D\u0E07\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E2A\u0E48\u0E07 Wallet ID \u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07";
 
 const webhook = new Hono();
 
@@ -66,15 +78,34 @@ webhook.post(
         await recordLineUserRequest(db, uid, event.type);
       }
       if (isTextMessageEvent(event)) {
-        processTextEvent(event).catch((err) => logError("webhook", err));
+        const { replyToken } = event;
+        processTextEvent(event).catch((err) => {
+          logError("webhook", err);
+          if (uid) void notifyRetry(replyToken, uid);
+        });
       } else if (isPostbackEvent(event)) {
-        processPostbackEvent(event).catch((err) => logError("webhook", err));
+        const { replyToken } = event;
+        processPostbackEvent(event).catch((err) => {
+          logError("webhook", err);
+          if (uid) void notifyRetry(replyToken, uid);
+        });
       }
     }
 
     return c.text("OK", 200);
   }
 );
+
+async function notifyRetry(replyToken: string, userId: string): Promise<void> {
+  // The catch-all also fires for non-whitelisted users whose rejection
+  // notice failed to send; they must not get a retry prompt.
+  if (!isWhitelisted(userId)) return;
+  try {
+    await replyOrPushText(replyToken, userId, RETRY_MESSAGE);
+  } catch (err) {
+    logError("webhook-notify", err);
+  }
+}
 
 async function processTextEvent(event: TextMessageEvent): Promise<void> {
   const userId = event.source.userId;
@@ -226,12 +257,22 @@ async function handleLookupAndReply(
     const walletId = result.data[0]!.client_id;
     const altLabel = `Wallet ${walletId}`;
     if (bubbles.length === 1) {
-      await replyFlex(replyToken, `Trading Summary \u2014 ${altLabel}`, bubbles[0]!);
+      await replyOrPushFlex(
+        replyToken,
+        userId,
+        `Trading Summary \u2014 ${altLabel}`,
+        bubbles[0]!
+      );
     } else {
-      await replyFlex(replyToken, `Trading Summary \u2014 ${altLabel}`, {
-        type: "carousel",
-        contents: bubbles,
-      });
+      await replyOrPushFlex(
+        replyToken,
+        userId,
+        `Trading Summary \u2014 ${altLabel}`,
+        {
+          type: "carousel",
+          contents: bubbles,
+        }
+      );
     }
     return;
   }
@@ -245,7 +286,7 @@ async function handleLookupAndReply(
         : result.reason === "timeout"
           ? "\u26A0\uFE0F \u0E01\u0E32\u0E23\u0E40\u0E0A\u0E37\u0E48\u0E2D\u0E21\u0E15\u0E48\u0E2D\u0E2B\u0E21\u0E14\u0E40\u0E27\u0E25\u0E32\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07"
           : "\u26A0\uFE0F \u0E23\u0E30\u0E1A\u0E1A HFM API \u0E02\u0E31\u0E14\u0E02\u0E49\u0E2D\u0E07\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E43\u0E19\u0E2D\u0E35\u0E01\u0E2A\u0E31\u0E01\u0E04\u0E23\u0E39\u0E48 \u0E2B\u0E23\u0E37\u0E2D\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D Support";
-  await replyText(replyToken, errMsg);
+  await replyOrPushText(replyToken, userId, errMsg);
 }
 
 export default webhook;

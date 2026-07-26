@@ -765,7 +765,7 @@ Do **not** change the whitelist-reject or bad-format `replyText` calls - those f
 
 **Steps:**
 
-- [ ] Step 1: In `apps/api/src/routes/webhook.ts`, extend the LINE service import on line 5.
+- [x] Step 1: In `apps/api/src/routes/webhook.ts`, extend the LINE service import on line 5.
       ```ts
       import {
         replyText,
@@ -777,7 +777,7 @@ Do **not** change the whitelist-reject or bad-format `replyText` calls - those f
       ```
       `replyFlex` is no longer used after **Step 5** and must be dropped from the import. Between Step 1 and Step 5 the file carries an unused-import state; that is expected, and only the end-of-task typecheck needs to be clean.
 
-- [ ] Step 2: In the same file, add the retry message constant directly below the `const lastTradeDeadlineMs` accessor added in Task 2. Copy the escape sequence exactly.
+- [x] Step 2: In the same file, add the retry message constant directly below the `const lastTradeDeadlineMs` accessor added in Task 2. Copy the escape sequence exactly.
       ```ts
       // Last-resort notice. Anything that reaches the dispatcher's catch has
       // already failed to reply, so the customer must at least be told to retry
@@ -787,7 +787,7 @@ Do **not** change the whitelist-reject or bad-format `replyText` calls - those f
       ```
       This escape sequence was generated and round-tripped while planning; copy it byte-for-byte rather than retyping Thai glyphs.
 
-- [ ] Step 3: In the same file, replace the dispatch block inside the route handler (anchor: `processTextEvent(event).catch`).
+- [x] Step 3: In the same file, replace the dispatch block inside the route handler (anchor: `processTextEvent(event).catch`).
       ```ts
             if (isTextMessageEvent(event)) {
               const { replyToken } = event;
@@ -804,7 +804,7 @@ Do **not** change the whitelist-reject or bad-format `replyText` calls - those f
             }
       ```
 
-- [ ] Step 4: In the same file, add `notifyRetry` directly below the closing `}` of the `webhook.post(...)` call and above `async function processTextEvent`.
+- [x] Step 4: In the same file, add `notifyRetry` directly below the closing `}` of the `webhook.post(...)` call and above `async function processTextEvent`.
       ```ts
       async function notifyRetry(replyToken: string, userId: string): Promise<void> {
         // The catch-all also fires for non-whitelisted users whose rejection
@@ -819,7 +819,7 @@ Do **not** change the whitelist-reject or bad-format `replyText` calls - those f
       ```
       `isWhitelisted` is already imported at `webhook.ts:10`; no import change is needed for it.
 
-- [ ] Step 5: In the same file, switch the three sends inside `handleLookupAndReply` to the push-fallback variants. Replace the `replyFlex` block (anchor: `await replyFlex(replyToken`):
+- [x] Step 5: In the same file, switch the three sends inside `handleLookupAndReply` to the push-fallback variants. Replace the `replyFlex` block (anchor: `await replyFlex(replyToken`):
       ```ts
           if (bubbles.length === 1) {
             await replyOrPushFlex(
@@ -845,7 +845,7 @@ Do **not** change the whitelist-reject or bad-format `replyText` calls - those f
         await replyOrPushText(replyToken, userId, errMsg);
       ```
 
-- [ ] Step 6: In `apps/api/tests/webhook.test.ts`, append these four tests after the test added in Task 2.
+- [x] Step 6: In `apps/api/tests/webhook.test.ts`, append these four tests after the test added in Task 2.
       ```ts
       test("HFM server error replies with the HFM-down notice instead of silence", async () => {
         const { app } = await importWebhook();
@@ -1130,11 +1130,11 @@ Do **not** change the whitelist-reject or bad-format `replyText` calls - those f
       });
       ```
 
-- [ ] Step 7: Verify - Run: `cd apps/api && bun test tests/webhook.test.ts` - Expected: `18 pass, 0 fail` (13 pre-existing + 1 from Task 2 + 4 here).
+- [x] Step 7: Verify - Run: `cd apps/api && bun test tests/webhook.test.ts` - Expected: `18 pass, 0 fail` (13 pre-existing + 1 from Task 2 + 4 here).
 
-- [ ] Step 8: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+- [x] Step 8: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
 
-- [ ] Step 9: Commit - `git commit -m "fix: always send the customer a reply when the lookup path fails"`
+- [x] Step 9: Commit - `git commit -m "fix: always send the customer a reply when the lookup path fails"`
 
 ---
 

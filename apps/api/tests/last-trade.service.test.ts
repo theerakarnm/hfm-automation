@@ -87,14 +87,20 @@ describe("getLastTradeMap", () => {
     const failFetch = mock(
       async (): Promise<HFMClientsResult> => ({ ok: false, reason: "server_error" }),
     );
-    const sleepFn = mock(async (_ms: number) => {});
+    // Real delay, not an instant mock: with an instant sleepFn the pre-SWR
+    // blocking path also finished in ~1ms, so the elapsed assertion below
+    // could not tell the two implementations apart.
+    const sleepFn = mock(
+      (_ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 60)),
+    );
 
     const startedAt = Date.now();
     const second = await getLastTradeMap({ fetchClientsFn: failFetch, sleepFn, nowMs });
     const elapsed = Date.now() - startedAt;
 
     expect(second!.get(101)).toBe("A");
-    expect(elapsed).toBeLessThan(50); // returned without waiting on the ladder
+    // Blocking would cost 2 x 60ms of backoff; SWR returns straight away.
+    expect(elapsed).toBeLessThan(50);
     await waitForCalls(failFetch, 3); // ladder still ran in the background
   });
 

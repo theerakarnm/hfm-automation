@@ -108,12 +108,6 @@ export const replyTexts = (replyToken: string, texts: string[]) =>
     texts.map((text) => ({ type: "text", text })),
   );
 
-export const replyFlex = (
-  replyToken: string,
-  altText: string,
-  contents: object
-) => replyMessage(replyToken, { type: "flex", altText, contents });
-
 // Replies with the reply token, falling back to a push when the reply is
 // rejected (expired token, LINE 4xx) so the customer is never left with
 // silence. Throws only when the push fails too.

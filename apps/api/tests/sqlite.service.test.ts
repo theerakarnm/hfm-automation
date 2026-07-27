@@ -63,6 +63,8 @@ test("client_snapshots has UNIQUE constraint on snapshot_date and client_id", as
     INSERT INTO client_snapshots (snapshot_date, client_id) VALUES ('2026-04-26', 456)
   `);
 
+  // db.execute returns Drizzle's PgRaw thenable, not a real Promise, and
+  // bun:test's .rejects requires a genuine Promise. The async IIFE promotes it.
   await expect(
     (async () =>
       db.execute(sql`

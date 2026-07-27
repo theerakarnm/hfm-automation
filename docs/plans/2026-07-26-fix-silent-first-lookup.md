@@ -1324,7 +1324,7 @@ Leave both test names byte-for-byte unchanged, including the em dash already pre
 
 **Steps:**
 
-- [ ] Step 1: In `apps/api/tests/sqlite.service.test.ts`, replace the second `db.execute` assertion inside the UNIQUE-constraint test (anchor: `).rejects.toThrow();`).
+- [x] Step 1: In `apps/api/tests/sqlite.service.test.ts`, replace the second `db.execute` assertion inside the UNIQUE-constraint test (anchor: `).rejects.toThrow();`).
       ```ts
         await expect(
           (async () =>
@@ -1334,16 +1334,16 @@ Leave both test names byte-for-byte unchanged, including the em dash already pre
         ).rejects.toThrow();
       ```
 
-- [ ] Step 2: In the same file, replace the idempotency assertion (anchor: `await expect(initDb(db)).resolves.not.toThrow();`).
+- [x] Step 2: In the same file, replace the idempotency assertion (anchor: `await expect(initDb(db)).resolves.not.toThrow();`).
       ```ts
         await expect(initDb(db)).resolves.toBeUndefined();
       ```
 
-- [ ] Step 3: Verify - Run: `cd apps/api && bun test tests/sqlite.service.test.ts` - Expected: `3 pass, 0 fail`.
+- [x] Step 3: Verify - Run: `cd apps/api && bun test tests/sqlite.service.test.ts` - Expected: `3 pass, 0 fail`.
 
-- [ ] Step 4: Verify - Run: `cd apps/api && bun test` - Expected: `193 pass, 0 fail`. Arithmetic: baseline `Ran 181 tests` plus 12 new (3 in `last-trade.service.test.ts`, 6 in `webhook.test.ts` - one from Task 2, four from Task 4, one from Task 5 - and 3 in `line.service.test.ts`) = 193 tests, with the 2 previously-failing ones now green. This is the first task where a package-wide green is expected; Tasks 1-6 verify against scoped test files because these 2 failures are still red until now.
+- [x] Step 4: Verify - Run: `cd apps/api && bun test` - Expected: `193 pass, 0 fail`. Arithmetic: baseline `Ran 181 tests` plus 12 new (3 in `last-trade.service.test.ts`, 6 in `webhook.test.ts` - one from Task 2, four from Task 4, one from Task 5 - and 3 in `line.service.test.ts`) = 193 tests, with the 2 previously-failing ones now green. This is the first task where a package-wide green is expected; Tasks 1-6 verify against scoped test files because these 2 failures are still red until now.
 
-- [ ] Step 5: Commit - `git commit -m "test: repair the two broken assertions in sqlite.service.test.ts"`
+- [x] Step 5: Commit - `git commit -m "test: repair the two broken assertions in sqlite.service.test.ts"`
 
 ---
 

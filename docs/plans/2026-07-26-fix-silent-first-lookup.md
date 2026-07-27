@@ -1358,10 +1358,23 @@ Leave both test names byte-for-byte unchanged, including the em dash already pre
 
 Run after all seven tasks are committed. Requires the real `HFM_API_KEY` from `apps/api/.env`, a reachable Postgres, and the LINE channel wired to this instance.
 
-- [ ] Run: `cd apps/api && bun test` - Expected: `0 fail`.
-- [ ] Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+- [x] Run: `cd apps/api && bun test` - Expected: `0 fail`.
+      > Result: `193 pass, 0 fail, Ran 193 tests across 17 files`.
+- [x] Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+      > Result: clean, exit 0.
 - [ ] Manual: reproduce the original bug shape against a **cold** process. Restart the app (`cd apps/api && bun run start`), and **within 3 seconds of boot** (before the startup warm finishes) send a real Wallet ID from a whitelisted LINE account. Expected: the Trading Account Summary card arrives in under ~20s on the **first** message, with no second message needed. Last Trade may read `N/A` on this one card if the warm has not landed yet; that is the accepted trade for never stalling.
 - [ ] Manual: send the same Wallet ID a second time, at least 15s after the first. Expected: the card arrives in ~1-2s and Last Trade shows a real timestamp (format `DD/MM/YYYY HH:mm`), confirming the cache warmed.
 - [ ] Manual: simulate the HFM outage the customer hit. Stop the app, set `HFM_API_BASE_URL=http://127.0.0.1:1` in `apps/api/.env`, restart, and send a Wallet ID. Expected: within ~15s the customer receives the Thai text `⚠️ ระบบ HFM API ขัดข้องชั่วคราว / กรุณาลองใหม่ในอีกสักครู่ หรือติดต่อ Support` - **never silence**. Restore `HFM_API_BASE_URL=https://api.hfaffiliates.com` afterwards.
 - [ ] Manual: confirm the paginated path still works. Send a Wallet ID that resolves to more than 5 trading accounts, then tap `Next Page ➔`. Expected: the next carousel page arrives, with Last Trade populated on its cards.
 - [ ] Manual: check the logs for the whole session. Expected: at least one `[startup] last-trade cache warmed` line with a non-zero `size`, and zero `UnhandledPromiseRejection` entries.
+
+> **Execution note (2026-07-27):** the four remaining Manual items require a real LINE
+> channel wired to this instance and a whitelisted LINE account sending messages, which
+> the executing agent cannot drive. They are reported as **awaiting human**, not as
+> passed. Automated proxies that DO cover the same code paths at the route level:
+> `replies with the card even when the last-trade fetch hangs`, `HFM server error replies
+> with the HFM-down notice instead of silence`, `an expired reply token falls back to
+> pushing the card`, `a total send failure still pushes the try-again notice`,
+> `a non-whitelisted user gets no retry notice when their rejection fails`, and
+> `a database failure does not stop the lookup reply`. The startup-warm log line was
+> verified for real during Task 6 (`"size":2723`, zero unhandled rejections).

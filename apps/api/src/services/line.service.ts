@@ -108,11 +108,35 @@ export const replyTexts = (replyToken: string, texts: string[]) =>
     texts.map((text) => ({ type: "text", text })),
   );
 
-export const replyFlex = (
+// Replies with the reply token, falling back to a push when the reply is
+// rejected (expired token, LINE 4xx) so the customer is never left with
+// silence. Throws only when the push fails too.
+async function replyOrPush(
   replyToken: string,
+  userId: string,
+  message: object
+): Promise<void> {
+  try {
+    await replyMessage(replyToken, message);
+    return;
+  } catch {
+    // replyMessage already logged the failure.
+  }
+  await pushMessage(userId, message);
+}
+
+export const replyOrPushText = (
+  replyToken: string,
+  userId: string,
+  text: string
+) => replyOrPush(replyToken, userId, { type: "text", text });
+
+export const replyOrPushFlex = (
+  replyToken: string,
+  userId: string,
   altText: string,
   contents: object
-) => replyMessage(replyToken, { type: "flex", altText, contents });
+) => replyOrPush(replyToken, userId, { type: "flex", altText, contents });
 
 export async function pushToAll(uids: string[], text: string): Promise<void> {
   for (let i = 0; i < uids.length; i++) {

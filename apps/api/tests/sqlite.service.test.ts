@@ -63,14 +63,17 @@ test("client_snapshots has UNIQUE constraint on snapshot_date and client_id", as
     INSERT INTO client_snapshots (snapshot_date, client_id) VALUES ('2026-04-26', 456)
   `);
 
+  // db.execute returns Drizzle's PgRaw thenable, not a real Promise, and
+  // bun:test's .rejects requires a genuine Promise. The async IIFE promotes it.
   await expect(
-    db.execute(sql`
-      INSERT INTO client_snapshots (snapshot_date, client_id) VALUES ('2026-04-26', 456)
-    `),
+    (async () =>
+      db.execute(sql`
+        INSERT INTO client_snapshots (snapshot_date, client_id) VALUES ('2026-04-26', 456)
+      `))(),
   ).rejects.toThrow();
 });
 
 test("initDb is idempotent — calling twice does not error", async () => {
   await initDb(db);
-  await expect(initDb(db)).resolves.not.toThrow();
+  await expect(initDb(db)).resolves.toBeUndefined();
 });

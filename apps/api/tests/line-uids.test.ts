@@ -18,6 +18,23 @@ function computeSig(body: string, secret: string): string {
   return createHmac("sha256", secret).update(body).digest("base64");
 }
 
+// The webhook records line_users fire-and-forget, so the row lands shortly
+// after the response. Returns whatever it has at the timeout so the
+// caller's toHaveLength assertion still reports a useful diff.
+async function waitForUsers(
+  db: ReturnType<typeof getDb>,
+  count: number,
+  timeoutMs = 1000,
+): Promise<Awaited<ReturnType<typeof listLineUsers>>> {
+  const startedAt = Date.now();
+  for (;;) {
+    const users = await listLineUsers(db);
+    if (users.length >= count) return users;
+    if (Date.now() - startedAt > timeoutMs) return users;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 async function setupTestDb() {
   const client = postgres(TEST_DATABASE_URL, { max: 1 });
   const db = drizzle(client);
@@ -86,10 +103,8 @@ describe("webhook UID collection", () => {
       })
     );
 
-    await new Promise((r) => setTimeout(r, 100));
-
     const db = getDb();
-    const users = await listLineUsers(db);
+    const users = await waitForUsers(db, 1);
     expect(users).toHaveLength(1);
     expect(users[0]!.line_uid).toBe("Umsg001");
   });
@@ -118,7 +133,7 @@ describe("webhook UID collection", () => {
     );
 
     const db = getDb();
-    const users = await listLineUsers(db);
+    const users = await waitForUsers(db, 1);
     expect(users).toHaveLength(1);
     expect(users[0]!.line_uid).toBe("Ufollow001");
     expect(users[0]!.last_event_type).toBe("follow");
@@ -186,7 +201,7 @@ describe("webhook UID collection", () => {
     );
 
     const db = getDb();
-    const users = await listLineUsers(db);
+    const users = await waitForUsers(db, 2);
     expect(users).toHaveLength(2);
     expect(users.map((u) => u.line_uid).sort()).toEqual(["Uuser1", "Uuser2"]);
   });

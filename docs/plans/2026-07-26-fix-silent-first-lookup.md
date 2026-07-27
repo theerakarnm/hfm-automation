@@ -286,13 +286,13 @@ Every command below was executed while writing this plan; the pasted output is r
 
 **Steps:**
 
-- [ ] Step 1: Create the branch.
+- [x] Step 1: Create the branch.
       ```bash
       cd /Users/jametirakarn/Desktop/Theerakarnm/HFM-Automation
       git checkout -b fix/silent-first-lookup
       ```
 
-- [ ] Step 2: In `apps/api/src/services/last-trade.service.ts`, replace the body of `getLastTradeMap` (from `export async function getLastTradeMap(` down to the closing `}` immediately before `async function refresh`) with the stale-while-revalidate version. Keep the existing doc comment above it unchanged.
+- [x] Step 2: In `apps/api/src/services/last-trade.service.ts`, replace the body of `getLastTradeMap` (from `export async function getLastTradeMap(` down to the closing `}` immediately before `async function refresh`) with the stale-while-revalidate version. Keep the existing doc comment above it unchanged.
       ```ts
       export async function getLastTradeMap(
         options: GetLastTradeMapOptions = {},
@@ -326,7 +326,7 @@ Every command below was executed while writing this plan; the pasted output is r
       }
       ```
 
-- [ ] Step 3: In the same file, append `getLastTradeMapWithin` immediately after `getLastTradeMap` and before `async function refresh`.
+- [x] Step 3: In the same file, append `getLastTradeMapWithin` immediately after `getLastTradeMap` and before `async function refresh`.
       ```ts
       // Same contract as getLastTradeMap but never blocks the caller longer than
       // deadlineMs. On a cold cache the retry ladder can run for ~48s, which does
@@ -361,7 +361,7 @@ Every command below was executed while writing this plan; the pasted output is r
       }
       ```
 
-- [ ] Step 4: In `apps/api/tests/last-trade.service.test.ts`, add a poll helper directly below the existing `makeRow` function (anchor: `function makeRow(overrides`).
+- [x] Step 4: In `apps/api/tests/last-trade.service.test.ts`, add a poll helper directly below the existing `makeRow` function (anchor: `function makeRow(overrides`).
       ```ts
       async function waitForCalls(
         m: { mock: { calls: unknown[] } },
@@ -380,7 +380,7 @@ Every command below was executed while writing this plan; the pasted output is r
       }
       ```
 
-- [ ] Step 5: In the same test file, replace the whole existing test `test("serves stale cache when a later refresh fully fails", ...)` (anchor: `serves stale cache when a later refresh fully fails`) with the stale-while-revalidate version.
+- [x] Step 5: In the same test file, replace the whole existing test `test("serves stale cache when a later refresh fully fails", ...)` (anchor: `serves stale cache when a later refresh fully fails`) with the stale-while-revalidate version.
       ```ts
       test("serves stale cache immediately and refreshes in the background", async () => {
         let now = 0;
@@ -410,7 +410,7 @@ Every command below was executed while writing this plan; the pasted output is r
       });
       ```
 
-- [ ] Step 6: In the same test file, append a new `describe` block for `getLastTradeMapWithin` after the closing `});` of the existing `describe("getLastTradeMap", ...)`. Add `getLastTradeMapWithin` to the import list at the top of the file.
+- [x] Step 6: In the same test file, append a new `describe` block for `getLastTradeMapWithin` after the closing `});` of the existing `describe("getLastTradeMap", ...)`. Add `getLastTradeMapWithin` to the import list at the top of the file.
       ```ts
       describe("getLastTradeMapWithin", () => {
         beforeEach(() => {
@@ -473,11 +473,11 @@ Every command below was executed while writing this plan; the pasted output is r
       });
       ```
 
-- [ ] Step 7: Verify - Run: `cd apps/api && bun test tests/last-trade.service.test.ts` - Expected: `9 pass, 0 fail`.
+- [x] Step 7: Verify - Run: `cd apps/api && bun test tests/last-trade.service.test.ts` - Expected: `9 pass, 0 fail`.
 
-- [ ] Step 8: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+- [x] Step 8: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
 
-- [ ] Step 9: Commit - `git commit -m "fix: serve last-trade cache stale-while-revalidate and add a bounded lookup"`
+- [x] Step 9: Commit - `git commit -m "fix: serve last-trade cache stale-while-revalidate and add a bounded lookup"`
 
 ---
 
@@ -501,12 +501,12 @@ An 8s wait would make the new test slow, so the value is overridable by env; the
 
 **Steps:**
 
-- [ ] Step 1: In `apps/api/src/routes/webhook.ts`, change the import on line 6 from `getLastTradeMap` to `getLastTradeMapWithin`.
+- [x] Step 1: In `apps/api/src/routes/webhook.ts`, change the import on line 6 from `getLastTradeMap` to `getLastTradeMapWithin`.
       ```ts
       import { getLastTradeMapWithin } from "../services/last-trade.service";
       ```
 
-- [ ] Step 2: In the same file, add the deadline accessor directly below `const MAX_WEBHOOK_EVENTS = 20;`. Note this is a **function**, not a const - see the Gotcha.
+- [x] Step 2: In the same file, add the deadline accessor directly below `const MAX_WEBHOOK_EVENTS = 20;`. Note this is a **function**, not a const - see the Gotcha.
       ```ts
       // The HFM /api/clients/ endpoint needs ~7.4s when healthy and up to 48s
       // through its retry ladder. LINE reply tokens expire after 60s, so the
@@ -518,21 +518,21 @@ An 8s wait would make the new test slow, so the value is overridable by env; the
         Number(process.env.LAST_TRADE_DEADLINE_MS) || 8_000;
       ```
 
-- [ ] Step 3: In the same file, replace the `lastTradeByAccountId` assignment (anchor: `const lastTradeByAccountId`, inside `handleLookupAndReply`).
+- [x] Step 3: In the same file, replace the `lastTradeByAccountId` assignment (anchor: `const lastTradeByAccountId`, inside `handleLookupAndReply`).
       ```ts
           const lastTradeByAccountId =
             (await getLastTradeMapWithin(lastTradeDeadlineMs())) ??
             new Map<number, string | null>();
       ```
 
-- [ ] Step 4: In `apps/api/.env.example`, append below `PORT=3000`.
+- [x] Step 4: In `apps/api/.env.example`, append below `PORT=3000`.
       ```
       # Max ms the LINE reply path waits for the HFM /api/clients/ last-trade map
       # before rendering the card without it. Default 8000.
       LAST_TRADE_DEADLINE_MS=
       ```
 
-- [ ] Step 5: In `apps/api/tests/webhook.test.ts`, add a test that a hanging `/api/clients/` still produces a card. Place it after the existing wallet-lookup test (anchor: `18/07/2026 09:30`). Note this test deliberately does **not** pre-seed the cache, and it sets the deadline override before `importWebhook()`.
+- [x] Step 5: In `apps/api/tests/webhook.test.ts`, add a test that a hanging `/api/clients/` still produces a card. Place it after the existing wallet-lookup test (anchor: `18/07/2026 09:30`). Note this test deliberately does **not** pre-seed the cache, and it sets the deadline override before `importWebhook()`.
       ```ts
       test("replies with the card even when the last-trade fetch hangs", async () => {
         process.env.LAST_TRADE_DEADLINE_MS = "200";
@@ -625,13 +625,13 @@ An 8s wait would make the new test slow, so the value is overridable by env; the
       });
       ```
 
-- [ ] Step 6: In `apps/api/tests/webhook.test.ts`, add `delete process.env.LAST_TRADE_DEADLINE_MS;` to the existing `afterEach` block (anchor: `delete process.env.TARGET_WALLET;`) so the override never leaks into other tests.
+- [x] Step 6: In `apps/api/tests/webhook.test.ts`, add `delete process.env.LAST_TRADE_DEADLINE_MS;` to the existing `afterEach` block (anchor: `delete process.env.TARGET_WALLET;`) so the override never leaks into other tests.
 
-- [ ] Step 7: Verify - Run: `cd apps/api && bun test tests/webhook.test.ts` - Expected: `14 pass, 0 fail` (13 pre-existing plus the new one). Requires the Postgres test database from Preflight.
+- [x] Step 7: Verify - Run: `cd apps/api && bun test tests/webhook.test.ts` - Expected: `14 pass, 0 fail` (13 pre-existing plus the new one). Requires the Postgres test database from Preflight.
 
-- [ ] Step 8: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+- [x] Step 8: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
 
-- [ ] Step 9: Commit - `git commit -m "fix: cap the last-trade wait so the LINE reply always beats the token expiry"`
+- [x] Step 9: Commit - `git commit -m "fix: cap the last-trade wait so the LINE reply always beats the token expiry"`
 
 ---
 
@@ -654,7 +654,7 @@ LINE push messages count against the channel's monthly message quota while repli
 
 **Steps:**
 
-- [ ] Step 1: In `apps/api/src/services/line.service.ts`, append after the `replyFlex` export (anchor: `export const replyFlex`) and before `export async function pushToAll`.
+- [x] Step 1: In `apps/api/src/services/line.service.ts`, append after the `replyFlex` export (anchor: `export const replyFlex`) and before `export async function pushToAll`.
       ```ts
       // Replies with the reply token, falling back to a push when the reply is
       // rejected (expired token, LINE 4xx) so the customer is never left with
@@ -687,7 +687,7 @@ LINE push messages count against the channel's monthly message quota while repli
       ) => replyOrPush(replyToken, userId, { type: "flex", altText, contents });
       ```
 
-- [ ] Step 2: In `apps/api/tests/line.service.test.ts`, extend the import on line 2 to `import { pushToAll, replyOrPushText, replyOrPushFlex } from "../src/services/line.service";` and append a new `describe` block after the closing `});` of `describe("pushToAll", ...)`.
+- [x] Step 2: In `apps/api/tests/line.service.test.ts`, extend the import on line 2 to `import { pushToAll, replyOrPushText, replyOrPushFlex } from "../src/services/line.service";` and append a new `describe` block after the closing `});` of `describe("pushToAll", ...)`.
       ```ts
       describe("replyOrPush", () => {
         afterEach(() => {
@@ -740,11 +740,11 @@ LINE push messages count against the channel's monthly message quota while repli
       });
       ```
 
-- [ ] Step 3: Verify - Run: `cd apps/api && bun test tests/line.service.test.ts` - Expected: `7 pass, 0 fail` (4 pre-existing plus 3 new).
+- [x] Step 3: Verify - Run: `cd apps/api && bun test tests/line.service.test.ts` - Expected: `7 pass, 0 fail` (4 pre-existing plus 3 new).
 
-- [ ] Step 4: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+- [x] Step 4: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
 
-- [ ] Step 5: Commit - `git commit -m "feat: add replyOrPushText and replyOrPushFlex LINE senders"`
+- [x] Step 5: Commit - `git commit -m "feat: add replyOrPushText and replyOrPushFlex LINE senders"`
 
 ---
 
@@ -765,7 +765,7 @@ Do **not** change the whitelist-reject or bad-format `replyText` calls - those f
 
 **Steps:**
 
-- [ ] Step 1: In `apps/api/src/routes/webhook.ts`, extend the LINE service import on line 5.
+- [x] Step 1: In `apps/api/src/routes/webhook.ts`, extend the LINE service import on line 5.
       ```ts
       import {
         replyText,
@@ -777,7 +777,7 @@ Do **not** change the whitelist-reject or bad-format `replyText` calls - those f
       ```
       `replyFlex` is no longer used after **Step 5** and must be dropped from the import. Between Step 1 and Step 5 the file carries an unused-import state; that is expected, and only the end-of-task typecheck needs to be clean.
 
-- [ ] Step 2: In the same file, add the retry message constant directly below the `const lastTradeDeadlineMs` accessor added in Task 2. Copy the escape sequence exactly.
+- [x] Step 2: In the same file, add the retry message constant directly below the `const lastTradeDeadlineMs` accessor added in Task 2. Copy the escape sequence exactly.
       ```ts
       // Last-resort notice. Anything that reaches the dispatcher's catch has
       // already failed to reply, so the customer must at least be told to retry
@@ -787,7 +787,7 @@ Do **not** change the whitelist-reject or bad-format `replyText` calls - those f
       ```
       This escape sequence was generated and round-tripped while planning; copy it byte-for-byte rather than retyping Thai glyphs.
 
-- [ ] Step 3: In the same file, replace the dispatch block inside the route handler (anchor: `processTextEvent(event).catch`).
+- [x] Step 3: In the same file, replace the dispatch block inside the route handler (anchor: `processTextEvent(event).catch`).
       ```ts
             if (isTextMessageEvent(event)) {
               const { replyToken } = event;
@@ -804,7 +804,7 @@ Do **not** change the whitelist-reject or bad-format `replyText` calls - those f
             }
       ```
 
-- [ ] Step 4: In the same file, add `notifyRetry` directly below the closing `}` of the `webhook.post(...)` call and above `async function processTextEvent`.
+- [x] Step 4: In the same file, add `notifyRetry` directly below the closing `}` of the `webhook.post(...)` call and above `async function processTextEvent`.
       ```ts
       async function notifyRetry(replyToken: string, userId: string): Promise<void> {
         // The catch-all also fires for non-whitelisted users whose rejection
@@ -819,7 +819,7 @@ Do **not** change the whitelist-reject or bad-format `replyText` calls - those f
       ```
       `isWhitelisted` is already imported at `webhook.ts:10`; no import change is needed for it.
 
-- [ ] Step 5: In the same file, switch the three sends inside `handleLookupAndReply` to the push-fallback variants. Replace the `replyFlex` block (anchor: `await replyFlex(replyToken`):
+- [x] Step 5: In the same file, switch the three sends inside `handleLookupAndReply` to the push-fallback variants. Replace the `replyFlex` block (anchor: `await replyFlex(replyToken`):
       ```ts
           if (bubbles.length === 1) {
             await replyOrPushFlex(
@@ -845,7 +845,7 @@ Do **not** change the whitelist-reject or bad-format `replyText` calls - those f
         await replyOrPushText(replyToken, userId, errMsg);
       ```
 
-- [ ] Step 6: In `apps/api/tests/webhook.test.ts`, append these four tests after the test added in Task 2.
+- [x] Step 6: In `apps/api/tests/webhook.test.ts`, append these four tests after the test added in Task 2.
       ```ts
       test("HFM server error replies with the HFM-down notice instead of silence", async () => {
         const { app } = await importWebhook();
@@ -1130,11 +1130,11 @@ Do **not** change the whitelist-reject or bad-format `replyText` calls - those f
       });
       ```
 
-- [ ] Step 7: Verify - Run: `cd apps/api && bun test tests/webhook.test.ts` - Expected: `18 pass, 0 fail` (13 pre-existing + 1 from Task 2 + 4 here).
+- [x] Step 7: Verify - Run: `cd apps/api && bun test tests/webhook.test.ts` - Expected: `18 pass, 0 fail` (13 pre-existing + 1 from Task 2 + 4 here).
 
-- [ ] Step 8: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+- [x] Step 8: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
 
-- [ ] Step 9: Commit - `git commit -m "fix: always send the customer a reply when the lookup path fails"`
+- [x] Step 9: Commit - `git commit -m "fix: always send the customer a reply when the lookup path fails"`
 
 ---
 
@@ -1159,7 +1159,7 @@ The two negative tests in that file (`does NOT collect UID when signature is inv
 
 **Steps:**
 
-- [ ] Step 1: In `apps/api/src/routes/webhook.ts`, replace the telemetry write inside the event loop (anchor: `await recordLineUserRequest`).
+- [x] Step 1: In `apps/api/src/routes/webhook.ts`, replace the telemetry write inside the event loop (anchor: `await recordLineUserRequest`).
       ```ts
             const uid = event.source?.userId;
             if (uid) {
@@ -1170,7 +1170,7 @@ The two negative tests in that file (`does NOT collect UID when signature is inv
             }
       ```
 
-- [ ] Step 2: In `apps/api/tests/line-uids.test.ts`, make the three positive assertions wait for the now-asynchronous write. Add this helper directly below `function computeSig(...)` (anchor: `function computeSig`).
+- [x] Step 2: In `apps/api/tests/line-uids.test.ts`, make the three positive assertions wait for the now-asynchronous write. Add this helper directly below `function computeSig(...)` (anchor: `function computeSig`).
       ```ts
       // The webhook records line_users fire-and-forget, so the row lands shortly
       // after the response. Returns whatever it has at the timeout so the
@@ -1196,9 +1196,9 @@ The two negative tests in that file (`does NOT collect UID when signature is inv
 
       Leave `does NOT collect UID when signature is invalid` and `skips events without userId (group source)` exactly as they are.
 
-- [ ] Step 3: Verify - Run: `cd apps/api && bun test tests/line-uids.test.ts` - Expected: `8 pass, 0 fail`. Run it **five times in a row** and confirm it is green every time. Three runs is not enough evidence here: before the fix this file's failure count itself varies run to run (measured 3, 3, 3, then 1 failure across four runs), so a single lucky pass proves nothing.
+- [x] Step 3: Verify - Run: `cd apps/api && bun test tests/line-uids.test.ts` - Expected: `8 pass, 0 fail`. Run it **five times in a row** and confirm it is green every time. Three runs is not enough evidence here: before the fix this file's failure count itself varies run to run (measured 3, 3, 3, then 1 failure across four runs), so a single lucky pass proves nothing.
 
-- [ ] Step 4: In `apps/api/tests/webhook.test.ts`, append a test after the ones added in Task 4.
+- [x] Step 4: In `apps/api/tests/webhook.test.ts`, append a test after the ones added in Task 4.
       ```ts
       test("a database failure does not stop the lookup reply", async () => {
         const { app } = await importWebhook();
@@ -1256,11 +1256,11 @@ The two negative tests in that file (`does NOT collect UID when signature is inv
       });
       ```
 
-- [ ] Step 5: Verify - Run: `cd apps/api && bun test tests/webhook.test.ts` - Expected: `19 pass, 0 fail`.
+- [x] Step 5: Verify - Run: `cd apps/api && bun test tests/webhook.test.ts` - Expected: `19 pass, 0 fail`.
 
-- [ ] Step 6: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+- [x] Step 6: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
 
-- [ ] Step 7: Commit - `git commit -m "fix: make the line_users telemetry write non-blocking"`
+- [x] Step 7: Commit - `git commit -m "fix: make the line_users telemetry write non-blocking"`
 
 ---
 
@@ -1280,13 +1280,13 @@ The two negative tests in that file (`does NOT collect UID when signature is inv
 
 **Steps:**
 
-- [ ] Step 1: In `apps/api/src/index.ts`, **replace** the existing line `import { logger } from "./utils/logger";` (anchor: `from "./utils/logger"`) with the two lines below. Do not append a second logger import - a duplicate `logger` binding fails typecheck with `TS2300: Duplicate identifier 'logger'`.
+- [x] Step 1: In `apps/api/src/index.ts`, **replace** the existing line `import { logger } from "./utils/logger";` (anchor: `from "./utils/logger"`) with the two lines below. Do not append a second logger import - a duplicate `logger` binding fails typecheck with `TS2300: Duplicate identifier 'logger'`.
       ```ts
       import { logger, logError } from "./utils/logger";
       import { getLastTradeMap } from "./services/last-trade.service";
       ```
 
-- [ ] Step 2: In the same file, append directly below `registerJobs();`.
+- [x] Step 2: In the same file, append directly below `registerJobs();`.
       ```ts
       // Warm the last-trade cache so the first customer lookup does not pay the
       // ~7s /api/clients/ round trip.
@@ -1297,11 +1297,12 @@ The two negative tests in that file (`does NOT collect UID when signature is inv
         .catch((err) => logError("startup-warm", err));
       ```
 
-- [ ] Step 3: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+- [x] Step 3: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
 
-- [ ] Step 4: Verify - Manual: with real credentials loaded, run `cd apps/api && bun run start`, then watch stdout for up to 20s. Expected: a pino line containing `[startup] last-trade cache warmed` with `"size"` greater than 0 (~2709 on the current dataset), and no unhandled rejection. Stop the server with Ctrl-C.
+- [x] Step 4: Verify - Manual: with real credentials loaded, run `cd apps/api && bun run start`, then watch stdout for up to 20s. Expected: a pino line containing `[startup] last-trade cache warmed` with `"size"` greater than 0 (~2709 on the current dataset), and no unhandled rejection. Stop the server with Ctrl-C.
+      > Deviation: passed on the second boot (`"size":2723`, 0 unhandled rejections). The FIRST boot logged `"size":0` because all 3 ladder attempts hit the 15s `FETCH_TIMEOUT_MS`. Re-measuring `/api/clients/` immediately after showed why: 38088ms, then 7735ms, then 7428ms. The upstream had degraded to ~38s since Preflight measured 7.4s. Environment condition, not a code defect - the warm behaved correctly (logged, degraded to an empty map, no unhandled rejection). Dataset also grew 2709 -> 2723, which is why `size` is not exactly the planned figure. See the run report for the `FETCH_TIMEOUT_MS` follow-up this exposes; changing it is on the NOT-building list, so it was not touched.
 
-- [ ] Step 5: Commit - `git commit -m "feat: warm the last-trade cache at startup"`
+- [x] Step 5: Commit - `git commit -m "feat: warm the last-trade cache at startup"`
 
 ---
 
@@ -1323,7 +1324,7 @@ Leave both test names byte-for-byte unchanged, including the em dash already pre
 
 **Steps:**
 
-- [ ] Step 1: In `apps/api/tests/sqlite.service.test.ts`, replace the second `db.execute` assertion inside the UNIQUE-constraint test (anchor: `).rejects.toThrow();`).
+- [x] Step 1: In `apps/api/tests/sqlite.service.test.ts`, replace the second `db.execute` assertion inside the UNIQUE-constraint test (anchor: `).rejects.toThrow();`).
       ```ts
         await expect(
           (async () =>
@@ -1333,16 +1334,16 @@ Leave both test names byte-for-byte unchanged, including the em dash already pre
         ).rejects.toThrow();
       ```
 
-- [ ] Step 2: In the same file, replace the idempotency assertion (anchor: `await expect(initDb(db)).resolves.not.toThrow();`).
+- [x] Step 2: In the same file, replace the idempotency assertion (anchor: `await expect(initDb(db)).resolves.not.toThrow();`).
       ```ts
         await expect(initDb(db)).resolves.toBeUndefined();
       ```
 
-- [ ] Step 3: Verify - Run: `cd apps/api && bun test tests/sqlite.service.test.ts` - Expected: `3 pass, 0 fail`.
+- [x] Step 3: Verify - Run: `cd apps/api && bun test tests/sqlite.service.test.ts` - Expected: `3 pass, 0 fail`.
 
-- [ ] Step 4: Verify - Run: `cd apps/api && bun test` - Expected: `193 pass, 0 fail`. Arithmetic: baseline `Ran 181 tests` plus 12 new (3 in `last-trade.service.test.ts`, 6 in `webhook.test.ts` - one from Task 2, four from Task 4, one from Task 5 - and 3 in `line.service.test.ts`) = 193 tests, with the 2 previously-failing ones now green. This is the first task where a package-wide green is expected; Tasks 1-6 verify against scoped test files because these 2 failures are still red until now.
+- [x] Step 4: Verify - Run: `cd apps/api && bun test` - Expected: `193 pass, 0 fail`. Arithmetic: baseline `Ran 181 tests` plus 12 new (3 in `last-trade.service.test.ts`, 6 in `webhook.test.ts` - one from Task 2, four from Task 4, one from Task 5 - and 3 in `line.service.test.ts`) = 193 tests, with the 2 previously-failing ones now green. This is the first task where a package-wide green is expected; Tasks 1-6 verify against scoped test files because these 2 failures are still red until now.
 
-- [ ] Step 5: Commit - `git commit -m "test: repair the two broken assertions in sqlite.service.test.ts"`
+- [x] Step 5: Commit - `git commit -m "test: repair the two broken assertions in sqlite.service.test.ts"`
 
 ---
 
@@ -1357,10 +1358,23 @@ Leave both test names byte-for-byte unchanged, including the em dash already pre
 
 Run after all seven tasks are committed. Requires the real `HFM_API_KEY` from `apps/api/.env`, a reachable Postgres, and the LINE channel wired to this instance.
 
-- [ ] Run: `cd apps/api && bun test` - Expected: `0 fail`.
-- [ ] Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+- [x] Run: `cd apps/api && bun test` - Expected: `0 fail`.
+      > Result: `193 pass, 0 fail, Ran 193 tests across 17 files`.
+- [x] Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+      > Result: clean, exit 0.
 - [ ] Manual: reproduce the original bug shape against a **cold** process. Restart the app (`cd apps/api && bun run start`), and **within 3 seconds of boot** (before the startup warm finishes) send a real Wallet ID from a whitelisted LINE account. Expected: the Trading Account Summary card arrives in under ~20s on the **first** message, with no second message needed. Last Trade may read `N/A` on this one card if the warm has not landed yet; that is the accepted trade for never stalling.
 - [ ] Manual: send the same Wallet ID a second time, at least 15s after the first. Expected: the card arrives in ~1-2s and Last Trade shows a real timestamp (format `DD/MM/YYYY HH:mm`), confirming the cache warmed.
 - [ ] Manual: simulate the HFM outage the customer hit. Stop the app, set `HFM_API_BASE_URL=http://127.0.0.1:1` in `apps/api/.env`, restart, and send a Wallet ID. Expected: within ~15s the customer receives the Thai text `⚠️ ระบบ HFM API ขัดข้องชั่วคราว / กรุณาลองใหม่ในอีกสักครู่ หรือติดต่อ Support` - **never silence**. Restore `HFM_API_BASE_URL=https://api.hfaffiliates.com` afterwards.
 - [ ] Manual: confirm the paginated path still works. Send a Wallet ID that resolves to more than 5 trading accounts, then tap `Next Page ➔`. Expected: the next carousel page arrives, with Last Trade populated on its cards.
 - [ ] Manual: check the logs for the whole session. Expected: at least one `[startup] last-trade cache warmed` line with a non-zero `size`, and zero `UnhandledPromiseRejection` entries.
+
+> **Execution note (2026-07-27):** the four remaining Manual items require a real LINE
+> channel wired to this instance and a whitelisted LINE account sending messages, which
+> the executing agent cannot drive. They are reported as **awaiting human**, not as
+> passed. Automated proxies that DO cover the same code paths at the route level:
+> `replies with the card even when the last-trade fetch hangs`, `HFM server error replies
+> with the HFM-down notice instead of silence`, `an expired reply token falls back to
+> pushing the card`, `a total send failure still pushes the try-again notice`,
+> `a non-whitelisted user gets no retry notice when their rejection fails`, and
+> `a database failure does not stop the lookup reply`. The startup-warm log line was
+> verified for real during Task 6 (`"size":2723`, zero unhandled rejections).

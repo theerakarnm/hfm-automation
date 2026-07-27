@@ -1280,13 +1280,13 @@ The two negative tests in that file (`does NOT collect UID when signature is inv
 
 **Steps:**
 
-- [ ] Step 1: In `apps/api/src/index.ts`, **replace** the existing line `import { logger } from "./utils/logger";` (anchor: `from "./utils/logger"`) with the two lines below. Do not append a second logger import - a duplicate `logger` binding fails typecheck with `TS2300: Duplicate identifier 'logger'`.
+- [x] Step 1: In `apps/api/src/index.ts`, **replace** the existing line `import { logger } from "./utils/logger";` (anchor: `from "./utils/logger"`) with the two lines below. Do not append a second logger import - a duplicate `logger` binding fails typecheck with `TS2300: Duplicate identifier 'logger'`.
       ```ts
       import { logger, logError } from "./utils/logger";
       import { getLastTradeMap } from "./services/last-trade.service";
       ```
 
-- [ ] Step 2: In the same file, append directly below `registerJobs();`.
+- [x] Step 2: In the same file, append directly below `registerJobs();`.
       ```ts
       // Warm the last-trade cache so the first customer lookup does not pay the
       // ~7s /api/clients/ round trip.
@@ -1297,11 +1297,12 @@ The two negative tests in that file (`does NOT collect UID when signature is inv
         .catch((err) => logError("startup-warm", err));
       ```
 
-- [ ] Step 3: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
+- [x] Step 3: Verify - Run: `cd apps/api && bun run typecheck` - Expected: no output, exit 0.
 
-- [ ] Step 4: Verify - Manual: with real credentials loaded, run `cd apps/api && bun run start`, then watch stdout for up to 20s. Expected: a pino line containing `[startup] last-trade cache warmed` with `"size"` greater than 0 (~2709 on the current dataset), and no unhandled rejection. Stop the server with Ctrl-C.
+- [x] Step 4: Verify - Manual: with real credentials loaded, run `cd apps/api && bun run start`, then watch stdout for up to 20s. Expected: a pino line containing `[startup] last-trade cache warmed` with `"size"` greater than 0 (~2709 on the current dataset), and no unhandled rejection. Stop the server with Ctrl-C.
+      > Deviation: passed on the second boot (`"size":2723`, 0 unhandled rejections). The FIRST boot logged `"size":0` because all 3 ladder attempts hit the 15s `FETCH_TIMEOUT_MS`. Re-measuring `/api/clients/` immediately after showed why: 38088ms, then 7735ms, then 7428ms. The upstream had degraded to ~38s since Preflight measured 7.4s. Environment condition, not a code defect - the warm behaved correctly (logged, degraded to an empty map, no unhandled rejection). Dataset also grew 2709 -> 2723, which is why `size` is not exactly the planned figure. See the run report for the `FETCH_TIMEOUT_MS` follow-up this exposes; changing it is on the NOT-building list, so it was not touched.
 
-- [ ] Step 5: Commit - `git commit -m "feat: warm the last-trade cache at startup"`
+- [x] Step 5: Commit - `git commit -m "feat: warm the last-trade cache at startup"`
 
 ---
 

@@ -446,6 +446,90 @@ describe("webhook", () => {
     expect(reply?.body).toContain("HFM API");
   });
 
+  test("wallet whose accounts are all archived replies with the partner notice", async () => {
+    // Self-contained whitelist: .env leaks real LINE_WHITELIST_UIDS into
+    // isolated runs (-t), which would reject Uabc123 before the lookup.
+    process.env.LINE_WHITELIST_UIDS = "Uabc123";
+    const { app } = await importWebhook();
+    const body = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "message",
+          message: { type: "text", id: "123", text: "65238209" },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "token123",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ],
+    });
+    const sig = computeSig(body, SECRET);
+
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      fetchCalls.push({
+        url,
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      if (url.includes("/api/performance/client-performance")) {
+        return new Response(
+          JSON.stringify({
+            clients: [
+              {
+                client_id: 65238209,
+                account_id: 198058740,
+                activity_status: "Archived Trading Account",
+                trades: 2908,
+                volume: 132.2,
+                account_type: "PREMIUM",
+                balance: 0,
+                account_currency: "USD",
+                equity: 0,
+                archived: true,
+                subaffiliate: 30506525,
+                account_regdate: "2026-04-08T17:14:12",
+                status: "Approved",
+              },
+            ],
+            totals: {},
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const response = await app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-line-signature": sig,
+        },
+        body,
+      })
+    );
+    expect(response.status).toBe(200);
+
+    await waitFor(
+      () => fetchCalls.some((c) => c.url === "https://api.line.me/v2/bot/message/reply"),
+      2000
+    );
+    const reply = fetchCalls.find(
+      (c) => c.url === "https://api.line.me/v2/bot/message/reply"
+    );
+    expect(reply?.body).toContain("\u0E2D\u0E22\u0E39\u0E48\u0E43\u0E15\u0E49 Partner 30506525 \u0E41\u0E15\u0E48\u0E44\u0E21\u0E48\u0E21\u0E35\u0E1A\u0E31\u0E0D\u0E0A\u0E35");
+    expect(reply?.body).not.toContain("\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25");
+  });
+
   test("an expired reply token falls back to pushing the card", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({

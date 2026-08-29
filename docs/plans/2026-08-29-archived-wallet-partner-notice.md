@@ -186,7 +186,7 @@ Expected: all pass, including the pre-existing guards on unchanged behavior:
 - `"multiple non-archived clients returned as array"` (line ~118) - mixed rows, still `ok` with only live rows.
 - `"404 response returns not_found"` (line ~96).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/types/hfm.types.ts src/services/hfm.service.ts tests/hfm.service.test.ts
@@ -201,7 +201,8 @@ git commit -m "feat: add all_archived HFM lookup result"
 - Modify: `src/routes/webhook.ts:284-291`
 - Test: `tests/webhook.test.ts` (after the `"HFM server error replies with the HFM-down notice instead of silence"` test, around line 448)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
+  > Deviation: Added `process.env.LINE_WHITELIST_UIDS = "Uabc123";` at the top of the test (matches the line-152 pattern): Bun auto-loads .env, whose real LINE_WHITELIST_UIDS leaks into isolated `-t` runs and rejects Uabc123 before the lookup. Pre-existing quirk - the existing "HFM server error" test fails the same way in isolation.
 
 In `tests/webhook.test.ts`, insert this test directly after the closing `});` of the test `"HFM server error replies with the HFM-down notice instead of silence"`:
 
@@ -291,7 +292,8 @@ In `tests/webhook.test.ts`, insert this test directly after the closing `});` of
 The first assertion is the full notice `อยู่ใต้ Partner 30506525 แต่ไม่มีบัญชี`.
 The second asserts the generic not-found text `ไม่พบข้อมูล` does NOT appear.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
+  > Deviation: RED confirmed, but the failing reply was the HFM-down notice (all_archived falls to the final else branch), not the generic not-found text the plan predicted. Same intent: the partner notice is absent before Step 3.
 
 ```bash
 export TEST_DATABASE_URL=postgresql://test:test@localhost:5433/hfm_test
@@ -300,7 +302,7 @@ bun test tests/webhook.test.ts -t "all archived"
 
 Expected: FAIL with `expected '…' to include 'อยู่ใต้ Partner…'`, because the reply body still contains the generic not-found text (`reason` is `all_archived` but the webhook has no branch for it yet).
 
-- [ ] **Step 3: Add the message branch**
+- [x] **Step 3: Add the message branch**
 
 Edit `src/routes/webhook.ts`, replace exactly:
 
@@ -323,7 +325,7 @@ with:
 Nothing else in the chain changes; the existing `not_found`, `no_wallet`, `timeout`, and server-error branches stay as they are, just one indent deeper inside the new ternary.
 `\u0E2D\u0E22\u0E39\u0E48\u0E43\u0E15\u0E49 Partner ${result.subaffiliate} \u0E41\u0E15\u0E48\u0E44\u0E21\u0E48\u0E21\u0E35\u0E1A\u0E31\u0E0D\u0E0A\u0E35` renders as `อยู่ใต้ Partner 30506525 แต่ไม่มีบัญชี` and matches the escaped-unicode style of the surrounding replies.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 bun test tests/webhook.test.ts -t "all archived"
@@ -331,7 +333,7 @@ bun test tests/webhook.test.ts -t "all archived"
 
 Expected: PASS.
 
-- [ ] **Step 5: Full suite and typecheck**
+- [x] **Step 5: Full suite and typecheck**
 
 ```bash
 export TEST_DATABASE_URL=postgresql://test:test@localhost:5433/hfm_test

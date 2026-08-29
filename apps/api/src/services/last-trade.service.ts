@@ -47,12 +47,54 @@ export async function getLastTradeMap(
   }
 
   // Single-flight: concurrent callers share one refresh.
-  if (inflight) return inflight;
+  if (!inflight) {
+    inflight = refresh(fetchClientsFn, sleep, now).finally(() => {
+      inflight = null;
+    });
+  }
+  const refreshing = inflight;
 
-  inflight = refresh(fetchClientsFn, sleep, now).finally(() => {
-    inflight = null;
+  // Stale-while-revalidate: /api/clients/ needs ~7s even when healthy, so
+  // an expired cache is handed back immediately while the refresh warms it
+  // for the next lookup. Only a completely cold cache blocks the caller.
+  if (cache) {
+    refreshing.catch((err) => logError("last-trade", err));
+    return cache.map;
+  }
+
+  return refreshing;
+}
+
+// Same contract as getLastTradeMap but never blocks the caller longer than
+// deadlineMs. On a cold cache the retry ladder can run for ~48s, which does
+// not fit inside LINE's 60s reply-token window; past the deadline we hand
+// back whatever cache exists (possibly none) and let the refresh finish in
+// the background so the next lookup is warm.
+export async function getLastTradeMapWithin(
+  deadlineMs: number,
+  options: GetLastTradeMapOptions = {},
+): Promise<LastTradeMap | null> {
+  const pending = getLastTradeMap(options).catch((err) => {
+    logError("last-trade", err);
+    return null;
   });
-  return inflight;
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<LastTradeMap | null>((resolve) => {
+    timer = setTimeout(() => {
+      logError(
+        "last-trade",
+        `getLastTradeMapWithin exceeded ${deadlineMs}ms; replying without a fresh map`,
+      );
+      resolve(cache?.map ?? null);
+    }, deadlineMs);
+  });
+
+  try {
+    return await Promise.race([pending, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function refresh(

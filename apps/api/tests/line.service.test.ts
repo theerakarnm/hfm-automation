@@ -1,5 +1,5 @@
 import { expect, test, describe, afterEach } from "bun:test";
-import { pushToAll } from "../src/services/line.service";
+import { pushToAll, replyOrPushText, replyOrPushFlex } from "../src/services/line.service";
 
 const ORIGINAL_FETCH = globalThis.fetch;
 
@@ -56,5 +56,55 @@ describe("pushToAll", () => {
 
     await expect(pushToAll(["U001", "U002", "U003"], "hello")).rejects.toThrow();
     expect(calls).toEqual(["U001", "U002"]);
+  });
+});
+
+describe("replyOrPush", () => {
+  afterEach(() => {
+    globalThis.fetch = ORIGINAL_FETCH;
+  });
+
+  test("uses the reply token and does not push when the reply succeeds", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: unknown) => {
+      urls.push(String(input));
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    await replyOrPushText("token123", "U001", "hello");
+    expect(urls).toEqual(["https://api.line.me/v2/bot/message/reply"]);
+  });
+
+  test("falls back to a push carrying the same message when the reply fails", async () => {
+    const calls: Array<{ url: string; body: string }> = [];
+    globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, body: init?.body as string });
+      if (url.endsWith("/message/reply")) {
+        return new Response("Invalid reply token", { status: 400 });
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    await replyOrPushFlex("expired", "U001", "alt text", { type: "bubble" });
+
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://api.line.me/v2/bot/message/reply",
+      "https://api.line.me/v2/bot/message/push",
+    ]);
+    const pushed = JSON.parse(calls[1]!.body);
+    expect(pushed.to).toBe("U001");
+    expect(pushed.messages[0]).toEqual({
+      type: "flex",
+      altText: "alt text",
+      contents: { type: "bubble" },
+    });
+  });
+
+  test("throws when both the reply and the push fail", async () => {
+    globalThis.fetch = (async () =>
+      new Response("nope", { status: 400 })) as unknown as typeof globalThis.fetch;
+
+    await expect(replyOrPushText("expired", "U001", "hello")).rejects.toThrow();
   });
 });

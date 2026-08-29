@@ -134,6 +134,23 @@ describe("fetchPerformance", () => {
     }
   });
 
+  test("all-archived clients returns all_archived with the partner id", async () => {
+    const archivedResponse: HFMClientsPerformanceResponse = {
+      clients: [
+        { ...mockHfmResponse.clients[0]!, archived: true, subaffiliate: 30506525 },
+      ],
+      totals: mockHfmResponse.totals,
+    };
+    globalThis.fetch = mockFetch(200, archivedResponse);
+    const result = await fetchPerformance({ kind: "wallet", id: 65238209, label: "65238209" });
+    expect(result.ok).toBe(false);
+    if (!result.ok && result.reason === "all_archived") {
+      expect(result.subaffiliate).toBe(30506525);
+    } else {
+      throw new Error(`expected all_archived, got ${JSON.stringify(result)}`);
+    }
+  });
+
   test("account lookup uses accounts= query param", async () => {
     let calledUrl = "";
     globalThis.fetch = (async (url: string | URL | Request) => {

@@ -127,7 +127,13 @@ export async function fetchPerformance(
     }
 
     const data: HFMPerformanceData[] = clients.filter((c) => !c.archived);
-    if (data.length === 0 || data[0]!.client_id == null) {
+    if (data.length === 0) {
+      // The API returned rows but every account is archived. The wallet
+      // still exists under a partner, so carry that partner id up to the
+      // webhook instead of collapsing into a plain not-found.
+      return { ok: false, reason: "all_archived", subaffiliate: clients[0]!.subaffiliate };
+    }
+    if (data[0]!.client_id == null) {
       return { ok: false, reason: "not_found" };
     }
 

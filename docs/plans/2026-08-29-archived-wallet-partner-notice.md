@@ -57,7 +57,7 @@ Requested message shape: `อยู่ใต้ Partner {_subaffiliate_} แต�
 
 ## Preflight
 
-- [ ] **P1: Verify clean baseline**
+- [x] **P1: Verify clean baseline**
 
 Run from `apps/api`:
 
@@ -67,7 +67,8 @@ bun run typecheck
 
 Expected: no errors.
 
-- [ ] **P2: Start the test database**
+- [x] **P2: Start the test database**
+  > Deviation: docker is not installed on this machine; a local PostgreSQL (127.0.0.1:5432, user jametirakarn, db hfm_test) serves the suite via the test file's built-in default URL. Baseline run without TEST_DATABASE_URL: 193 pass / 0 fail.
 
 Run from the repo root, in every shell you will run `bun test` from (`%%bash` cells do not share exports, so re-`export` per cell):
 
@@ -80,7 +81,7 @@ bun test
 
 Expected: all tests pass. If the container is already running, skip `docker compose`.
 
-- [ ] **P3: Create the branch**
+- [x] **P3: Create the branch**
 
 ```bash
 git checkout -b feat/archived-wallet-partner-notice
@@ -97,7 +98,7 @@ Expected: new branch created off `main`.
 - Modify: `src/services/hfm.service.ts:129-132`
 - Test: `tests/hfm.service.test.ts` (inside `describe("fetchPerformance")`)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `tests/hfm.service.test.ts`, inside `describe("fetchPerformance")`, insert this test directly after the closing `});` of the test `"multiple non-archived clients returned as array"` (around line 132):
 
@@ -120,7 +121,7 @@ In `tests/hfm.service.test.ts`, inside `describe("fetchPerformance")`, insert th
   });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 bun test tests/hfm.service.test.ts -t "all-archived"
@@ -128,7 +129,7 @@ bun test tests/hfm.service.test.ts -t "all-archived"
 
 Expected: FAIL. TypeScript reports `Property 'all_archived' does not exist` (or the runtime fails the `all_archived` check with `expected all_archived, got {"ok":false,"reason":"not_found"}`), because the variant does not exist yet.
 
-- [ ] **Step 3: Add the result variant and set it in the service**
+- [x] **Step 3: Add the result variant and set it in the service**
 
 Edit 1 - `src/types/hfm.types.ts`, replace exactly:
 
@@ -173,7 +174,7 @@ with:
 
 This split is safe because the guard at `hfm.service.ts:124-127` already returned `not_found` when `clients` is empty, so `clients[0]` exists whenever the filter empties a non-empty list.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 ```bash
 bun test tests/hfm.service.test.ts

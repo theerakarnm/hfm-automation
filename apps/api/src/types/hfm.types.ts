@@ -51,7 +51,8 @@ export interface HFMClientsPerformanceResponse {
 
 export type HFMApiResult =
   | { ok: true; data: HFMPerformanceData[] }
-  | { ok: false; reason: "not_found" | "server_error" | "timeout" | "no_wallet" };
+  | { ok: false; reason: "not_found" | "server_error" | "timeout" | "no_wallet" }
+  | { ok: false; reason: "all_archived"; subaffiliate: number };
 
 export type HFMAllClientsResult =
   | { ok: true; data: HFMClientsPerformanceResponse }

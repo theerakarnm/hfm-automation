@@ -343,7 +343,7 @@ bun run typecheck
 
 Expected: all tests pass, typecheck clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/routes/webhook.ts tests/webhook.test.ts
@@ -357,7 +357,7 @@ git commit -m "feat: reply partner notice for archived wallet"
 This mirrors how the bug was found: call the real upstream with the archived wallet and confirm the service now surfaces the partner instead of `not_found`.
 It never sends a LINE message; it only exercises `fetchPerformance`.
 
-- [ ] **Step 1: Run the live check**
+- [x] **Step 1: Run the live check**
 
 From `apps/api`, create `tmp-fetch-perf.ts`:
 
@@ -385,7 +385,7 @@ Expected output:
 }
 ```
 
-- [ ] **Step 2: Confirm the empty-data wallet still reports not_found**
+- [x] **Step 2: Confirm the empty-data wallet still reports not_found**
 
 Same script with `id: 0, label: "0"`.
 

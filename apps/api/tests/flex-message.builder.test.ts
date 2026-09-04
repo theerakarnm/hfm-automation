@@ -315,6 +315,34 @@ describe("buildPaginationCard", () => {
     expect(bodyBox.contents[1].action.data).toBe("action=page&kind=wallet&id=98241376&page=1");
   });
 
+  test("postback data preserves the volume opt-in", () => {
+    const withVol = buildPaginationCard(
+      { kind: "wallet", id: 98241376, showVolume: true },
+      1,
+      2,
+      7
+    ) as any;
+
+    const bodyBox = withVol.body.contents.find((c: any) => c.type === "box");
+    expect(bodyBox.contents[0].action.data).toBe(
+      "action=page&kind=wallet&id=98241376&page=2&vol=1"
+    );
+  });
+
+  test("postback data omits the volume flag by default", () => {
+    const withoutVol = buildPaginationCard(
+      { kind: "wallet", id: 98241376 },
+      1,
+      2,
+      7
+    ) as any;
+
+    const bodyBox = withoutVol.body.contents.find((c: any) => c.type === "box");
+    expect(bodyBox.contents[0].action.data).toBe(
+      "action=page&kind=wallet&id=98241376&page=2"
+    );
+  });
+
   test("first page only shows Next button", () => {
     const card = buildPaginationCard(
       { kind: "wallet", id: 98241376 },

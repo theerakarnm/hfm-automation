@@ -377,7 +377,9 @@ export function buildPaginationCard(
       action: {
         type: "postback",
         label: "Next Page ➔",
-        data: `action=page&kind=${lookup.kind}&id=${lookup.id}&page=${currentPage + 1}`,
+        data: `action=page&kind=${lookup.kind}&id=${lookup.id}&page=${currentPage + 1}${
+          lookup.showVolume ? "&vol=1" : ""
+        }`,
       },
       style: "primary",
       color: colors.green,
@@ -392,7 +394,9 @@ export function buildPaginationCard(
       action: {
         type: "postback",
         label: "🠔 Previous Page",
-        data: `action=page&kind=${lookup.kind}&id=${lookup.id}&page=${currentPage - 1}`,
+        data: `action=page&kind=${lookup.kind}&id=${lookup.id}&page=${currentPage - 1}${
+          lookup.showVolume ? "&vol=1" : ""
+        }`,
       },
       style: "secondary",
       height: "sm",

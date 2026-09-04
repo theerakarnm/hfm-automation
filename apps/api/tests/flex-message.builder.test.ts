@@ -68,7 +68,9 @@ function findBadgeByLabel(
 
 describe("buildTradingCard", () => {
   test("all fields populated in output JSON", () => {
-    const card = buildTradingCard(mockData, matchAllConditions);
+    const card = buildTradingCard(mockData, matchAllConditions, {
+      showVolume: true,
+    });
     const texts = extractTexts(card);
 
     expect(texts.some((t) => t.includes("45219"))).toBe(true);
@@ -109,8 +111,28 @@ describe("buildTradingCard", () => {
   });
 
   test("volume formatting with lots suffix", () => {
+    const card = buildTradingCard(mockData, matchAllConditions, {
+      showVolume: true,
+    });
+    const texts = extractTexts(card);
+    expect(texts.some((t) => t === "3.42 lots")).toBe(true);
+  });
+
+  test("volume metric hidden by default", () => {
     const card = buildTradingCard(mockData, matchAllConditions);
     const texts = extractTexts(card);
+    expect(texts.some((t) => t === "Volume")).toBe(false);
+    expect(texts.some((t) => t.includes("lots"))).toBe(false);
+    expect(texts.some((t) => t === "Trades")).toBe(true);
+    expect(texts.some((t) => t === "24")).toBe(true);
+  });
+
+  test("volume metric shown when showVolume option is set", () => {
+    const card = buildTradingCard(mockData, matchAllConditions, {
+      showVolume: true,
+    });
+    const texts = extractTexts(card);
+    expect(texts.some((t) => t === "Volume")).toBe(true);
     expect(texts.some((t) => t === "3.42 lots")).toBe(true);
   });
 

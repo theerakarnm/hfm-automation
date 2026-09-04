@@ -62,6 +62,11 @@ export interface PerformanceLookup {
   kind: "wallet" | "account";
   id: number;
   label: string;
+  /**
+   * Set when the user prefixed the lookup with "lot" (e.g. "lot 98241376").
+   * Only then does the trading card render the Volume metric.
+   */
+  showVolume?: boolean;
 }
 
 export interface HFMClientRow {

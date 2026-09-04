@@ -301,10 +301,7 @@ export function buildTradingCard(
           type: "box",
           layout: "horizontal",
           spacing: "sm",
-          contents: [
-            metricCard("Trades", String(data.trades)),
-            metricCard("Volume", fmtVolume(data.volume)),
-          ],
+          contents: tradeMetricContents,
         },
         detailCard("Last Trade", lastTrade.text, { color: lastTrade.color }),
         {
@@ -348,7 +345,7 @@ export function buildTradingCard(
 }
 
 export function buildPaginationCard(
-  lookup: { kind: "wallet" | "account"; id: number },
+  lookup: { kind: "wallet" | "account"; id: number; showVolume?: boolean },
   currentPage: number,
   totalPages: number,
   totalItems: number

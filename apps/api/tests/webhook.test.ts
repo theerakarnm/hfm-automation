@@ -526,7 +526,7 @@ describe("webhook", () => {
     const reply = fetchCalls.find(
       (c) => c.url === "https://api.line.me/v2/bot/message/reply"
     );
-    expect(reply?.body).toContain("\u0E2D\u0E22\u0E39\u0E48\u0E43\u0E15\u0E49 Partner 30506525 \u0E41\u0E15\u0E48\u0E44\u0E21\u0E48\u0E21\u0E35\u0E1A\u0E31\u0E0D\u0E0A\u0E35");
+    expect(reply?.body).toContain("\u0E2D\u0E22\u0E39\u0E48\u0E43\u0E15\u0E49 Partner 30506525 \u0E41\u0E15\u0E48\u0E44\u0E21\u0E48\u0E21\u0E35 Trading Account");
     expect(reply?.body).not.toContain("\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25");
   });
 
@@ -1068,6 +1068,102 @@ describe("webhook", () => {
     expect(lastCard2.body.contents.find((c: any) => c.type === "box").contents[0].action.data).toContain("page=1");
   });
 
+
+  test("plain wallet lookup hides volume while lot-prefixed lookup shows it", async () => {
+    const { app } = await importWebhook();
+
+    const mockClients = [
+      {
+        client_id: 45219,
+        account_id: 1000001,
+        activity_status: "active",
+        trades: 10,
+        volume: 1.5,
+        account_type: "Standard",
+        balance: 5000,
+        account_currency: "USD",
+        equity: 5100,
+        archived: false,
+        subaffiliate: 98241376,
+        account_regdate: "2024-06-01T00:00:00Z",
+        status: "approved",
+      },
+    ];
+
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0],
+      init?: Parameters<typeof globalThis.fetch>[1]
+    ) => {
+      const url = String(input);
+      fetchCalls.push({
+        url,
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+
+      if (url.endsWith("/v2/bot/chat/loading/start")) {
+        return new Response("{}", { status: 202 });
+      }
+
+      if (url.includes("/api/performance/client-performance")) {
+        return new Response(
+          JSON.stringify({ clients: mockClients, totals: {} }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    await getLastTradeMap({
+      fetchClientsFn: async () => ({ ok: true, data: [] as HFMClientRow[] }),
+    });
+
+    const sendText = async (text: string, replyToken: string) => {
+      const bodyText = JSON.stringify({
+        destination: "U123",
+        events: [
+          {
+            type: "message",
+            message: { type: "text", id: `msg_${replyToken}`, text },
+            source: { type: "user", userId: "Uabc123" },
+            replyToken,
+            timestamp: 1716000000000,
+            mode: "active",
+          },
+        ],
+      });
+      const res = await app.fetch(
+        new Request("http://localhost/webhook", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-line-signature": computeSig(bodyText, SECRET),
+          },
+          body: bodyText,
+        })
+      );
+      expect(res.status).toBe(200);
+    };
+
+    await sendText("98241376", "reply_plain");
+    await waitFor(() => fetchCalls.length >= 3);
+    const replyPlain = JSON.parse(fetchCalls[2]?.body ?? "{}");
+    const plainCardJson = JSON.stringify(replyPlain.messages[0].contents);
+    expect(plainCardJson).toContain("\"Trades\"");
+    expect(plainCardJson).not.toContain("\"Volume\"");
+    expect(plainCardJson).not.toContain("lots");
+
+    fetchCalls.length = 0;
+
+    await sendText("lot 98241376", "reply_lot");
+    await waitFor(() => fetchCalls.length >= 3);
+    const replyLot = JSON.parse(fetchCalls[2]?.body ?? "{}");
+    const lotCardJson = JSON.stringify(replyLot.messages[0].contents);
+    expect(lotCardJson).toContain("\"Trades\"");
+    expect(lotCardJson).toContain("\"Volume\"");
+    expect(lotCardJson).toContain("1.50 lots");
+  });
 
   test("invalid input returns format error message", async () => {
     const { app } = await importWebhook();

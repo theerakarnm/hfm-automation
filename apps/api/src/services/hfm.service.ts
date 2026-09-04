@@ -36,9 +36,7 @@ export function extractWalletNumber(walletId: string): number | null {
   return Number.isNaN(num) ? null : num;
 }
 
-export function parsePerformanceLookup(input: string): PerformanceLookup | null {
-  const trimmed = input.trim();
-
+function parseLookupBody(trimmed: string): PerformanceLookup | null {
   const tPrefixMatch = trimmed.match(/^T(\d+)$/i);
   if (tPrefixMatch) {
     const digits = tPrefixMatch[1]!;
@@ -55,6 +53,22 @@ export function parsePerformanceLookup(input: string): PerformanceLookup | null 
   }
 
   return null;
+}
+
+export function parsePerformanceLookup(input: string): PerformanceLookup | null {
+  const trimmed = input.trim();
+
+  // An optional "lot" prefix (case-insensitive, separator optional) opts the
+  // request into showing the Volume metric on the trading card. Without it
+  // the card hides the lot section entirely.
+  const lotPrefix = trimmed.match(/^lot[-\s]*/i);
+  if (lotPrefix) {
+    const rest = trimmed.slice(lotPrefix[0].length).trim();
+    const lookup = parseLookupBody(rest);
+    return lookup ? { ...lookup, showVolume: true } : null;
+  }
+
+  return parseLookupBody(trimmed);
 }
 
 export function checkConditions(

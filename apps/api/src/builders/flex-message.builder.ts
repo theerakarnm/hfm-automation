@@ -195,7 +195,8 @@ const keyValueRow = (label: string, value: string): object => ({
 
 export function buildTradingCard(
   data: HFMPerformanceData,
-  conditions: ConditionCheck
+  conditions: ConditionCheck,
+  options: { showVolume?: boolean } = {}
 ): object {
   const status = getStatusMeta(data.activity_status);
   const accountStatus = getAccountStatusMeta(data.status);
@@ -203,6 +204,15 @@ export function buildTradingCard(
   const walletIdValue = String(data.client_id);
   const accountIdValue = String(data.account_id);
   const lastTrade = fmtLastTrade(data.last_trade);
+
+  // The Volume metric only renders when the lookup opted in via the "lot"
+  // input prefix; without it the Trades card spans the row alone.
+  const tradeMetricContents: object[] = [
+    metricCard("Trades", String(data.trades)),
+  ];
+  if (options.showVolume) {
+    tradeMetricContents.push(metricCard("Volume", fmtVolume(data.volume)));
+  }
 
   return {
     type: "bubble",

@@ -354,6 +354,60 @@ describe("parsePerformanceLookup", () => {
     const result = parsePerformanceLookup("  98241376  ");
     expect(result).toEqual({ kind: "wallet", id: 98241376, label: "98241376" });
   });
+
+  test("lot prefix with space returns wallet lookup with showVolume", () => {
+    const result = parsePerformanceLookup("lot 98241376");
+    expect(result).toEqual({
+      kind: "wallet",
+      id: 98241376,
+      label: "98241376",
+      showVolume: true,
+    });
+  });
+
+  test("lot prefix without separator still parses", () => {
+    const result = parsePerformanceLookup("lot98241376");
+    expect(result).toEqual({
+      kind: "wallet",
+      id: 98241376,
+      label: "98241376",
+      showVolume: true,
+    });
+  });
+
+  test("LOT prefix is case-insensitive", () => {
+    const result = parsePerformanceLookup("LOT WL-98241376");
+    expect(result).toEqual({
+      kind: "wallet",
+      id: 98241376,
+      label: "WL-98241376",
+      showVolume: true,
+    });
+  });
+
+  test("lot prefix works with T-prefixed account", () => {
+    const result = parsePerformanceLookup("lot T1928491038");
+    expect(result).toEqual({
+      kind: "account",
+      id: 1928491038,
+      label: "1928491038",
+      showVolume: true,
+    });
+  });
+
+  test("plain lookup does not set showVolume", () => {
+    const result = parsePerformanceLookup("98241376");
+    expect(result?.showVolume).toBeUndefined();
+  });
+
+  test("lot alone without an id returns null", () => {
+    expect(parsePerformanceLookup("lot")).toBeNull();
+    expect(parsePerformanceLookup("lot ")).toBeNull();
+  });
+
+  test("lot prefix with garbage id returns null", () => {
+    expect(parsePerformanceLookup("lot abc")).toBeNull();
+  });
 });
 
 describe("resolveLinkedAccounts", () => {

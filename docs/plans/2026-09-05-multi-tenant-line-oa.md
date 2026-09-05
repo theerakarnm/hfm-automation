@@ -2567,11 +2567,12 @@ git commit -m "fix: key last-trade cache by tenant"
 - Modify: `apps/api/src/repositories/request-snapshot.repository.ts`
 - Modify: `apps/api/src/repositories/report-range.repository.ts`
 - Modify: `apps/api/src/repositories/line-user.repository.ts`
-- Test: `apps/api/tests/recipient.repository.test.ts`, `apps/api/tests/line-user.repository.test.ts`, `apps/api/tests/snapshot.repository.test.ts`
+- Test: `apps/api/tests/recipient.repository.test.ts`, `apps/api/tests/line-user.repository.test.ts`, `apps/api/tests/snapshot.repository.test.ts`, `apps/api/tests/sqlite.service.test.ts`
 
 - [ ] **Step 1: Update the tests to always pass a tenant id**
 
 The representative change in `recipient.repository.test.ts`:
+Also update `tests/sqlite.service.test.ts` (an initDb schema-shape test): its index assertions become `idx_snapshot_tenant_date` and `idx_req_snapshot_tenant_date`, and its duplicate-insert test now seeds two tenants or expects the composite `UNIQUE(tenant_id, snapshot_date, client_id)` to reject only same-tenant duplicates.
 
 ```ts
 let tenantA: number;
@@ -4325,6 +4326,7 @@ git commit -m "fix: compose context and image scripts"
 - Modify: `apps/api/scripts/trigger-hfm-healthcheck.ts`
 - Modify: `apps/api/scripts/fetch-client-performance-range.ts`
 - Modify: `apps/api/scripts/compare-client-performance-files.ts`
+- Modify: `apps/api/scripts/seed-mock-client-snapshots.ts` (takes a tenant via the same resolver and passes it to `insertMany`/`countByDate`)
 
 - [ ] **Step 1: Shared resolver**
 

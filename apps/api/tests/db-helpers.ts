@@ -11,6 +11,9 @@ export async function createTestDb() {
   const db = drizzle(client, { schema });
 
   await db.execute(sql`
+    DROP TABLE IF EXISTS tenant_health_state CASCADE;
+    DROP TABLE IF EXISTS tenant_whitelist_uids CASCADE;
+    DROP TABLE IF EXISTS tenants CASCADE;
     DROP TABLE IF EXISTS client_request_snapshot_rows CASCADE;
     DROP TABLE IF EXISTS client_request_snapshots CASCADE;
     DROP TABLE IF EXISTS report_range_snapshots CASCADE;
@@ -21,6 +24,42 @@ export async function createTestDb() {
   `);
 
   await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS tenants (
+      id                            SERIAL PRIMARY KEY,
+      webhook_id                    TEXT NOT NULL UNIQUE,
+      label                         TEXT NOT NULL,
+      active                        INTEGER NOT NULL DEFAULT 0,
+      line_channel_access_token_enc TEXT NOT NULL,
+      line_channel_secret_enc       TEXT NOT NULL,
+      line_bot_user_id              TEXT,
+      line_basic_id                 TEXT,
+      line_display_name             TEXT,
+      hfm_api_key_enc               TEXT NOT NULL,
+      hfm_api_base_url              TEXT NOT NULL DEFAULT 'https://api.hfaffiliates.com',
+      target_wallet                 INTEGER NOT NULL,
+      whitelist_enabled             INTEGER NOT NULL DEFAULT 1,
+      key_version                   INTEGER NOT NULL DEFAULT 1,
+      last_tested_at                TIMESTAMP,
+      last_test_result              TEXT,
+      created_at                    TIMESTAMP NOT NULL DEFAULT now(),
+      updated_at                    TIMESTAMP NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS tenant_whitelist_uids (
+      id         SERIAL PRIMARY KEY,
+      tenant_id  INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+      line_uid   TEXT NOT NULL,
+      label      TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT now(),
+      UNIQUE(tenant_id, line_uid)
+    );
+
+    CREATE TABLE IF NOT EXISTS tenant_health_state (
+      tenant_id  INTEGER PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+      healthy    INTEGER NOT NULL,
+      changed_at TIMESTAMP NOT NULL DEFAULT now()
+    );
+
     CREATE TABLE IF NOT EXISTS client_snapshots (
       id              SERIAL PRIMARY KEY,
       snapshot_date   TEXT NOT NULL,

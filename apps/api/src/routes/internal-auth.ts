@@ -39,7 +39,10 @@ export function verifySession(value: string | undefined): { csrf: string } | nul
   const a = Buffer.from(sig);
   const b = Buffer.from(expected);
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-  if (Number(expiresAt) < Date.now()) return null;
+  // "<=" not "<": the expiry instant itself counts as expired. issueSession(0)
+  // produces expiresAt == now, and the same-millisecond verification of a
+  // freshly issued token must still reject it.
+  if (Number(expiresAt) <= Date.now()) return null;
   return { csrf };
 }
 

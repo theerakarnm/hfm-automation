@@ -3021,12 +3021,16 @@ Expected: all PASS.
 > `bun run typecheck` still reports five pre-existing errors in `tests/line-uids.test.ts`
 > (old-signature calls); that file is Task 17's Files block and was left untouched.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/routes/webhook.ts tests/webhook.test.ts
 git commit -m "refactor: thread tenant ctx through webhook handlers"
 ```
+
+> Deviation: the docs watcher auto-committed the code edits mid-task (16 watcher commits), so the
+> cumulative diff since the pre-task HEAD was verified and squashed back into this single verbatim
+> commit.
 
 ---
 

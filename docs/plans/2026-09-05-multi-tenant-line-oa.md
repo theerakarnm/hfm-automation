@@ -4069,7 +4069,11 @@ git commit -m "feat: tenant connection test and status page"
 - Modify: `apps/api/src/routes/internal-config.tsx`
 - Test: `apps/api/tests/internal-config.test.ts`
 
-- [ ] **Step 1: Tests**
+- [x] **Step 1: Tests**
+
+> Deviation: the snippet referenced undefined scaffolding (`id`, `app`, `csrf`, `adminCookie()`, `formBody`, `db`, `addUid()`), so the tests live in a `describe` block using this file's existing harness (per-test app/cookie/csrf/db setup), with the webhook route mounted alongside `/internal` for the first test.
+> Deviation: the "not rejected" webhook assertion needed two additions to be meaningful: the whitelist is pre-seeded with another uid and the cache is primed first (an EMPTY list allows everyone, so without pre-seeding the test passes even when the invalidation is missing - verified by temporarily removing `invalidateTenantCache(id)` and watching both whitelist tests fail), and the bot's LINE reply is recorded through a stubbed `globalThis.fetch` with a `waitFor` poll because the webhook answers 200 immediately and processes events in the background.
+> Deviation: added tests beyond the snippet (remove paths for both endpoints, CSRF 403 for both, invalid action / empty uid -> 400, unknown id -> 404, detail page renders both lists with remove buttons and add forms) following this file's established practice from Tasks 20/21.
 
 ```ts
 test("adding a whitelist uid takes effect on the next webhook without restart", async () => {
@@ -4090,7 +4094,10 @@ test("notify recipients are per tenant", async () => {
 });
 ```
 
-- [ ] **Step 2: Implement two form endpoints**
+- [x] **Step 2: Implement two form endpoints**
+
+> Deviation: both handlers check `await requireCsrf(c)` (Task 20's documented Promise correction) and answer `c.notFound()` for unknown ids per this file's convention; invalid action or empty uid answers the shared `errorPage` with 400.
+> Deviation: the rendered lists show uids only, not labels: the authoritative repository contracts expose uid-only lists (`listWhitelistUids`, `getActiveUids`) and the Files block forbids touching the repositories. Labels are still stored with the add form, exactly as the form contract specifies.
 
 `POST /internal/config/:id/whitelist` with `action=add|remove`, `lineUid`, `label`:
 calls `addWhitelistUid` or `removeWhitelistUid`, then `invalidateTenantCache(id)`.
@@ -4100,7 +4107,7 @@ The cache invalidation is mandatory because `whitelistUids` lives inside the cac
 
 Render both lists with remove buttons inside the tenant detail page.
 
-- [ ] **Step 3: Run, commit**
+- [x] **Step 3: Run, commit**
 
 ```bash
 bun test tests/internal-config.test.ts

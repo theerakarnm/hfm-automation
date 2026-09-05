@@ -11,13 +11,17 @@ import { decryptSecret, maskSecret } from "../utils/crypto";
 import { logError } from "../utils/logger";
 import { getDb } from "../db/connection";
 import {
+  addWhitelistUid,
   getTenantHealthStateRow,
   getTenantRowById,
   listTenantRows,
+  listWhitelistUids,
+  removeWhitelistUid,
   rotateWebhookId,
   updateTenantLineIdentity,
   updateTenantTestResult,
 } from "../repositories/tenant.repository";
+import { addRecipient, getActiveUids, removeRecipient } from "../repositories/recipient.repository";
 import { listLineUsers } from "../repositories/line-user.repository";
 import { invalidateTenantCache, getTenantById, saveTenant } from "../services/tenant-config.service";
 import { fetchBotInfo } from "../services/line.service";
@@ -192,6 +196,84 @@ function TenantForm({ row, csrf }: { row?: TenantRow; csrf: string }) {
   );
 }
 
+// Add/remove form pair for a per-tenant uid list (whitelist uids and notify
+// recipients share the exact same shape: action=add|remove, lineUid, label).
+// The label is stored with the uid but the list shows uids only, because the
+// authoritative repository contracts expose uid-only lists.
+function UidList({
+  csrf,
+  id,
+  endpoint,
+  title,
+  emptyText,
+  uids,
+}: {
+  csrf: string;
+  id: number;
+  endpoint: string;
+  title: string;
+  emptyText: string;
+  uids: string[];
+}) {
+  return (
+    <section>
+      <h2>{title}</h2>
+      {uids.length === 0 ? (
+        <p>{emptyText}</p>
+      ) : (
+        <table>
+          <thead>
+            <tr><th>Line uid</th><th></th></tr>
+          </thead>
+          <tbody>
+            {uids.map((uid) => (
+              <tr>
+                <td><code>{uid}</code></td>
+                <td>
+                  <form method="post" action={`/internal/config/${id}/${endpoint}`} class="inline">
+                    <input type="hidden" name="csrf" value={csrf} />
+                    <input type="hidden" name="action" value="remove" />
+                    <input type="hidden" name="lineUid" value={uid} />
+                    <button type="submit">Remove</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <form method="post" action={`/internal/config/${id}/${endpoint}`} class="inline">
+        <input type="hidden" name="csrf" value={csrf} />
+        <input type="hidden" name="action" value="add" />
+        <label>Line uid <input name="lineUid" required /></label>{" "}
+        <label>Label <input name="label" /></label>{" "}
+        <button type="submit">Add</button>
+      </form>
+    </section>
+  );
+}
+
+// Parses the shared add/remove form shape. error is set when the submission
+// is unusable; the caller answers with the error page and mutates nothing.
+async function parseUidMutation(c: Context): Promise<{
+  action: "add" | "remove";
+  lineUid: string;
+  label: string | null;
+  error: string | null;
+}> {
+  const form = await c.req.parseBody();
+  const action = String(form.action ?? "");
+  const lineUid = String(form.lineUid ?? "").trim();
+  const label = String(form.label ?? "").trim();
+  if (action !== "add" && action !== "remove") {
+    return { action: "add", lineUid: "", label: null, error: "action must be add or remove" };
+  }
+  if (!lineUid) {
+    return { action, lineUid: "", label: null, error: "line uid is required" };
+  }
+  return { action, lineUid, label: label || null, error: null };
+}
+
 const internalConfigRoutes = new Hono();
 
 internalConfigRoutes.get("/", async (c) => {
@@ -240,6 +322,8 @@ internalConfigRoutes.get("/:id", async (c) => {
   const row = await getTenantRowById(getDb(), id);
   if (!row) return c.notFound();
   const warn = c.req.query("warn");
+  const whitelist = await listWhitelistUids(getDb(), id);
+  const recipients = await getActiveUids(getDb(), id);
   return c.html(
     <Layout title={`Edit ${row.label} - HFM internal`}>
       <h1>Edit tenant: {row.label}</h1>
@@ -259,6 +343,27 @@ internalConfigRoutes.get("/:id", async (c) => {
       </form>
       <p><a href={`/internal/config/${row.id}/status`}>View full status page</a></p>
       <TenantForm row={row} csrf={csrfFrom(c)} />
+      {/*
+        Whitelist uids gate the webhook (an empty list allows everyone, same
+        as the old env behaviour). Notify recipients receive the daily
+        report. Both are per tenant and managed only here.
+      */}
+      <UidList
+        csrf={csrfFrom(c)}
+        id={row.id}
+        endpoint="whitelist"
+        title="Whitelist uids"
+        emptyText="No whitelist uids. While the whitelist is enabled, an empty list allows everyone."
+        uids={whitelist}
+      />
+      <UidList
+        csrf={csrfFrom(c)}
+        id={row.id}
+        endpoint="recipients"
+        title="Notify recipients"
+        emptyText="No notify recipients. Nobody receives the daily report until one is added."
+        uids={recipients}
+      />
     </Layout>,
   );
 });
@@ -337,6 +442,44 @@ internalConfigRoutes.post("/:id/test", async (c) => {
   await updateTenantTestResult(getDb(), ctx.id, { lineOk, hfmOk, walletOk, message });
   invalidateTenantCache(ctx.id);
   return c.redirect(`/internal/config/${ctx.id}`);
+});
+
+// Whitelist management. whitelistUids lives INSIDE the cached TenantConfig
+// (it is checked on the webhook 2-second hot path), so every mutation MUST
+// invalidate the cache: without it a newly added uid stays rejected until
+// the 60s TTL expires, and a removed uid stays authorised just as long.
+internalConfigRoutes.post("/:id/whitelist", async (c) => {
+  if (!(await requireCsrf(c))) return c.text("Forbidden", 403);
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) return c.notFound();
+  if (!(await getTenantRowById(getDb(), id))) return c.notFound();
+  const mutation = await parseUidMutation(c);
+  if (mutation.error) return c.html(errorPage([mutation.error]), 400);
+  if (mutation.action === "add") {
+    await addWhitelistUid(getDb(), id, mutation.lineUid, mutation.label);
+  } else {
+    await removeWhitelistUid(getDb(), id, mutation.lineUid);
+  }
+  invalidateTenantCache(id);
+  return c.redirect(`/internal/config/${id}`);
+});
+
+// Notify recipients share the form shape with the whitelist. They are NOT
+// part of the cached TenantConfig (the daily job reads notify_recipients
+// per run), so no cache invalidation is needed here.
+internalConfigRoutes.post("/:id/recipients", async (c) => {
+  if (!(await requireCsrf(c))) return c.text("Forbidden", 403);
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) return c.notFound();
+  if (!(await getTenantRowById(getDb(), id))) return c.notFound();
+  const mutation = await parseUidMutation(c);
+  if (mutation.error) return c.html(errorPage([mutation.error]), 400);
+  if (mutation.action === "add") {
+    await addRecipient(getDb(), id, mutation.lineUid, mutation.label);
+  } else {
+    await removeRecipient(getDb(), id, mutation.lineUid);
+  }
+  return c.redirect(`/internal/config/${id}`);
 });
 
 // Read-only per-tenant status page: everything an operator needs to decide

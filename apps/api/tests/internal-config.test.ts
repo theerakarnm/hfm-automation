@@ -1,17 +1,21 @@
 // apps/api/tests/internal-config.test.ts
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { Hono } from "hono";
+import { createHmac } from "node:crypto";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import * as schema from "../src/db/schema";
 import { createTestDb, closeTestDb } from "./db-helpers";
 import { resetDbForTests, type DrizzleDb } from "../src/db/connection";
 import {
+  addWhitelistUid,
   insertTenantRow,
   getTenantRowById,
+  listWhitelistUids,
   updateTenantLineIdentity,
   updateTenantTestResult,
 } from "../src/repositories/tenant.repository";
+import { getActiveUids } from "../src/repositories/recipient.repository";
 import { recordLineUserRequest } from "../src/repositories/line-user.repository";
 import { getTenantById, invalidateTenantCache } from "../src/services/tenant-config.service";
 import type { TenantInput, TenantTestResult } from "../src/types/tenant.types";
@@ -523,5 +527,216 @@ describe("GET /internal/config/:id/status", () => {
   test("unknown tenant status is 404", async () => {
     const res = await app.request("/internal/config/9999/status", { headers: { cookie } });
     expect(res.status).toBe(404);
+  });
+});
+
+// POST /internal/config/:id/whitelist and /internal/config/:id/recipients
+// manage the per-tenant uid lists. The whitelist case mounts the webhook
+// route too: the point of the first test is that an added uid authorises
+// webhook traffic on the very next request, without a restart, thanks to
+// the mandatory invalidateTenantCache. The webhook path may call the LINE
+// reply API, so every test in this block stubs globalThis.fetch.
+describe("POST /internal/config/:id/whitelist and /recipients", () => {
+  let app: Hono;
+  let cookie: string;
+  let csrf: string;
+  let db: DrizzleDb;
+  let client: postgres.Sql;
+  let idB = 0;
+  const realFetch = globalThis.fetch;
+
+  // Same escape sequences as the webhook route source: the "no access"
+  // rejection text and the "wrong format" usage-help text.
+  const REJECT_MARKER = "\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E1A\u0E2D\u0E17\u0E19\u0E35\u0E49";
+  const FORMAT_MARKER = "\u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07";
+
+  function postForm(path: string, fields: Record<string, string>) {
+    return app.request(path, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: formBody({ csrf, ...fields }),
+    });
+  }
+
+  async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
+    const startedAt = Date.now();
+    while (!predicate()) {
+      if (Date.now() - startedAt > timeoutMs) {
+        throw new Error("Timed out waiting for webhook background work");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+
+  beforeEach(async () => {
+    client = postgres(TEST_DATABASE_URL, { max: 1 });
+    db = drizzle(client, { schema });
+    idB = await insertTenantRow(db, { ...TENANT, label: "oa-second-tenant" });
+    invalidateTenantCache();
+    const internalMod = await import("../src/routes/internal");
+    const webhookMod = await import("../src/routes/webhook");
+    app = new Hono();
+    app.route("/internal", internalMod.default);
+    app.route("/webhook", webhookMod.default);
+    cookie = await adminCookie(app);
+    csrf = csrfFromCookie(cookie);
+  });
+
+  afterEach(async () => {
+    globalThis.fetch = realFetch;
+    invalidateTenantCache();
+    await client.end();
+  });
+
+  test("adding a whitelist uid takes effect on the next webhook without restart", async () => {
+    // A pre-existing uid keeps the list non-empty. An empty list allows
+    // everyone (old env behaviour), which would make this test pass even
+    // if the endpoint forgot to invalidate the cache.
+    await addWhitelistUid(db, tenantId, "Uexisting", null);
+    await getTenantById(tenantId); // prime the cache with the OLD list
+
+    const res = await postForm(`/internal/config/${tenantId}/whitelist`, {
+      action: "add", lineUid: "Unew", label: "new guy",
+    });
+    expect(res.status).toBe(302);
+
+    // Fresh read after the invalidation: the cached config now carries it.
+    const ctx = await getTenantById(tenantId);
+    expect(ctx!.whitelistUids).toContain("Unew");
+
+    // A signed webhook from Unew must not be rejected. Rejection is visible
+    // only in the LINE reply the bot sends (the webhook always answers
+    // 200), so record outbound bodies and check what was answered.
+    const recorded: string[] = [];
+    globalThis.fetch = (async (_u: unknown, init?: RequestInit) => {
+      recorded.push(String(init?.body ?? ""));
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const webhookId = (await getTenantRowById(db, tenantId))!.webhookId;
+    const raw = JSON.stringify({
+      destination: "UdestWhitelist",
+      events: [{
+        type: "message",
+        replyToken: "rt_whitelist_add",
+        source: { type: "user", userId: "Unew" },
+        message: { type: "text", text: "hello" },
+      }],
+    });
+    const sig = createHmac("sha256", SECRET_PLAIN).update(raw).digest("base64");
+    const webhookRes = await app.request(`/webhook?oa=${webhookId}`, {
+      method: "POST",
+      headers: { "x-line-signature": sig, "content-type": "application/json" },
+      body: raw,
+    });
+    expect(webhookRes.status).toBe(200);
+
+    // The reply is sent in the background: wait for it, then assert it is
+    // the usage-help text of the whitelisted path, never the rejection.
+    await waitFor(() => recorded.length > 0);
+    const joined = recorded.join("\n");
+    expect(joined).not.toContain(REJECT_MARKER);
+    expect(joined).toContain(FORMAT_MARKER);
+  });
+
+  test("notify recipients are per tenant", async () => {
+    const resA = await postForm(`/internal/config/${tenantId}/recipients`, {
+      action: "add", lineUid: "Ur1", label: "boss A",
+    });
+    const resB = await postForm(`/internal/config/${idB}/recipients`, {
+      action: "add", lineUid: "Ur2", label: "boss B",
+    });
+    expect(resA.status).toBe(302);
+    expect(resB.status).toBe(302);
+    expect(await getActiveUids(db, tenantId)).toEqual(["Ur1"]);
+    expect(await getActiveUids(db, idB)).toEqual(["Ur2"]);
+  });
+
+  test("removing a whitelist uid is visible on a fresh read", async () => {
+    await addWhitelistUid(db, tenantId, "Ugone", null);
+    await addWhitelistUid(db, tenantId, "Ustays", null);
+    await getTenantById(tenantId); // prime the cache
+    const res = await postForm(`/internal/config/${tenantId}/whitelist`, {
+      action: "remove", lineUid: "Ugone",
+    });
+    expect(res.status).toBe(302);
+    const ctx = await getTenantById(tenantId);
+    expect(ctx!.whitelistUids).not.toContain("Ugone");
+    expect(ctx!.whitelistUids).toContain("Ustays");
+  });
+
+  test("removing a recipient works through the same endpoint", async () => {
+    await postForm(`/internal/config/${tenantId}/recipients`, {
+      action: "add", lineUid: "Ubye",
+    });
+    const res = await postForm(`/internal/config/${tenantId}/recipients`, {
+      action: "remove", lineUid: "Ubye",
+    });
+    expect(res.status).toBe(302);
+    expect(await getActiveUids(db, tenantId)).toEqual([]);
+  });
+
+  test("whitelist mutation without a valid csrf is rejected with 403", async () => {
+    const res = await app.request(`/internal/config/${tenantId}/whitelist`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: formBody({ action: "add", lineUid: "Uevil" }),
+    });
+    expect(res.status).toBe(403);
+    expect(await listWhitelistUids(db, tenantId)).toEqual([]);
+  });
+
+  test("recipient mutation with a wrong csrf is rejected with 403", async () => {
+    const res = await app.request(`/internal/config/${tenantId}/recipients`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: formBody({ csrf: "not-the-session-token", action: "add", lineUid: "Uevil" }),
+    });
+    expect(res.status).toBe(403);
+    expect(await getActiveUids(db, tenantId)).toEqual([]);
+  });
+
+  test("invalid action or empty uid renders a 400 error page", async () => {
+    const badAction = await postForm(`/internal/config/${tenantId}/whitelist`, {
+      action: "nuke", lineUid: "Uok",
+    });
+    expect(badAction.status).toBe(400);
+    expect(await badAction.text()).toContain("action must be add or remove");
+
+    const emptyUid = await postForm(`/internal/config/${tenantId}/recipients`, {
+      action: "add", lineUid: "  ",
+    });
+    expect(emptyUid.status).toBe(400);
+    expect(await emptyUid.text()).toContain("line uid is required");
+  });
+
+  test("unknown tenant id is 404 for both endpoints", async () => {
+    expect((await postForm("/internal/config/9999/whitelist", {
+      action: "add", lineUid: "Ux",
+    })).status).toBe(404);
+    expect((await postForm("/internal/config/9999/recipients", {
+      action: "add", lineUid: "Ux",
+    })).status).toBe(404);
+  });
+
+  test("detail page renders both lists with remove buttons and add forms", async () => {
+    await addWhitelistUid(db, tenantId, "Ushown", "shown guy");
+    await db.insert(schema.notifyRecipients).values({
+      tenantId, lineUid: "Urshown", label: "shown recipient",
+    });
+    const html = await (await app.request(`/internal/config/${tenantId}`, {
+      headers: { cookie },
+    })).text();
+    expect(html).toContain("Whitelist uids");
+    expect(html).toContain("Notify recipients");
+    expect(html).toContain("Ushown");
+    expect(html).toContain("Urshown");
+    expect(html).toContain(`action="/internal/config/${tenantId}/whitelist"`);
+    expect(html).toContain(`action="/internal/config/${tenantId}/recipients"`);
+    // remove button (action=remove) and add form (action=add) both present
+    expect(html).toContain('value="remove"');
+    expect(html).toContain('value="add"');
+    expect(html).toContain("Remove");
+    expect(html).toContain("Add");
   });
 });

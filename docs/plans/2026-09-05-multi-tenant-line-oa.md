@@ -1175,10 +1175,6 @@ import type { DrizzleDb } from "../src/db/connection";
 
 process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 5).toString("base64");
 
-process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString("base64");
-
-process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 11).toString("base64");
-
 import { createTestDb, closeTestDb, TEST_DATABASE_URL } from "./db-helpers";
 import type postgres from "postgres";
 
@@ -1675,6 +1671,8 @@ Note: if `daily-client-report.ts` keeps its notification helpers inline, export 
 The rest of the test:
 
 ```ts
+process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 11).toString("base64");
+
 import { createTestDb, closeTestDb, TEST_DATABASE_URL } from "./db-helpers";
 import type { DrizzleDb } from "../src/db/connection";
 import type postgres from "postgres";

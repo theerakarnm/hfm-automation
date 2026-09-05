@@ -38,7 +38,7 @@ describe("admin auth", () => {
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("SameSite=Strict");
     const res = await app.request("/internal/secret-page", {
-      headers: { cookie: cookie.split(";")[0] },
+      headers: { cookie: cookie.split(";")[0]! },
     });
     expect(res.status).toBe(200);
   });
@@ -48,7 +48,7 @@ describe("admin auth", () => {
       method: "POST",
       body: new URLSearchParams({ key: "the-key" }),
     });
-    const good = login.headers.get("set-cookie")!.split(";")[0];
+    const good = login.headers.get("set-cookie")!.split(";")[0]!;
     const forged = good.replace(/hfm_admin=[^;]+/, "hfm_admin=forged");
     const res = await app.request("/internal/secret-page", {
       headers: { cookie: forged },

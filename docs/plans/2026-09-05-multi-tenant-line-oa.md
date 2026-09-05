@@ -2272,7 +2272,7 @@ bun test tests/line.service.test.ts
 
 Expected: FAIL, arity errors.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Every internal helper (`pushMessage`, `replyMessage`, `replyMessages`) gains a `ctx: TenantConfig` first parameter and uses `ctx.lineChannelAccessToken`.
 Every exported wrapper passes it through.
@@ -2335,7 +2335,7 @@ export async function fetchBotInfo(
 }
 ```
 
-- [ ] **Step 4: Run the tests, then grep**
+- [x] **Step 4: Run the tests, then grep**
 
 ```bash
 bun test tests/line.service.test.ts

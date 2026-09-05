@@ -4355,7 +4355,7 @@ bun test tests/multi-tenant-isolation.test.ts
 Expected: every test PASS.
 If the interleaved-concurrency test fails intermittently, treat it as a real shared-state bug, never as flakiness.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/app.ts src/index.ts tests/multi-tenant-isolation.test.ts

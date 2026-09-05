@@ -4560,7 +4560,9 @@ git commit -m "refactor: scripts select an explicit tenant"
 - Modify: `AGENTS.md`
 - Create: `docs/plans/2026-09-05-multi-tenant-line-oa-rollout.md`
 
-- [ ] **Step 1: `.env.example`**
+- [x] **Step 1: `.env.example`**
+
+> Deviation: kept the existing two-line `LAST_TRADE_DEADLINE_MS` comment from the old `.env.example`; repo rules require preserving explanatory comments about timing budgets.
 
 ```bash
 # --- System level, always read from env ---
@@ -4587,12 +4589,12 @@ LINE_WHITELIST_UIDS=
 LINE_NOTIFY_UIDS=
 ```
 
-- [ ] **Step 2: `AGENTS.md` updates**
+- [x] **Step 2: `AGENTS.md` updates**
 
 In the Environment and Security section, keep the secret list but note that per-OA credentials now live in the database, encrypted with `CONFIG_ENCRYPTION_KEY`, and that `/internal/config` is cookie protected while `/internal/health`, `/internal/logs`, and `/internal/line-uids` keep the `?key=` mechanism.
 Add a short "Multi-tenant" section: webhook URL shape `https://host/webhook?oa=<webhook_id>`, tenant resolution order, and the fact that `initDb` seeds the first tenant from env exactly once.
 
-- [ ] **Step 3: Rollout runbook**
+- [x] **Step 3: Rollout runbook**
 
 Create `docs/plans/2026-09-05-multi-tenant-line-oa-rollout.md` with this sequence:
 

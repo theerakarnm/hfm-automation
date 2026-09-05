@@ -1,41 +1,62 @@
-import { eq, lt, sql, count, desc } from "drizzle-orm";
+import { and, eq, lt, sql, count, desc } from "drizzle-orm";
 import type { DrizzleDb } from "../db/connection";
 import { clientSnapshots } from "../db/schema";
-import type { HFMPerformanceData } from "../types/hfm.types";
 
 const CHUNK_SIZE = 500;
 
-export async function countByDate(db: DrizzleDb, date: string): Promise<number> {
+// Task 6 tenant scoping: rows carry their own snapshot_date so callers can
+// backfill multiple dates in one call. normalizeClientRow-style mapping now
+// happens in the caller (the job does it in Task 14).
+export interface ClientSnapshotInput {
+  snapshotDate: string;
+  clientId: number;
+  name: string | null;
+  email: string | null;
+}
+
+export async function countByDate(
+  db: DrizzleDb,
+  tenantId: number,
+  date: string,
+): Promise<number> {
   const rows = await db
     .select({ count: count() })
     .from(clientSnapshots)
-    .where(eq(clientSnapshots.snapshotDate, date));
+    .where(
+      and(
+        eq(clientSnapshots.tenantId, tenantId),
+        eq(clientSnapshots.snapshotDate, date),
+      ),
+    );
   return rows[0]?.count ?? 0;
 }
 
 export async function insertMany(
   db: DrizzleDb,
-  date: string,
-  clients: HFMPerformanceData[],
+  tenantId: number,
+  rows: ClientSnapshotInput[],
 ): Promise<void> {
-  const seen = new Set<number>();
+  const seen = new Set<string>();
 
-  for (let i = 0; i < clients.length; i += CHUNK_SIZE) {
-    const chunk = clients.slice(i, i + CHUNK_SIZE);
+  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + CHUNK_SIZE);
     const values: {
+      tenantId: number;
       snapshotDate: string;
       clientId: number;
       name: string | null;
       email: string | null;
     }[] = [];
-    for (const client of chunk) {
-      if (seen.has(client.client_id)) continue;
-      seen.add(client.client_id);
+    for (const row of chunk) {
+      const key = `${row.snapshotDate}_${row.clientId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       values.push({
-        snapshotDate: date,
-        clientId: client.client_id,
-        name: client.full_name ?? null,
-        email: client.email ?? null,
+        tenantId,
+        snapshotDate: row.snapshotDate,
+        clientId: row.clientId,
+        name: row.name,
+        email: row.email,
       });
     }
     if (values.length > 0) {

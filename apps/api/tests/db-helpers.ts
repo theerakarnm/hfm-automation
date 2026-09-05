@@ -61,57 +61,66 @@ export async function createTestDb() {
     );
 
     CREATE TABLE IF NOT EXISTS client_snapshots (
-      id              SERIAL PRIMARY KEY,
-      snapshot_date   TEXT NOT NULL,
-      client_id       INTEGER NOT NULL,
-      name            TEXT,
-      email           TEXT,
-      created_at      TIMESTAMP NOT NULL DEFAULT now(),
-      UNIQUE(snapshot_date, client_id)
+      id            SERIAL PRIMARY KEY,
+      tenant_id     INTEGER NOT NULL REFERENCES tenants(id),
+      snapshot_date TEXT NOT NULL,
+      client_id     INTEGER NOT NULL,
+      name          TEXT,
+      email         TEXT,
+      created_at    TIMESTAMP NOT NULL DEFAULT now(),
+      CONSTRAINT client_snapshots_tenant_date_client_unique
+        UNIQUE (tenant_id, snapshot_date, client_id)
     );
-    CREATE INDEX IF NOT EXISTS idx_snapshot_date
-      ON client_snapshots(snapshot_date);
+    CREATE INDEX IF NOT EXISTS idx_snapshot_tenant_date
+      ON client_snapshots(tenant_id, snapshot_date);
 
     CREATE TABLE IF NOT EXISTS notify_recipients (
-      id         SERIAL PRIMARY KEY,
-      -- Nullable interim column: Task 6 replaces this block with the final
-      -- NOT NULL + UNIQUE(tenant_id, line_uid) shape.
-      tenant_id  INTEGER REFERENCES tenants(id),
-      line_uid   TEXT NOT NULL UNIQUE,
-      label      TEXT,
-      active     INTEGER NOT NULL DEFAULT 1
+      id        SERIAL PRIMARY KEY,
+      tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+      line_uid  TEXT NOT NULL,
+      label     TEXT,
+      active    INTEGER NOT NULL DEFAULT 1,
+      CONSTRAINT notify_recipients_tenant_uid_unique UNIQUE (tenant_id, line_uid)
     );
 
     CREATE TABLE IF NOT EXISTS daily_report_notifications (
-      snapshot_date TEXT PRIMARY KEY,
-      sent_at       TIMESTAMP NOT NULL DEFAULT now()
+      tenant_id     INTEGER NOT NULL REFERENCES tenants(id),
+      snapshot_date TEXT NOT NULL,
+      sent_at       TIMESTAMP NOT NULL DEFAULT now(),
+      CONSTRAINT daily_report_notifications_tenant_date_pkey
+        PRIMARY KEY (tenant_id, snapshot_date)
     );
 
     CREATE TABLE IF NOT EXISTS line_users (
-      line_uid        TEXT PRIMARY KEY,
-      first_seen_at   TIMESTAMP NOT NULL DEFAULT now(),
-      last_seen_at    TIMESTAMP NOT NULL DEFAULT now(),
-      request_count   INTEGER NOT NULL DEFAULT 1,
-      last_event_type TEXT
+      tenant_id        INTEGER NOT NULL REFERENCES tenants(id),
+      line_uid         TEXT NOT NULL,
+      first_seen_at    TIMESTAMP NOT NULL DEFAULT now(),
+      last_seen_at     TIMESTAMP NOT NULL DEFAULT now(),
+      request_count    INTEGER NOT NULL DEFAULT 1,
+      last_event_type  TEXT,
+      CONSTRAINT line_users_tenant_uid_pkey PRIMARY KEY (tenant_id, line_uid)
     );
 
     CREATE TABLE IF NOT EXISTS report_range_snapshots (
       id         SERIAL PRIMARY KEY,
+      tenant_id  INTEGER NOT NULL REFERENCES tenants(id),
       period     TEXT NOT NULL,
       from_date  TEXT NOT NULL,
       to_date    TEXT NOT NULL,
       raw_json   TEXT NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT now(),
-      UNIQUE(period, from_date, to_date)
+      CONSTRAINT report_range_snapshots_tenant_period_unique
+        UNIQUE (tenant_id, period, from_date, to_date)
     );
 
     CREATE TABLE IF NOT EXISTS client_request_snapshots (
       id            SERIAL PRIMARY KEY,
+      tenant_id     INTEGER NOT NULL REFERENCES tenants(id),
       snapshot_date TEXT NOT NULL,
       created_at    TIMESTAMP NOT NULL DEFAULT now()
     );
-    CREATE INDEX IF NOT EXISTS idx_req_snapshot_date
-      ON client_request_snapshots(snapshot_date);
+    CREATE INDEX IF NOT EXISTS idx_req_snapshot_tenant_date
+      ON client_request_snapshots(tenant_id, snapshot_date);
 
     CREATE TABLE IF NOT EXISTS client_request_snapshot_rows (
       id          SERIAL PRIMARY KEY,

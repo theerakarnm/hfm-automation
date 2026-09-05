@@ -1669,7 +1669,7 @@ Without these changes OA number two silently loses its daily report and its line
 
 Order inside `initDb()`, with a comment explaining it: create the new tables from Task 2, seed the default tenant from Task 5, then migrate the existing tables, because the backfill needs a tenant id to point at.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/api/tests/tenant-migration.test.ts
@@ -1767,7 +1767,10 @@ describe("tenant_id migration", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+> Deviation: the reference test reads the pg_constraint result as `(res as { rows }).rows.length`, but drizzle's postgres-js `db.execute` resolves to a RowList (a plain array with no `.rows`); changed it to `(res as unknown as unknown[]).length`.
+> Deviation: the test's IN list only contained the drizzle-style `..._unique` constraint names, which never exist on a database created by `initDb`'s raw SQL (Postgres auto-names inline uniques `..._key`); added the real `client_snapshots_snapshot_date_client_id_key`, `notify_recipients_line_uid_key`, and `report_range_snapshots_period_from_date_to_date_key` names so the assertion actually checks the constraints that exist.
+
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 bun test tests/tenant-migration.test.ts
@@ -1776,7 +1779,7 @@ bun test tests/tenant-migration.test.ts
 Expected: FAIL, because `insertMany(db, tenantId, ...)` does not exist yet and `createTestDb` still creates the old unique constraints.
 Run it now anyway and read the failure: it is the exact bug class this task removes.
 
-- [ ] **Step 3: Update `db-helpers.ts` to the new schema shape**
+- [x] **Step 3: Update `db-helpers.ts` to the new schema shape**
 
 Change every table in the create block to the new shape.
 The critical parts:
@@ -1852,7 +1855,9 @@ CREATE TABLE IF NOT EXISTS client_request_snapshot_rows (
 Keep `DROP TABLE IF EXISTS ...
 CASCADE` for all tables (tenants last) at the top of the helper.
 
-- [ ] **Step 4: Write the idempotent migration in `initDb()`**
+> Deviation: the inline uniques/pkeys in the CREATE block are given their final constraint names (`client_snapshots_tenant_date_client_unique` etc.) instead of Postgres default names, so Step 4's guarded `ADD CONSTRAINT` runs are true no-ops on fresh databases, as the step requires.
+
+- [x] **Step 4: Write the idempotent migration in `initDb()`**
 
 Add helper functions above `initDb` in `apps/api/src/db/connection.ts`:
 
@@ -2015,7 +2020,13 @@ Because these `ADD CONSTRAINT` statements are not idempotent on their own, wrap 
 
 Finally update `apps/api/src/db/schema.ts` drizzle definitions to match the new columns and constraints (same names as the SQL above), and switch index `idx_snapshot_date` to `idx_snapshot_tenant_date` and `idx_req_snapshot_date` to `idx_req_snapshot_tenant_date` in both the SQL and `db-helpers.ts`.
 
-- [ ] **Step 5: Run the migration tests and the whole suite**
+> Deviation: `columnExists`/`constraintExists` and the migration queries read results as arrays (`res.length`, `res[0]`) instead of `res.rows`, because drizzle's postgres-js `execute` resolves to a RowList with no `.rows` property.
+> Deviation: `dropIfExists` takes a list of names and drops both the drizzle-style `..._unique` names and the Postgres-default `..._key` names (`client_snapshots_snapshot_date_client_id_key`, `notify_recipients_line_uid_key`, `report_range_snapshots_period_from_date_to_date_key`); the `_unique` names never exist on databases created by the old `initDb` raw SQL, so dropping only them would leave the old single-tenant uniques in place and tenant B's rows would violate them.
+> Deviation: `initDb` calls `seedDefaultTenantFromEnv` between table creation and the migration block (the order this task prescribes; Task 17 confirms it).
+> Deviation: `insertMany`/`countByDate` (snapshot.repository), `recordLineUserRequest`/`listLineUsers` (line-user.repository), and the new `daily-notification.repository.ts` were changed here even though the Files block omits them, because the Step 1 test imports exactly those signatures ("insertMany(db, tenantId, ...) does not exist yet").
+> Deviation: the two `CREATE INDEX ... (tenant_id, ...)` statements were moved out of the CREATE batch into the migration block right after the ADD COLUMN loop; verified against a legacy-shape database, the batch form aborts with `column "tenant_id" does not exist` because the whole sql template is one statement batch.
+
+- [x] **Step 5: Run the migration tests and the whole suite**
 
 ```bash
 bun test tests/tenant-migration.test.ts

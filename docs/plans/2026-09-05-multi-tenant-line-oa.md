@@ -4442,6 +4442,8 @@ git add apps/api/Dockerfile docker-compose.yml
 git commit -m "fix: compose context and image scripts"
 ```
 
+> Deviation: the repo's file watcher auto-committed the changes before the manual commit ran (5ff1b7c Dockerfile, f5e8cb3 docker-compose.yml, d20d5bb plan ticks), so `git add` staged nothing new; the exact task files are committed, but under watcher-generated messages instead of "fix: compose context and image scripts". History was left unwritten to avoid racing concurrent task commits.
+
 ---
 
 ### Task 25: Scripts take an explicit tenant

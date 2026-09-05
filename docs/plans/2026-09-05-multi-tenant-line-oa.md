@@ -4614,7 +4614,7 @@ Rollback: restore the code and the `pg_dump` from step 1.
 The database changes (composite keys, backfilled `tenant_id`, dropped constraints) cannot be reverted in place, which is why the backup is mandatory.
 Rolling back code without restoring the database is not supported.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/api/.env.example AGENTS.md docs/plans/2026-09-05-multi-tenant-line-oa-rollout.md

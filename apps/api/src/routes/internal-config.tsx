@@ -11,13 +11,18 @@ import { decryptSecret, maskSecret } from "../utils/crypto";
 import { logError } from "../utils/logger";
 import { getDb } from "../db/connection";
 import {
+  getTenantHealthStateRow,
   getTenantRowById,
   listTenantRows,
   rotateWebhookId,
   updateTenantLineIdentity,
+  updateTenantTestResult,
 } from "../repositories/tenant.repository";
-import { invalidateTenantCache, saveTenant } from "../services/tenant-config.service";
+import { listLineUsers } from "../repositories/line-user.repository";
+import { invalidateTenantCache, getTenantById, saveTenant } from "../services/tenant-config.service";
 import { fetchBotInfo } from "../services/line.service";
+import { fetchPerformance } from "../services/hfm.service";
+import { getLastTradeCacheInfo } from "../services/last-trade.service";
 import { requireCsrf } from "./internal-auth";
 
 // requireAdmin stores the CSRF token in c.var. The route is mounted on the
@@ -57,6 +62,15 @@ function TestBadge({ row }: { row: TenantRow }) {
   } catch {
     return <span class="badge-warn">unknown</span>;
   }
+}
+
+// Same badge as TestBadge, but rendered from the parsed TenantConfig that
+// the status page already holds (the service parses lastTestResult).
+function testOutcomeBadge(result: TenantTestResult | null) {
+  if (!result) return <span class="badge-warn">unknown</span>;
+  return result.lineOk && result.hfmOk && result.walletOk
+    ? <span class="badge-ok">tested ok</span>
+    : <span class="badge-warn">test failed</span>;
 }
 
 function webhookUrl(webhookId: string): string {
@@ -201,7 +215,7 @@ internalConfigRoutes.get("/", async (c) => {
               <td>{row.label}{row.active === 1 ? "" : " (inactive)"}</td>
               <td><TestBadge row={row} /></td>
               <td><code>{webhookUrl(row.webhookId)}</code></td>
-              <td><a href={`/internal/config/${row.id}`}>Edit</a></td>
+              <td><a href={`/internal/config/${row.id}`}>Edit</a> · <a href={`/internal/config/${row.id}/status`}>Status</a></td>
             </tr>
           ))}
         </tbody>
@@ -234,6 +248,16 @@ internalConfigRoutes.get("/:id", async (c) => {
       <p>
         Test status: <TestBadge row={row} /> · Webhook URL: <code>{webhookUrl(row.webhookId)}</code>
       </p>
+      {/*
+        The connection test is a button, never a gate (Q24): it stores the
+        result and redirects back here. Activation is never blocked by a
+        failed test; the badge above is how a misconfigured OA stays visible.
+      */}
+      <form method="post" action={`/internal/config/${row.id}/test`} class="inline">
+        <input type="hidden" name="csrf" value={csrfFrom(c)} />
+        <button type="submit">Test connection</button>
+      </form>
+      <p><a href={`/internal/config/${row.id}/status`}>View full status page</a></p>
       <TenantForm row={row} csrf={csrfFrom(c)} />
     </Layout>,
   );
@@ -266,6 +290,128 @@ internalConfigRoutes.post("/:id/rotate", async (c) => {
       <p>Old URL: <code>{webhookUrl(row.webhookId)}</code></p>
       <p>New URL: <code>{webhookUrl(newWebhookId)}</code></p>
       <p><a href={`/internal/config/${id}`}>Back to the tenant</a></p>
+    </Layout>,
+  );
+});
+
+// Connection test button (Q24: a button, never a gate). Three independent
+// checks run against the tenant's OWN stored credentials, the result is
+// persisted for the list/detail badges, and the operator is redirected back
+// to the edit page regardless of the outcome.
+internalConfigRoutes.post("/:id/test", async (c) => {
+  if (!(await requireCsrf(c))) return c.text("Forbidden", 403);
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) return c.notFound();
+  const ctx = await getTenantById(id);
+  if (!ctx) return c.notFound();
+
+  // Three independent checks. LINE token via /v2/bot/info, HFM key via the
+  // wallet balance probe, and the wallet itself must exist under that key.
+  const identity = await fetchBotInfo(ctx.lineChannelAccessToken);
+  const lineOk = identity !== null;
+
+  let hfmOk = false;
+  try {
+    const res = await fetch(`${ctx.hfmApiBaseUrl}/api/wallet/balance`, {
+      headers: { Authorization: `Bearer ${ctx.hfmApiKey}` },
+      signal: AbortSignal.timeout(5_000),
+    });
+    hfmOk = res.ok;
+  } catch {
+    hfmOk = false;
+  }
+
+  // The wallet check is the one that catches "wrong wallet copied from
+  // another OA": a wrong-but-existing wallet would otherwise report happily
+  // forever. It runs only when the key itself works.
+  let walletOk = false;
+  if (hfmOk) {
+    const result = await fetchPerformance(ctx, {
+      kind: "wallet", id: ctx.targetWallet, label: String(ctx.targetWallet),
+    });
+    walletOk = result.ok;
+  }
+
+  const message = [lineOk && "LINE ok", hfmOk && "HFM ok", walletOk && "wallet ok"]
+    .filter(Boolean).join(", ") || "all checks failed";
+  await updateTenantTestResult(getDb(), ctx.id, { lineOk, hfmOk, walletOk, message });
+  invalidateTenantCache(ctx.id);
+  return c.redirect(`/internal/config/${ctx.id}`);
+});
+
+// Read-only per-tenant status page: everything an operator needs to decide
+// whether this OA is wired correctly, without a single upstream call.
+internalConfigRoutes.get("/:id/status", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) return c.notFound();
+  const ctx = await getTenantById(id);
+  if (!ctx) return c.notFound();
+
+  const db = getDb();
+  const health = await getTenantHealthStateRow(db, ctx.id);
+  const users = await listLineUsers(db, ctx.id);
+  const cache = getLastTradeCacheInfo(ctx.id);
+
+  return c.html(
+    <Layout title={`Status ${ctx.label} - HFM internal`}>
+      <h1>Tenant status: {ctx.label}</h1>
+      <p><a href="/internal/config">Back to the tenant list</a> · <a href={`/internal/config/${ctx.id}`}>Edit this tenant</a></p>
+      <table>
+        <tbody>
+          <tr><th>Active</th><td>{ctx.active ? "active" : "inactive"}</td></tr>
+          <tr><th>Webhook URL</th><td><code>{webhookUrl(ctx.webhookId)}</code></td></tr>
+          <tr><th>LINE display name</th><td>{ctx.lineDisplayName ?? "not set"}</td></tr>
+          <tr><th>LINE basic id</th><td>{ctx.lineBasicId ?? "not set"}</td></tr>
+          <tr><th>LINE bot user id</th><td>{ctx.lineBotUserId ?? "not set"}</td></tr>
+          <tr><th>Target wallet</th><td>{ctx.targetWallet}</td></tr>
+          <tr>
+            <th>Last test</th>
+            <td>
+              {testOutcomeBadge(ctx.lastTestResult)} {ctx.lastTestedAt ?? "never tested"}
+              {ctx.lastTestResult ? <> - {ctx.lastTestResult.message}</> : null}
+            </td>
+          </tr>
+          <tr>
+            <th>HFM health (cron)</th>
+            <td>
+              {health
+                ? <>
+                    {health.healthy ? "healthy" : "unhealthy"} since {health.changedAt}
+                  </>
+                : "no state yet (assumed healthy)"}
+            </td>
+          </tr>
+          <tr>
+            <th>Last-trade cache</th>
+            <td>
+              {cache.warm
+                ? <>warm, {cache.entries} entries, fetched {new Date(cache.fetchedAt!).toISOString()}</>
+                : "cold"}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <h2>LINE users</h2>
+      {users.length === 0
+        ? <p>No LINE user has talked to this OA yet.</p>
+        : (
+          <table>
+            <thead>
+              <tr><th>Line uid</th><th>Requests</th><th>Last seen</th><th>First seen</th><th>Last event</th></tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr>
+                  <td>{u.line_uid}</td>
+                  <td>{u.request_count}</td>
+                  <td>{u.last_seen_at}</td>
+                  <td>{u.first_seen_at}</td>
+                  <td>{u.last_event_type ?? ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
     </Layout>,
   );
 });

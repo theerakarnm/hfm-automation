@@ -29,6 +29,21 @@ export interface GetLastTradeMapOptions {
 const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+// Read-only probe for the internal status page: reports whether this
+// tenant's cache is warm and how stale it is, without ever triggering an
+// upstream fetch (a status page must not fire HFM requests).
+export interface LastTradeCacheInfo {
+  warm: boolean;
+  fetchedAt: number | null;
+  entries: number;
+}
+
+export function getLastTradeCacheInfo(tenantId: number): LastTradeCacheInfo {
+  const cache = caches.get(tenantId);
+  if (!cache) return { warm: false, fetchedAt: null, entries: 0 };
+  return { warm: true, fetchedAt: cache.fetchedAt, entries: cache.map.size };
+}
+
 export function resetLastTradeCache(tenantId?: number): void {
   if (tenantId === undefined) {
     caches.clear();

@@ -3958,7 +3958,11 @@ The test is a button, never a gate (decision Q24).
 Activation is never blocked by a failed test.
 But the list page shows a red badge for never-tested or failed, so a misconfigured OA cannot look healthy at a glance.
 
-- [ ] **Step 1: Tests**
+- [x] **Step 1: Tests**
+
+> Deviation: the snippet referenced undefined scaffolding (`id`, `db`, `csrf`, `adminCookie()` with no args, `ctxA`, `withCsrf()`); the tests were rewritten against this file's existing harness (per-test app/cookie/csrf/db setup, plus a second tenant inserted with token `line_ok...` so the stub can tell the LINE check apart from the HFM checks).
+> Deviation: the "own HFM key" assertion `toEqual([\`Bearer ${ctxA.hfmApiKey}\`])` cannot hold as written: the reference implementation itself makes TWO HFM-authed calls (the balance probe and the wallet performance lookup), so the test asserts both recorded Authorization headers equal the tenant's own key.
+> Deviation: added tests beyond the snippet (CSRF rejection -> 403 stores nothing, edit-page test button + status link, unknown id -> 404 for both routes, status-page healthy/no-state/unauthenticated cases) to cover the CSRF gate and the status-page pieces.
 
 ```ts
 test("test stores a failing result and the list shows the badge", async () => {
@@ -3997,7 +4001,10 @@ test("wallet check uses the tenant's own HFM key", async () => {
 });
 ```
 
-- [ ] **Step 2: Implement `POST /internal/config/:id/test`**
+- [x] **Step 2: Implement `POST /internal/config/:id/test`**
+
+> Deviation: `requireAdmin` is not repeated inside the handler because `routes/internal.ts` already applies it to every `/config/*` route at mount; the handler adds the `requireCsrf` check exactly like every other POST in the file (the reference snippet's route-level `requireAdmin` would run twice).
+> Deviation: unknown or invalid id answers `c.notFound()` (the file's convention) instead of `c.text("Not Found", 404)`; the 302 redirect target is asserted in the tests.
 
 ```ts
 internalConfigRoutes.post("/:id/test", requireAdmin, async (c) => {
@@ -4039,11 +4046,14 @@ internalConfigRoutes.post("/:id/test", requireAdmin, async (c) => {
 });
 ```
 
-- [ ] **Step 3: Status page `GET /internal/config/:id/status`**
+- [x] **Step 3: Status page `GET /internal/config/:id/status`**
+
+> Deviation: the Files block grew by two read-only helpers: `getTenantHealthStateRow` in `tenant.repository.ts` (the plan's file-structure table puts all `tenant_health_state` SQL in that repository, and AGENTS.md forbids SQL in routes) and `getLastTradeCacheInfo` in `last-trade.service.ts` (the per-tenant cache map is module-private and the page must show freshness without firing an upstream fetch). When the map is not warm the page shows "cold".
+> Deviation: the "Test connection" button itself is placed by no step; it renders on the tenant detail page as an inline CSRF-carrying form, and Status links were added to the list and detail pages.
 
 Show: LINE identity (displayName, basicId, botUserId), active flag, target wallet, last test result and time, `tenant_health_state` row, webhook URL, last webhook activity and request counts from `listLineUsers(db, ctx.id)`, and last-trade cache freshness if the map is warm.
 
-- [ ] **Step 4: Run, commit**
+- [x] **Step 4: Run, commit**
 
 ```bash
 bun test tests/internal-config.test.ts

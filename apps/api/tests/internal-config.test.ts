@@ -6,9 +6,15 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import * as schema from "../src/db/schema";
 import { createTestDb, closeTestDb } from "./db-helpers";
 import { resetDbForTests, type DrizzleDb } from "../src/db/connection";
-import { insertTenantRow, getTenantRowById } from "../src/repositories/tenant.repository";
+import {
+  insertTenantRow,
+  getTenantRowById,
+  updateTenantLineIdentity,
+  updateTenantTestResult,
+} from "../src/repositories/tenant.repository";
+import { recordLineUserRequest } from "../src/repositories/line-user.repository";
 import { getTenantById, invalidateTenantCache } from "../src/services/tenant-config.service";
-import type { TenantInput } from "../src/types/tenant.types";
+import type { TenantInput, TenantTestResult } from "../src/types/tenant.types";
 
 const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? "postgresql://jametirakarn@localhost:5432/hfm_test";
@@ -70,6 +76,13 @@ afterEach(() => {
 
 function formBody(fields: Record<string, string>): URLSearchParams {
   return new URLSearchParams(fields);
+}
+
+// The session cookie embeds the CSRF token (see routes/internal-auth.ts),
+// so the test can extract it exactly like the rendered form would carry it.
+function csrfFromCookie(adminCookieValue: string): string {
+  const value = adminCookieValue.slice(adminCookieValue.indexOf("=") + 1);
+  return value.split(".")[1]!;
 }
 
 async function createInternalApp() {
@@ -168,13 +181,6 @@ describe("POST /internal/config/:id (save)", () => {
   let db: DrizzleDb;
   let client: postgres.Sql;
   const realFetch = globalThis.fetch;
-
-  // The session cookie embeds the CSRF token (see routes/internal-auth.ts),
-  // so the test can extract it exactly like the rendered form would carry it.
-  function csrfFromCookie(adminCookieValue: string): string {
-    const value = adminCookieValue.slice(adminCookieValue.indexOf("=") + 1);
-    return value.split(".")[1]!;
-  }
 
   function stubBotInfo(body: {
     userId: string;
@@ -322,5 +328,200 @@ describe("POST /internal/config/:id (save)", () => {
     expect(after!.webhookId).not.toBe(before!.webhookId);
     expect(html).toContain(after!.webhookId);
     expect(html).toContain("LINE Developers Console");
+  });
+});
+
+// POST /internal/config/:id/test runs three upstream checks against the
+// tenant's OWN stored credentials. Every test stubs globalThis.fetch,
+// because the handler always calls api.line.me and the HFM API: tests must
+// never reach the real network.
+describe("POST /internal/config/:id/test", () => {
+  let app: Hono;
+  let cookie: string;
+  let csrf: string;
+  let db: DrizzleDb;
+  let client: postgres.Sql;
+  let testId = 0;
+  const realFetch = globalThis.fetch;
+
+  beforeEach(async () => {
+    // A second tenant whose LINE token starts with "line_ok" so the stub can
+    // tell the LINE check from the HFM checks apart, with its own HFM key.
+    client = postgres(TEST_DATABASE_URL, { max: 1 });
+    db = drizzle(client, { schema });
+    testId = await insertTenantRow(db, {
+      ...TENANT,
+      label: "oa-test-connection",
+      lineChannelAccessToken: "line_ok_token",
+      hfmApiKey: "hfm_own_key",
+    });
+    invalidateTenantCache();
+    app = await createInternalApp();
+    cookie = await adminCookie(app);
+    csrf = csrfFromCookie(cookie);
+  });
+
+  afterEach(async () => {
+    globalThis.fetch = realFetch;
+    invalidateTenantCache();
+    await client.end();
+  });
+
+  test("test stores a failing result and the list shows the badge", async () => {
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+      const auth = String((init!.headers as Record<string, string>).Authorization);
+      if (auth.startsWith("Bearer line_ok")) {
+        return new Response(JSON.stringify({ userId: "U1" }), { status: 200 });
+      }
+      return new Response("nope", { status: 401 }); // HFM down
+    }) as unknown as typeof fetch;
+
+    const res = await app.request(`/internal/config/${testId}/test`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: formBody({ csrf }),
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(`/internal/config/${testId}`);
+
+    const row = await getTenantRowById(db, testId);
+    expect(row!.lastTestedAt).not.toBeNull();
+    const result = JSON.parse(row!.lastTestResult!) as TenantTestResult;
+    expect(result.lineOk).toBe(true);
+    expect(result.hfmOk).toBe(false);
+    expect(result.walletOk).toBe(false);
+    expect(result.message).toBe("LINE ok");
+    const list = await (await app.request("/internal/config", { headers: { cookie } })).text();
+    expect(list).toContain("test failed");
+  });
+
+  test("wallet check uses the tenant's own HFM key", async () => {
+    const seen: string[] = [];
+    globalThis.fetch = (async (_u: unknown, init?: RequestInit) => {
+      const headers = init?.headers as Record<string, string> | undefined;
+      const auth = String(headers?.Authorization ?? "");
+      if (auth.includes("hfm")) {
+        seen.push(auth);
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+    await app.request(`/internal/config/${testId}/test`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: formBody({ csrf }),
+    });
+    // Two HFM-authed calls happen: the balance probe and the wallet
+    // performance lookup. Both must carry this tenant's own key, never
+    // another tenant's and never an env fallback.
+    expect(seen.length).toBe(2);
+    expect(seen.every((auth) => auth === "Bearer hfm_own_key")).toBe(true);
+  });
+
+  test("test without a valid csrf is rejected with 403", async () => {
+    globalThis.fetch = (async () => new Response("{}", { status: 401 })) as unknown as typeof fetch;
+    const res = await app.request(`/internal/config/${testId}/test`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: formBody({ csrf: "not-the-session-token" }),
+    });
+    expect(res.status).toBe(403);
+    const row = await getTenantRowById(db, testId);
+    expect(row!.lastTestResult).toBeNull(); // nothing stored on a rejected post
+  });
+
+  test("edit page carries a test connection button and a status link", async () => {
+    globalThis.fetch = (async () => new Response("{}", { status: 401 })) as unknown as typeof fetch;
+    const html = await (await app.request(`/internal/config/${testId}`, { headers: { cookie } })).text();
+    expect(html).toContain(`action="/internal/config/${testId}/test"`);
+    expect(html).toContain("Test connection");
+    expect(html).toContain(`href="/internal/config/${testId}/status"`);
+  });
+
+  test("unknown tenant test is 404", async () => {
+    globalThis.fetch = (async () => new Response("{}", { status: 401 })) as unknown as typeof fetch;
+    const res = await app.request("/internal/config/9999/test", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: formBody({ csrf }),
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /internal/config/:id/status", () => {
+  let app: Hono;
+  let cookie: string;
+  let db: DrizzleDb;
+  let client: postgres.Sql;
+  let testId = 0;
+
+  beforeEach(async () => {
+    client = postgres(TEST_DATABASE_URL, { max: 1 });
+    db = drizzle(client, { schema });
+    testId = await insertTenantRow(db, { ...TENANT, label: "oa-status-page" });
+    invalidateTenantCache();
+    app = await createInternalApp();
+    cookie = await adminCookie(app);
+  });
+
+  afterEach(async () => {
+    invalidateTenantCache();
+    await client.end();
+  });
+
+  test("status page shows identity, wallet, test result, health, webhook, users, cache", async () => {
+    await updateTenantLineIdentity(db, testId, {
+      userId: "Ubot9",
+      basicId: "@statbasic",
+      displayName: "Status OA",
+    });
+    await updateTenantTestResult(db, testId, {
+      lineOk: true,
+      hfmOk: true,
+      walletOk: false,
+      message: "LINE ok, HFM ok",
+    });
+    await recordLineUserRequest(db, testId, "Ustatususer", "message");
+    await db.insert(schema.tenantHealthState).values({ tenantId: testId, healthy: 0 });
+    invalidateTenantCache();
+
+    const res = await app.request(`/internal/config/${testId}/status`, { headers: { cookie } });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Status OA");
+    expect(html).toContain("@statbasic");
+    expect(html).toContain("Ubot9");
+    expect(html).toContain("active");
+    expect(html).toContain(String(TENANT.targetWallet));
+    expect(html).toContain("test failed"); // walletOk false
+    expect(html).toContain("LINE ok, HFM ok");
+    expect(html).toContain("unhealthy");
+    expect(html).toContain("/webhook?oa=");
+    expect(html).toContain("Ustatususer");
+    expect(html).toContain("cold"); // last-trade cache not warmed
+    expect(html).not.toContain(TOKEN_PLAIN);
+    expect(html).not.toContain(SECRET_PLAIN);
+    expect(html).not.toContain(HFM_PLAIN);
+  });
+
+  test("status page shows healthy and no-state cases without secrets", async () => {
+    await db.insert(schema.tenantHealthState).values({ tenantId: testId, healthy: 1 });
+    invalidateTenantCache();
+    const html = await (await app.request(`/internal/config/${testId}/status`, { headers: { cookie } })).text();
+    expect(html).toContain("healthy");
+    expect(html).toContain("never tested");
+    expect(html).toContain("No LINE user has talked to this OA yet.");
+    expect(html).not.toContain(TOKEN_PLAIN);
+  });
+
+  test("unauthenticated status page redirects to login", async () => {
+    const res = await app.request(`/internal/config/${testId}/status`);
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/internal/login");
+  });
+
+  test("unknown tenant status is 404", async () => {
+    const res = await app.request("/internal/config/9999/status", { headers: { cookie } });
+    expect(res.status).toBe(404);
   });
 });

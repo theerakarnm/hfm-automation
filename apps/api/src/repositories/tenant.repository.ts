@@ -2,7 +2,7 @@
 import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { DrizzleDb } from "../db/connection";
-import { tenants, tenantWhitelistUids } from "../db/schema";
+import { tenants, tenantHealthState, tenantWhitelistUids } from "../db/schema";
 import type { TenantInput, TenantRow, TenantTestResult } from "../types/tenant.types";
 import { encryptSecret } from "../utils/crypto";
 
@@ -128,6 +128,25 @@ export async function updateTenantTestResult(
       updatedAt: new Date().toISOString(),
     })
     .where(eq(tenants.id, id));
+}
+
+// Healthcheck edge state for the status page. A missing row means "never
+// probed", which the healthcheck job treats as healthy; the caller decides
+// how to render that case.
+export interface TenantHealthStateRow {
+  healthy: boolean;
+  changedAt: string;
+}
+
+export async function getTenantHealthStateRow(
+  db: DrizzleDb,
+  tenantId: number,
+): Promise<TenantHealthStateRow | null> {
+  const rows = await db
+    .select({ healthy: tenantHealthState.healthy, changedAt: tenantHealthState.changedAt })
+    .from(tenantHealthState)
+    .where(eq(tenantHealthState.tenantId, tenantId));
+  return rows[0] ? { healthy: rows[0].healthy === 1, changedAt: rows[0].changedAt } : null;
 }
 
 export async function rotateWebhookId(db: DrizzleDb, id: number): Promise<string> {

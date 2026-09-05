@@ -1,61 +1,80 @@
-import { expect, test, beforeEach, afterEach } from "bun:test";
+import { expect, test, beforeAll, beforeEach, afterAll } from "bun:test";
 import postgres from "postgres";
-import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
-import { parseNotifyUids, seedFromEnv, getActiveUids } from "../src/repositories/recipient.repository";
+import {
+  addRecipient,
+  removeRecipient,
+  getActiveUids,
+} from "../src/repositories/recipient.repository";
+import { insertTenantRow } from "../src/repositories/tenant.repository";
 import type { DrizzleDb } from "../src/db/connection";
+import type { TenantInput } from "../src/types/tenant.types";
+import { createTestDb, closeTestDb } from "./db-helpers";
 
-const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ?? "postgresql://jametirakarn@localhost:5432/hfm_test";
+process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 13).toString("base64");
 
-let client: postgres.Sql;
+const INPUT = (label: string): TenantInput => ({
+  label,
+  active: true,
+  lineChannelAccessToken: `tok_${label}`,
+  lineChannelSecret: `sec_${label}`,
+  hfmApiKey: `hfm_${label}`,
+  hfmApiBaseUrl: "https://api.hfaffiliates.com",
+  targetWallet: 30506525,
+  whitelistEnabled: true,
+});
+
 let db: DrizzleDb;
+let client: postgres.Sql;
+let tenantA: number;
+let tenantB: number;
 
-async function clearTables() {
-  await db.execute(sql`DELETE FROM client_request_snapshot_rows`);
-  await db.execute(sql`DELETE FROM client_request_snapshots`);
-  await db.execute(sql`DELETE FROM notify_recipients`);
-  await db.execute(sql`DELETE FROM daily_report_notifications`);
-  await db.execute(sql`DELETE FROM client_snapshots`);
-}
+beforeAll(async () => {
+  const t = await createTestDb();
+  db = t.db; client = t.client;
+  tenantA = await insertTenantRow(db, INPUT("A"));
+  tenantB = await insertTenantRow(db, INPUT("B"));
+});
 
 beforeEach(async () => {
-  client = postgres(TEST_DATABASE_URL, { max: 1 });
-  db = drizzle(client);
-  await clearTables();
+  await db.execute(sql`DELETE FROM notify_recipients`);
 });
 
-afterEach(async () => {
-  await client.end();
+afterAll(async () => {
+  await closeTestDb(client);
 });
 
-test("parseNotifyUids trims and dedupes comma separated env", () => {
-  expect(parseNotifyUids(" Uabc123, Udef456, Uabc123, ")).toEqual(["Uabc123", "Udef456"]);
+test("getActiveUids returns only this tenant's recipients", async () => {
+  await addRecipient(db, tenantA, "Urec1", "boss A");
+  await addRecipient(db, tenantA, "Urec2", null);
+  await addRecipient(db, tenantB, "Urec3", "boss B");
+  expect(await getActiveUids(db, tenantA)).toEqual(["Urec1", "Urec2"]);
+  expect(await getActiveUids(db, tenantB)).toEqual(["Urec3"]);
 });
 
-test("parseNotifyUids handles empty string", () => {
-  expect(parseNotifyUids("")).toEqual([]);
+test("removeRecipient only removes for that tenant", async () => {
+  await addRecipient(db, tenantA, "Udup", "a");
+  await addRecipient(db, tenantB, "Udup", "b");
+  await removeRecipient(db, tenantB, "Udup");
+  expect(await getActiveUids(db, tenantA)).toContain("Udup");
+  expect(await getActiveUids(db, tenantB)).not.toContain("Udup");
 });
 
-test("parseNotifyUids handles single UID", () => {
-  expect(parseNotifyUids("Uabc123")).toEqual(["Uabc123"]);
+test("getActiveUids skips rows deactivated directly in SQL", async () => {
+  await addRecipient(db, tenantA, "Uoff", "a");
+  await db.execute(
+    sql`UPDATE notify_recipients SET active = 0 WHERE line_uid = 'Uoff'`,
+  );
+  expect(await getActiveUids(db, tenantA)).not.toContain("Uoff");
 });
 
-test("seedFromEnv inserts recipients and getActiveUids returns them", async () => {
-  await seedFromEnv(db, "Uabc123,Udef456");
-  expect(await getActiveUids(db)).toEqual(["Uabc123", "Udef456"]);
-});
-
-test("seedFromEnv inserts recipients without overwriting active flag", async () => {
-  await seedFromEnv(db, "Uabc123,Udef456");
-  await db.execute(sql`UPDATE notify_recipients SET active = 0 WHERE line_uid = 'Uabc123'`);
-  await seedFromEnv(db, "Uabc123,Udef456");
-  expect(await getActiveUids(db)).toEqual(["Udef456"]);
-});
-
-test("seedFromEnv is idempotent — duplicate seeds do not create extra rows", async () => {
-  await seedFromEnv(db, "Uabc123,Udef456");
-  await seedFromEnv(db, "Uabc123,Udef456");
-  const rows = await db.execute(sql`SELECT COUNT(*) as count FROM notify_recipients`);
-  expect(Number(rows[0]!.count)).toBe(2);
+test("addRecipient ignores same-tenant duplicates, allows same uid per tenant", async () => {
+  await addRecipient(db, tenantA, "Usame", "a");
+  await addRecipient(db, tenantA, "Usame", "a2");
+  await addRecipient(db, tenantB, "Usame", "b");
+  const rows = await db.execute(
+    sql`SELECT tenant_id, line_uid FROM notify_recipients WHERE line_uid = 'Usame' ORDER BY tenant_id`,
+  );
+  expect(rows).toHaveLength(2);
+  expect(rows.map((r) => r.tenant_id)).toEqual([tenantA, tenantB]);
 });

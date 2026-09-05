@@ -12,6 +12,7 @@ export interface RangeSnapshotRow {
 
 export async function getRangeSnapshot(
   db: DrizzleDb,
+  tenantId: number,
   period: string,
   fromDate: string,
   toDate: string,
@@ -21,6 +22,7 @@ export async function getRangeSnapshot(
     .from(reportRangeSnapshots)
     .where(
       and(
+        eq(reportRangeSnapshots.tenantId, tenantId),
         eq(reportRangeSnapshots.period, period),
         eq(reportRangeSnapshots.fromDate, fromDate),
         eq(reportRangeSnapshots.toDate, toDate),
@@ -39,6 +41,7 @@ export async function getRangeSnapshot(
 
 export async function upsertRangeSnapshot(
   db: DrizzleDb,
+  tenantId: number,
   period: string,
   fromDate: string,
   toDate: string,
@@ -47,6 +50,7 @@ export async function upsertRangeSnapshot(
   await db
     .insert(reportRangeSnapshots)
     .values({
+      tenantId,
       period,
       fromDate,
       toDate,
@@ -54,6 +58,7 @@ export async function upsertRangeSnapshot(
     })
     .onConflictDoUpdate({
       target: [
+        reportRangeSnapshots.tenantId,
         reportRangeSnapshots.period,
         reportRangeSnapshots.fromDate,
         reportRangeSnapshots.toDate,

@@ -70,12 +70,18 @@ export async function insertMany(
 
 export async function getLatestSnapshotDateBefore(
   db: DrizzleDb,
+  tenantId: number,
   beforeDate: string,
 ): Promise<string | null> {
   const rows = await db
     .selectDistinct({ date: clientSnapshots.snapshotDate })
     .from(clientSnapshots)
-    .where(lt(clientSnapshots.snapshotDate, beforeDate))
+    .where(
+      and(
+        eq(clientSnapshots.tenantId, tenantId),
+        lt(clientSnapshots.snapshotDate, beforeDate),
+      ),
+    )
     .orderBy(desc(clientSnapshots.snapshotDate))
     .limit(1);
   return rows[0]?.date ?? null;
@@ -83,12 +89,16 @@ export async function getLatestSnapshotDateBefore(
 
 export async function purgeOlderThan(
   db: DrizzleDb,
+  tenantId: number,
   days: number,
   referenceDate: string,
 ): Promise<void> {
   await db
     .delete(clientSnapshots)
     .where(
-      sql`${clientSnapshots.snapshotDate}::date < (${referenceDate}::date - ${days} * INTERVAL '1 day')`,
+      and(
+        eq(clientSnapshots.tenantId, tenantId),
+        sql`${clientSnapshots.snapshotDate}::date < (${referenceDate}::date - ${days} * INTERVAL '1 day')`,
+      ),
     );
 }

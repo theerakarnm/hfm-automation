@@ -2,31 +2,9 @@ import { and, eq } from "drizzle-orm";
 import type { DrizzleDb } from "../db/connection";
 import { notifyRecipients } from "../db/schema";
 
-export function parseNotifyUids(envValue: string): string[] {
-  return [
-    ...new Set(
-      envValue
-        .split(",")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0),
-    ),
-  ];
-}
+// seedFromEnv and parseNotifyUids are gone by design: recipients now come
+// from the database only, managed per tenant through the internal UI.
 
-export async function seedFromEnv(
-  db: DrizzleDb,
-  envValue: string,
-): Promise<void> {
-  const uids = parseNotifyUids(envValue);
-  if (uids.length === 0) return;
-  await db
-    .insert(notifyRecipients)
-    .values(uids.map((uid) => ({ lineUid: uid })))
-    .onConflictDoNothing();
-}
-
-// Pulled forward from Task 11 for the Task 5 bootstrap seed. seedFromEnv and
-// parseNotifyUids are deleted there, once the jobs no longer call them.
 export async function addRecipient(
   db: DrizzleDb,
   tenantId: number,
@@ -39,19 +17,27 @@ export async function addRecipient(
     .onConflictDoNothing();
 }
 
-// tenantId is optional only until Task 11 updates the legacy job callers,
-// which have no tenant context yet. The filter applies whenever it is given.
-export async function getActiveUids(
+export async function removeRecipient(
   db: DrizzleDb,
-  tenantId?: number,
-): Promise<string[]> {
-  const conditions = [eq(notifyRecipients.active, 1)];
-  if (tenantId !== undefined) {
-    conditions.push(eq(notifyRecipients.tenantId, tenantId));
-  }
+  tenantId: number,
+  lineUid: string,
+): Promise<void> {
+  await db
+    .delete(notifyRecipients)
+    .where(
+      and(
+        eq(notifyRecipients.tenantId, tenantId),
+        eq(notifyRecipients.lineUid, lineUid),
+      ),
+    );
+}
+
+export async function getActiveUids(db: DrizzleDb, tenantId: number): Promise<string[]> {
   const rows = await db
     .select({ lineUid: notifyRecipients.lineUid })
     .from(notifyRecipients)
-    .where(and(...conditions));
+    .where(
+      and(eq(notifyRecipients.tenantId, tenantId), eq(notifyRecipients.active, 1)),
+    );
   return rows.map((r) => r.lineUid);
 }

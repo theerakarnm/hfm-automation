@@ -2577,7 +2577,7 @@ git commit -m "fix: key last-trade cache by tenant"
 - Modify: `apps/api/src/repositories/line-user.repository.ts`
 - Test: `apps/api/tests/recipient.repository.test.ts`, `apps/api/tests/line-user.repository.test.ts`, `apps/api/tests/snapshot.repository.test.ts`, `apps/api/tests/sqlite.service.test.ts`
 
-- [ ] **Step 1: Update the tests to always pass a tenant id**
+- [x] **Step 1: Update the tests to always pass a tenant id**
 
 The representative change in `recipient.repository.test.ts`:
 Also update `tests/sqlite.service.test.ts` (an initDb schema-shape test): its index assertions become `idx_snapshot_tenant_date` and `idx_req_snapshot_tenant_date`, and its duplicate-insert test now seeds two tenants or expects the composite `UNIQUE(tenant_id, snapshot_date, client_id)` to reject only same-tenant duplicates.
@@ -2610,13 +2610,13 @@ test("removeRecipient only removes for that tenant", async () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 ```bash
 bun test tests/recipient.repository.test.ts tests/line-user.repository.test.ts tests/snapshot.repository.test.ts
 ```
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Rule for every function in these five files: `tenantId: number` is the second parameter, right after `db`, and every query filters by it.
 
@@ -2672,7 +2672,7 @@ export async function getActiveUids(db: DrizzleDb, tenantId: number): Promise<st
 `line-user.repository.ts`: `recordLineUserRequest(db, tenantId, lineUid, eventType)` upserts on `target: [lineUsers.tenantId, lineUsers.lineUid]`, and `listLineUsers(db, tenantId)` filters `eq(lineUsers.tenantId, tenantId)`.
 `snapshot.repository.ts` (`countByDate`, `insertMany`, `purgeOlderThan`, `getLatestSnapshotDateBefore`), `request-snapshot.repository.ts`, and `report-range.repository.ts` follow the same rule: add the parameter, add the `eq(table.tenantId, tenantId)` filter to every statement, and include `tenantId` in every insert's values.
 
-- [ ] **Step 4: Run the repository tests**
+- [x] **Step 4: Run the repository tests**
 
 ```bash
 bun test tests/recipient.repository.test.ts tests/line-user.repository.test.ts tests/snapshot.repository.test.ts
@@ -2680,7 +2680,7 @@ bun test tests/recipient.repository.test.ts tests/line-user.repository.test.ts t
 
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/repositories tests/recipient.repository.test.ts tests/line-user.repository.test.ts tests/snapshot.repository.test.ts

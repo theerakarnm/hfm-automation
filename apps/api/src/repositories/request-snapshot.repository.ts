@@ -1,4 +1,4 @@
-import { eq, lte, desc, sql } from "drizzle-orm";
+import { and, eq, lte, desc, sql } from "drizzle-orm";
 import type { DrizzleDb } from "../db/connection";
 import { clientRequestSnapshots, clientRequestSnapshotRows } from "../db/schema";
 import type { HFMClientRow } from "../types/hfm.types";
@@ -15,13 +15,14 @@ export interface RequestSnapshotResult {
 
 export async function insertRequestSnapshot(
   db: DrizzleDb,
+  tenantId: number,
   date: string,
   clients: HFMClientRow[],
 ): Promise<number> {
   return await db.transaction(async (tx) => {
     const [header] = await tx
       .insert(clientRequestSnapshots)
-      .values({ snapshotDate: date })
+      .values({ tenantId, snapshotDate: date })
       .returning({ id: clientRequestSnapshots.id });
 
     const snapshotId = header!.id;
@@ -47,12 +48,18 @@ export async function insertRequestSnapshot(
 
 export async function getLatestRequestSnapshotBefore(
   db: DrizzleDb,
+  tenantId: number,
   beforeDate: string,
 ): Promise<RequestSnapshotResult | null> {
   const [header] = await db
     .select()
     .from(clientRequestSnapshots)
-    .where(lte(clientRequestSnapshots.snapshotDate, beforeDate))
+    .where(
+      and(
+        eq(clientRequestSnapshots.tenantId, tenantId),
+        lte(clientRequestSnapshots.snapshotDate, beforeDate),
+      ),
+    )
     .orderBy(desc(clientRequestSnapshots.id))
     .limit(1);
 

@@ -2563,6 +2563,8 @@ git add src/services/last-trade.service.ts tests/last-trade.service.test.ts
 git commit -m "fix: key last-trade cache by tenant"
 ```
 
+> Deviation: the file watcher auto-committed the code and plan files (317c060 "test: update last-trade.service", 90c03bf "chore: update last-trade.service", a68e3b8 "docs(plans): update 2026-09-05-multi-tenant-line-oa") before the task's `git add` could run, so the task's commit message could not be applied. Following the Task 1 precedent, history was not rewritten to avoid racing the continuously-committing watcher. All task files are committed on the branch with their intended content.
+
 ---
 
 ### Task 11: `tenantId` in the repositories

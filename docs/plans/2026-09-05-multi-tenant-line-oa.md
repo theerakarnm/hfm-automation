@@ -203,7 +203,8 @@ CREATE TABLE IF NOT EXISTS tenant_health_state (
 | `client_request_snapshots` | add `tenant_id`; replace `idx_req_snapshot_date` with `idx_req_snapshot_tenant_date (tenant_id, snapshot_date)` |
 | `client_request_snapshot_rows` | no `tenant_id`. It is reached only through `snapshot_id`, and every query joins `client_request_snapshots` which is tenant scoped. |
 
-Backfill rule for every table above: add the column nullable, `UPDATE ... SET tenant_id = <default tenant id>` , then `SET NOT NULL`, then add the foreign key `REFERENCES tenants(id)`.
+Backfill rule for every table above: add the column nullable, `UPDATE ...
+SET tenant_id = <default tenant id>` , then `SET NOT NULL`, then add the foreign key `REFERENCES tenants(id)`.
 The default tenant is the row created by the bootstrap seed in Task 5, so the seed runs BEFORE the backfill in `initDb()`.
 
 ## Core types (`apps/api/src/types/tenant.types.ts`, created in Task 3)
@@ -301,7 +302,8 @@ export async function addWhitelistUid(db: DrizzleDb, tenantId: number, lineUid: 
 export async function removeWhitelistUid(db: DrizzleDb, tenantId: number, lineUid: string): Promise<void>;
 ```
 
-The repository never encrypts or decrypts. It stores and returns `*_enc` strings as they are.
+The repository never encrypts or decrypts.
+It stores and returns `*_enc` strings as they are.
 
 ### `apps/api/src/services/tenant-config.service.ts` (Task 4)
 
@@ -1836,7 +1838,8 @@ CREATE TABLE IF NOT EXISTS client_request_snapshot_rows (
 );
 ```
 
-Keep `DROP TABLE IF EXISTS ... CASCADE` for all tables (tenants last) at the top of the helper.
+Keep `DROP TABLE IF EXISTS ...
+CASCADE` for all tables (tenants last) at the top of the helper.
 
 - [ ] **Step 4: Write the idempotent migration in `initDb()`**
 

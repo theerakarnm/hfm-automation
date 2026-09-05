@@ -1224,3 +1224,384 @@ git commit -m "feat: seed first tenant from env on boot"
 ```
 
 ---
+### Task 6: Add `tenant_id` to the seven existing tables
+
+**Files:**
+- Modify: `apps/api/src/db/connection.ts` (`initDb`)
+- Modify: `apps/api/src/db/schema.ts`
+- Modify: `apps/api/tests/db-helpers.ts`
+- Test: `apps/api/tests/tenant-migration.test.ts`
+
+Every table that stores per-OA data gets a `tenant_id`, and every unique key that can collide across OAs is rebuilt to include it.
+The three collisions that matter most today: `client_snapshots(snapshot_date, client_id)`, `daily_report_notifications(snapshot_date)` as primary key, and `line_users(line_uid)` as primary key.
+Without these changes OA number two silently loses its daily report and its line-user rows.
+
+Order inside `initDb()`, with a comment explaining it: create the new tables from Task 2, seed the default tenant from Task 5, then migrate the existing tables, because the backfill needs a tenant id to point at.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// apps/api/tests/tenant-migration.test.ts
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { createTestDb, closeTestDb } from "./db-helpers";
+import { db as rawDb } from "./db-helpers";
+import { sql } from "drizzle-orm";
+import { insertTenantRow } from "../src/repositories/tenant.repository";
+import { insertMany, countByDate } from "../src/repositories/snapshot.repository";
+import { recordLineUserRequest, listLineUsers } from "../src/repositories/line-user.repository";
+import { markDailyReportSent, isDailyReportSent } from "../src/repositories/daily-notification.repository";
+```
+
+Note: if `daily-client-report.ts` keeps its notification helpers inline, export them from a new `apps/api/src/repositories/daily-notification.repository.ts` with `markDailyReportSent(db, tenantId, snapshotDate)` and `isDailyReportSent(db, tenantId, snapshotDate)` first, and reuse them from the job.
+The rest of the test:
+
+```ts
+process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 11).toString("base64");
+
+const TEST_DATABASE_URL =
+  process.env.TEST_DATABASE_URL ?? "postgresql://test:test@localhost:5433/hfm_test";
+
+let db: ReturnType<typeof rawDb> extends never ? never : any;
+let client: ReturnType<typeof import("postgres")>;
+
+const INPUT = (wallet: number) => ({
+  label: `OA ${wallet}`,
+  active: true,
+  lineChannelAccessToken: `tok_${wallet}`,
+  lineChannelSecret: `sec_${wallet}`,
+  hfmApiKey: `key_${wallet}`,
+  hfmApiBaseUrl: "https://api.hfaffiliates.com",
+  targetWallet: wallet,
+  whitelistEnabled: true,
+});
+
+beforeAll(async () => {
+  process.env.DATABASE_URL = TEST_DATABASE_URL;
+  const t = await createTestDb();
+  db = t.db;
+  client = t.client;
+});
+
+afterAll(async () => {
+  await closeTestDb(client);
+  delete process.env.DATABASE_URL;
+});
+
+describe("tenant_id migration", () => {
+  test("two tenants can store the same snapshot_date and client_id", async () => {
+    const a = await insertTenantRow(db, INPUT(111));
+    const b = await insertTenantRow(db, INPUT(222));
+    await insertMany(db, a, [
+      { snapshotDate: "2026-09-05", clientId: 98241376, name: "x", email: null },
+    ]);
+    await insertMany(db, b, [
+      { snapshotDate: "2026-09-05", clientId: 98241376, name: "x", email: null },
+    ]);
+    expect(await countByDate(db, a, "2026-09-05")).toBe(1);
+    expect(await countByDate(db, b, "2026-09-05")).toBe(1);
+  });
+
+  test("two tenants can hold the same line uid without overwriting", async () => {
+    const rows = await db.select().from((await import("../src/db/schema")).tenants);
+    const a = rows[0]!.id;
+    const b = rows[1]!.id;
+    await recordLineUserRequest(db, a, "Usame", "message");
+    await recordLineUserRequest(db, b, "Usame", "message");
+    await recordLineUserRequest(db, a, "Usame", "message");
+    const forA = (await listLineUsers(db, a)).find((u) => u.line_uid === "Usame");
+    const forB = (await listLineUsers(db, b)).find((u) => u.line_uid === "Usame");
+    expect(forA!.request_count).toBe(2);
+    expect(forB!.request_count).toBe(1);
+  });
+
+  test("daily report sent for A does not suppress B", async () => {
+    const rows = await db.select().from((await import("../src/db/schema")).tenants);
+    const a = rows[0]!.id;
+    const b = rows[1]!.id;
+    await markDailyReportSent(db, a, "2026-09-05");
+    expect(await isDailyReportSent(db, a, "2026-09-05")).toBe(true);
+    expect(await isDailyReportSent(db, b, "2026-09-05")).toBe(false);
+  });
+
+  test("old single-tenant unique constraints are gone", async () => {
+    const res = await db.execute(sql`
+      SELECT conname FROM pg_constraint
+      WHERE contype = 'u' AND conname IN (
+        'client_snapshots_snapshot_date_client_id_unique',
+        'notify_recipients_line_uid_unique',
+        'report_range_snapshots_period_from_date_to_date_unique'
+      )
+    `);
+    expect((res as unknown as { rows: unknown[] }).rows.length).toBe(0);
+  });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+```bash
+bun test tests/tenant-migration.test.ts
+```
+
+Expected: FAIL, because `insertMany(db, tenantId, ...)` does not exist yet and `createTestDb` still creates the old unique constraints.
+Run it now anyway and read the failure: it is the exact bug class this task removes.
+
+- [ ] **Step 3: Update `db-helpers.ts` to the new schema shape**
+
+Change every table in the create block to the new shape.
+The critical parts:
+
+```sql
+CREATE TABLE IF NOT EXISTS client_snapshots (
+  id            SERIAL PRIMARY KEY,
+  tenant_id     INTEGER NOT NULL REFERENCES tenants(id),
+  snapshot_date TEXT NOT NULL,
+  client_id     INTEGER NOT NULL,
+  name          TEXT,
+  email         TEXT,
+  created_at    TIMESTAMP NOT NULL DEFAULT now(),
+  UNIQUE(tenant_id, snapshot_date, client_id)
+);
+CREATE INDEX IF NOT EXISTS idx_snapshot_tenant_date
+  ON client_snapshots(tenant_id, snapshot_date);
+
+CREATE TABLE IF NOT EXISTS notify_recipients (
+  id        SERIAL PRIMARY KEY,
+  tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+  line_uid  TEXT NOT NULL,
+  label     TEXT,
+  active    INTEGER NOT NULL DEFAULT 1,
+  UNIQUE(tenant_id, line_uid)
+);
+
+CREATE TABLE IF NOT EXISTS daily_report_notifications (
+  tenant_id    INTEGER NOT NULL REFERENCES tenants(id),
+  snapshot_date TEXT NOT NULL,
+  sent_at       TIMESTAMP NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, snapshot_date)
+);
+
+CREATE TABLE IF NOT EXISTS line_users (
+  tenant_id        INTEGER NOT NULL REFERENCES tenants(id),
+  line_uid         TEXT NOT NULL,
+  first_seen_at    TIMESTAMP NOT NULL DEFAULT now(),
+  last_seen_at     TIMESTAMP NOT NULL DEFAULT now(),
+  request_count    INTEGER NOT NULL DEFAULT 1,
+  last_event_type  TEXT,
+  PRIMARY KEY (tenant_id, line_uid)
+);
+
+CREATE TABLE IF NOT EXISTS report_range_snapshots (
+  id         SERIAL PRIMARY KEY,
+  tenant_id  INTEGER NOT NULL REFERENCES tenants(id),
+  period     TEXT NOT NULL,
+  from_date  TEXT NOT NULL,
+  to_date    TEXT NOT NULL,
+  raw_json   TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT now(),
+  UNIQUE(tenant_id, period, from_date, to_date)
+);
+
+CREATE TABLE IF NOT EXISTS client_request_snapshots (
+  id            SERIAL PRIMARY KEY,
+  tenant_id     INTEGER NOT NULL REFERENCES tenants(id),
+  snapshot_date TEXT NOT NULL,
+  created_at    TIMESTAMP NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_req_snapshot_tenant_date
+  ON client_request_snapshots(tenant_id, snapshot_date);
+
+CREATE TABLE IF NOT EXISTS client_request_snapshot_rows (
+  id          SERIAL PRIMARY KEY,
+  snapshot_id INTEGER NOT NULL REFERENCES client_request_snapshots(id),
+  client_id   INTEGER NOT NULL,
+  UNIQUE(snapshot_id, client_id)
+);
+```
+
+Keep `DROP TABLE IF EXISTS ... CASCADE` for all tables (tenants last) at the top of the helper.
+
+- [ ] **Step 4: Write the idempotent migration in `initDb()`**
+
+Add helper functions above `initDb` in `apps/api/src/db/connection.ts`:
+
+```ts
+async function columnExists(
+  db: PostgresJsDatabase<Record<string, unknown>>,
+  table: string,
+  column: string,
+): Promise<boolean> {
+  const res = await db.execute(sql`
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = ${table} AND column_name = ${column}
+  `);
+  return (res as unknown as { rows: unknown[] }).rows.length > 0;
+}
+
+async function constraintExists(
+  db: PostgresJsDatabase<Record<string, unknown>>,
+  name: string,
+): Promise<boolean> {
+  const res = await db.execute(sql`
+    SELECT 1 FROM pg_constraint WHERE conname = ${name}
+  `);
+  return (res as unknown as { rows: unknown[] }).rows.length > 0;
+}
+```
+
+Then extend `initDb` so its body becomes, in this order:
+
+```ts
+// 1. Create every table in its NEW shape (IF NOT EXISTS is a no-op on
+//    databases that already ran the migration).
+// 2. Seed the default tenant from env (no-op when tenants already exist).
+// 3. Migrate existing legacy tables: add tenant_id, backfill, constrain.
+//    The order matters: the backfill needs at least one tenant row.
+```
+
+The migration block (after the seed call):
+
+```ts
+const LEGACY_TABLES = [
+  "client_snapshots",
+  "notify_recipients",
+  "daily_report_notifications",
+  "line_users",
+  "report_range_snapshots",
+  "client_request_snapshots",
+] as const;
+
+for (const table of LEGACY_TABLES) {
+  if (!(await columnExists(target, table, "tenant_id"))) {
+    await target.execute(
+      sql.raw(`ALTER TABLE ${table} ADD COLUMN tenant_id INTEGER`),
+    );
+  }
+}
+
+const tenantRows = (await target
+  .execute(sql`SELECT MIN(id) AS first_id FROM tenants`)) as unknown as {
+  rows: { first_id: number | null }[];
+};
+const defaultTenantId = tenantRows.rows[0]?.first_id ?? null;
+
+const orphanCheck = (await target.execute(sql`
+  SELECT
+    (SELECT count(*) FROM client_snapshots WHERE tenant_id IS NULL) +
+    (SELECT count(*) FROM daily_report_notifications WHERE tenant_id IS NULL) +
+    (SELECT count(*) FROM line_users WHERE tenant_id IS NULL) +
+    (SELECT count(*) FROM notify_recipients WHERE tenant_id IS NULL) +
+    (SELECT count(*) FROM report_range_snapshots WHERE tenant_id IS NULL) +
+    (SELECT count(*) FROM client_request_snapshots WHERE tenant_id IS NULL) AS orphans
+`)) as unknown as { rows: { orphans: string }[] };
+const orphans = Number(orphanCheck.rows[0]?.orphans ?? 0);
+
+if (orphans > 0 && defaultTenantId === null) {
+  throw new Error(
+    `Legacy rows exist (${orphans}) but no tenant exists to backfill them. ` +
+      "Set the per-OA env vars once so the bootstrap seed can run, then restart.",
+  );
+}
+
+if (defaultTenantId !== null) {
+  for (const table of LEGACY_TABLES) {
+    await target.execute(
+      sql.raw(`UPDATE ${table} SET tenant_id = ${defaultTenantId} WHERE tenant_id IS NULL`),
+    );
+  }
+}
+
+// NOT NULL + FK after the backfill, guarded so reruns are silent.
+for (const table of LEGACY_TABLES) {
+  const nullRes = (await target.execute(
+    sql.raw(`SELECT count(*) AS n FROM ${table} WHERE tenant_id IS NULL`),
+  )) as unknown as { rows: { n: string }[] };
+  if (Number(nullRes.rows[0]!.n) === 0) {
+    await target.execute(
+      sql.raw(`ALTER TABLE ${table} ALTER COLUMN tenant_id SET NOT NULL`),
+    );
+    await target.execute(
+      sql.raw(
+        `ALTER TABLE ${table} DROP CONSTRAINT IF EXISTS ${table}_tenant_id_fkey`,
+      ),
+    );
+    await target.execute(
+      sql.raw(
+        `ALTER TABLE ${table} ADD CONSTRAINT ${table}_tenant_id_fkey ` +
+          `FOREIGN KEY (tenant_id) REFERENCES tenants(id)`,
+      ),
+    );
+  }
+}
+```
+
+Then the constraint rebuilds, each guarded by `constraintExists` and each written so it can never partially apply on a fresh database (on a fresh database the old constraints never exist, so these are all no-ops):
+
+```ts
+async function dropIfExists(db: PostgresJsDatabase<Record<string, unknown>>, name: string, table: string) {
+  if (await constraintExists(db, name)) {
+    await db.execute(sql.raw(`ALTER TABLE ${table} DROP CONSTRAINT ${name}`));
+  }
+}
+
+await dropIfExists(target, "client_snapshots_snapshot_date_client_id_unique", "client_snapshots");
+await target.execute(sql`
+  ALTER TABLE client_snapshots
+  ADD CONSTRAINT client_snapshots_tenant_date_client_unique
+  UNIQUE (tenant_id, snapshot_date, client_id)
+`);
+
+await dropIfExists(target, "notify_recipients_line_uid_unique", "notify_recipients");
+await target.execute(sql`
+  ALTER TABLE notify_recipients
+  ADD CONSTRAINT notify_recipients_tenant_uid_unique
+  UNIQUE (tenant_id, line_uid)
+`);
+
+await dropIfExists(target, "daily_report_notifications_pkey", "daily_report_notifications");
+await target.execute(sql`
+  ALTER TABLE daily_report_notifications
+  ADD CONSTRAINT daily_report_notifications_tenant_date_pkey
+  PRIMARY KEY (tenant_id, snapshot_date)
+`);
+
+await dropIfExists(target, "line_users_pkey", "line_users");
+await target.execute(sql`
+  ALTER TABLE line_users
+  ADD CONSTRAINT line_users_tenant_uid_pkey
+  PRIMARY KEY (tenant_id, line_uid)
+`);
+
+await dropIfExists(target, "report_range_snapshots_period_from_date_to_date_unique", "report_range_snapshots");
+await target.execute(sql`
+  ALTER TABLE report_range_snapshots
+  ADD CONSTRAINT report_range_snapshots_tenant_period_unique
+  UNIQUE (tenant_id, period, from_date, to_date)
+`);
+```
+
+Because these `ADD CONSTRAINT` statements are not idempotent on their own, wrap each pair in a guard: only run the `ADD` when `!await constraintExists(target, "<new name>")`.
+
+Finally update `apps/api/src/db/schema.ts` drizzle definitions to match the new columns and constraints (same names as the SQL above), and switch index `idx_snapshot_date` to `idx_snapshot_tenant_date` and `idx_req_snapshot_date` to `idx_req_snapshot_tenant_date` in both the SQL and `db-helpers.ts`.
+
+- [ ] **Step 5: Run the migration tests and the whole suite**
+
+```bash
+bun test tests/tenant-migration.test.ts
+bun test
+```
+
+Expected: tenant-migration tests PASS.
+Other suites FAIL at this point (they call `insertMany(db, ...)` without `tenantId`).
+That is expected: Tasks 7 to 14 thread `tenantId` through the repositories and jobs.
+Do not fix those tests by loosening this task; continue with the plan order.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/db/connection.ts src/db/schema.ts tests/db-helpers.ts tests/tenant-migration.test.ts
+git commit -m "feat: scope all data tables by tenant_id"
+```
+
+---
+

@@ -2038,7 +2038,7 @@ Other suites FAIL at this point (they call `insertMany(db, ...)` without `tenant
 That is expected: Tasks 7 to 14 thread `tenantId` through the repositories and jobs.
 Do not fix those tests by loosening this task; continue with the plan order.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/db/connection.ts src/db/schema.ts tests/db-helpers.ts tests/tenant-migration.test.ts

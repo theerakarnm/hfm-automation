@@ -513,7 +513,7 @@ bun test tests/crypto.test.ts
 
 Expected: FAIL with `Cannot find module '../src/utils/crypto'` (module resolution error).
 
-- [ ] **Step 3: Implement `crypto.ts`**
+- [x] **Step 3: Implement `crypto.ts`**
 
 ```ts
 // apps/api/src/utils/crypto.ts
@@ -586,7 +586,9 @@ export function maskSecret(plain: string): string {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
+
+> Deviation: Plan expected "9 pass, 0 fail", but the reference test file itself defines 10 `test()` blocks. Actual run: 10 pass, 0 fail. Intent (all tests in the file pass, none fail) holds.
 
 ```bash
 bun test tests/crypto.test.ts

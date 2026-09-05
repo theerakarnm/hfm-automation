@@ -596,7 +596,9 @@ bun test tests/crypto.test.ts
 
 Expected: 9 pass, 0 fail.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
+
+> Deviation: The auto-commit watcher committed the two code files itself (1b133ff "test: add crypto", caa2623 "chore: add crypto") before the task's `git add` could run, so the task's commit message could not be applied to them. History was not rewritten because the watcher commits continuously and racing it with a rebase risks corrupting the plan file. All task files plus the plan ticks are committed on the branch.
 
 ```bash
 git add src/utils/crypto.ts tests/crypto.test.ts

@@ -1175,6 +1175,10 @@ import type { DrizzleDb } from "../src/db/connection";
 
 process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 5).toString("base64");
 
+process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString("base64");
+
+process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 11).toString("base64");
+
 import { createTestDb, closeTestDb, TEST_DATABASE_URL } from "./db-helpers";
 import type postgres from "postgres";
 
@@ -1475,7 +1479,11 @@ import { getActiveUids } from "../src/repositories/recipient.repository";
 import { getTenantConfigForTests } from "../src/services/tenant-config.service";
 import { resetDbForTests } from "../src/db/connection";
 
+process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 5).toString("base64");
+
 process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString("base64");
+
+process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 11).toString("base64");
 
 import { createTestDb, closeTestDb, TEST_DATABASE_URL } from "./db-helpers";
 import type { DrizzleDb } from "../src/db/connection";
@@ -1660,7 +1668,6 @@ Order inside `initDb()`, with a comment explaining it: create the new tables fro
 ```ts
 // apps/api/tests/tenant-migration.test.ts
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { db as rawDb } from "./db-helpers";
 import { sql } from "drizzle-orm";
 import { insertTenantRow } from "../src/repositories/tenant.repository";
 import { insertMany, countByDate } from "../src/repositories/snapshot.repository";
@@ -1672,8 +1679,6 @@ Note: if `daily-client-report.ts` keeps its notification helpers inline, export 
 The rest of the test:
 
 ```ts
-process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 11).toString("base64");
-
 import { createTestDb, closeTestDb, TEST_DATABASE_URL } from "./db-helpers";
 import type { DrizzleDb } from "../src/db/connection";
 import type postgres from "postgres";

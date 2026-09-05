@@ -4456,7 +4456,7 @@ git commit -m "fix: compose context and image scripts"
 - Modify: `apps/api/scripts/compare-client-performance-files.ts`
 - Modify: `apps/api/scripts/seed-mock-client-snapshots.ts` (takes a tenant via the same resolver and passes it to `insertMany`/`countByDate`)
 
-- [ ] **Step 1: Shared resolver**
+- [x] **Step 1: Shared resolver**
 
 ```ts
 // apps/api/scripts/lib/resolve-tenant.ts
@@ -4504,7 +4504,7 @@ export async function resolveTenants(selector: TenantSelector): Promise<TenantCo
 }
 ```
 
-- [ ] **Step 2: Rewire the four scripts**
+- [x] **Step 2: Rewire the four scripts**
 
 `trigger-daily-client-report.ts` becomes:
 
@@ -4532,7 +4532,10 @@ const DEFAULT_WALLET = Number(process.env.TARGET_WALLET ?? process.env.TARGET_WA
 
 and take the wallet from the resolved tenant's `ctx.targetWallet`.
 
-- [ ] **Step 3: Run one script against the local test database**
+> Deviation: the reference `trigger-daily-client-report.ts` snippet imports from `../../src/...`, but the script lives in `apps/api/scripts/`, so the paths are `../src/...`; tsc could not resolve the modules otherwise.
+> Deviation: `RunDailyClientReportOptions` has no `dryRun` field, so `{ dryRun: ... }` failed typecheck; the script keeps the pre-existing DRY_RUN behavior by passing a printing `pushToAllFn` stub instead.
+
+- [x] **Step 3: Run one script against the local test database**
 
 ```bash
 TENANT=wrong bun run trigger:daily-client-report; echo "exit=$?"
@@ -4540,7 +4543,7 @@ TENANT=wrong bun run trigger:daily-client-report; echo "exit=$?"
 
 Expected: exit=2 and the "Refusing to guess"/"No tenant matched" message, proving no silent default tenant.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add scripts

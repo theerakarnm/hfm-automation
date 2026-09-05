@@ -1,12 +1,14 @@
+import { resolveTenants, parseArgs } from "./lib/resolve-tenant";
+import { initDb, getDb } from "../src/db/connection";
+import { loadEncryptionKey } from "../src/utils/crypto";
+import type { TenantConfig } from "../src/types/tenant.types";
+
 const PREV_FILE =
   process.env.PREV_FILE ??
   "output/client-performance_2026-02-01_2026-02-28.json";
 const CURR_FILE =
   process.env.CURR_FILE ??
   "output/client-performance_2026-03-01_2026-03-31.json";
-const TARGET_WALLET = Number(
-  process.env.TARGET_WALLET ?? process.env.TARGET_WALLET ?? 30506525,
-);
 
 function eq(a: number, b: number): string {
   return a === b ? "EQUAL" : "DIFF";
@@ -25,7 +27,9 @@ function step(title: string, obj: Record<string, unknown>): void {
   console.log(JSON.stringify(obj, null, 2));
 }
 
-async function main() {
+async function main(ctx: TenantConfig) {
+  const TARGET_WALLET = ctx.targetWallet;
+
   const prev = await Bun.file(PREV_FILE).json();
   const curr = await Bun.file(CURR_FILE).json();
 
@@ -168,4 +172,15 @@ async function main() {
   );
 }
 
-main();
+loadEncryptionKey(); // fail fast
+await initDb(getDb());
+const tenants = await resolveTenants(parseArgs(process.argv));
+if (tenants.length !== 1) {
+  // The wallet filter comes from the tenant, so an ambiguous tenant list
+  // would silently compare the wrong wallet's files.
+  console.error(
+    "compare-client-performance-files expects exactly one tenant. Use --tenant=<id|webhookId|label> or TENANT=, not --all.",
+  );
+  process.exit(2);
+}
+await main(tenants[0]!);

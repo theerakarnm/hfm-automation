@@ -3689,12 +3689,14 @@ In `internal.ts`, mount `internalAuthRoutes` and protect the config routes with 
 bun test tests/internal-auth.test.ts
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/routes/internal-auth.ts src/routes/internal.ts tests/internal-auth.test.ts
 git commit -m "feat: cookie session and CSRF for admin UI"
 ```
+
+> Deviation: the file watcher auto-committed the three code files (33f9592 "chore: update internal", d053b72 "chore: update internal-auth", 0a7bfa4 "test: update internal-auth") and the plan ticks (4ad88bc, 93bb3a5) before the task's `git add` could run, so the task's commit message could not be applied. History was not rewritten, same handling as Tasks 1 and 2. Working tree is clean and all task files are on the branch.
 
 ---
 

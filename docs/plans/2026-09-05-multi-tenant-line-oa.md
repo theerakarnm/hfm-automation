@@ -4372,7 +4372,7 @@ git commit -m "test: prove cross-tenant isolation"
 
 Two real defects: the image omits `apps/api/scripts/`, so `trigger:daily-client-report` cannot run in production, and the root compose file says `build: .` while no root Dockerfile exists.
 
-- [ ] **Step 1: Fix the Dockerfile**
+- [x] **Step 1: Fix the Dockerfile**
 
 Add after `COPY src/ ./src/`:
 
@@ -4380,7 +4380,7 @@ Add after `COPY src/ ./src/`:
 COPY scripts/ ./scripts/
 ```
 
-- [ ] **Step 2: Fix the compose file**
+- [x] **Step 2: Fix the compose file**
 
 ```yaml
 services:
@@ -4423,7 +4423,7 @@ services:
 
 `CONFIG_ENCRYPTION_KEY` and `PUBLIC_BASE_URL` travel through `env_file: apps/api/.env`, so they need no separate entries.
 
-- [ ] **Step 3: Verify the build**
+- [x] **Step 3: Verify the build**
 
 Run `docker compose build bot` if Docker is available on the machine.
 This development machine has no `docker` binary (verified), so on it run instead:
@@ -4435,7 +4435,7 @@ cd apps/api && bun build src/index.ts --target=bun --outdir /tmp/hfm-build-check
 Expected: build completes with no unresolved imports, and `/tmp/hfm-build-check` contains the bundled entry.
 On the deploy host, `docker compose config` must print a valid config and `docker compose build bot` must succeed before rollout.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/api/Dockerfile docker-compose.yml

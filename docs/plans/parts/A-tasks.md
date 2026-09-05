@@ -725,3 +725,502 @@ git commit -m "feat: add tenant repository and types"
 ```
 
 ---
+### Task 4: Tenant config service with cache
+
+**Files:**
+- Create: `apps/api/src/services/tenant-config.service.ts`
+- Test: `apps/api/tests/tenant-config.service.test.ts`
+
+This is the only module that decrypts secrets.
+It caches resolved `TenantConfig` objects because the webhook must answer LINE within 2 seconds, and cache misses otherwise cost a database round trip plus three AES decrypts.
+The cache is invalidated the moment the UI saves, and also expires after 60 seconds as a safety net against direct database edits.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// apps/api/tests/tenant-config.service.test.ts
+import { describe, test, expect, beforeAll, afterAll, beforeEach } from "bun:test";
+import { createTestDb, closeTestDb } from "./db-helpers";
+import {
+  getTenantById,
+  getTenantByWebhookId,
+  listActiveTenants,
+  saveTenant,
+  invalidateTenantCache,
+  TENANT_CACHE_TTL_MS,
+  __setTenantClockForTests,
+} from "../src/services/tenant-config.service";
+import { insertTenantRow } from "../src/repositories/tenant.repository";
+import { listWhitelistUids, addWhitelistUid } from "../src/repositories/tenant.repository";
+import { getTenantRowById } from "../src/repositories/tenant.repository";
+import { resetDbForTests } from "../src/db/connection";
+import type { DrizzleDb } from "../src/db/connection";
+
+process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 5).toString("base64");
+
+const TEST_DATABASE_URL =
+  process.env.TEST_DATABASE_URL ?? "postgresql://test:test@localhost:5433/hfm_test";
+
+let db: DrizzleDb;
+let client: ReturnType<typeof import("postgres")>;
+let fakeNow = 1_000_000;
+
+beforeAll(async () => {
+  process.env.DATABASE_URL = TEST_DATABASE_URL;
+  const t = await createTestDb();
+  db = t.db;
+  client = t.client;
+  __setTenantClockForTests(() => fakeNow);
+});
+
+afterAll(async () => {
+  await closeTestDb(client);
+  resetDbForTests();
+  delete process.env.DATABASE_URL;
+});
+
+beforeEach(() => {
+  invalidateTenantCache();
+  fakeNow = 1_000_000;
+});
+
+describe("tenant-config.service", () => {
+  test("resolves a decrypted TenantConfig with whitelist uids", async () => {
+    const id = await insertTenantRow(db, {
+      label: "A",
+      active: true,
+      lineChannelAccessToken: "tokA",
+      lineChannelSecret: "secA",
+      hfmApiKey: "keyA",
+      hfmApiBaseUrl: "https://api.hfaffiliates.com",
+      targetWallet: 111,
+      whitelistEnabled: true,
+    });
+    await addWhitelistUid(db, id, "U1", null);
+    await addWhitelistUid(db, id, "U2", null);
+
+    const ctx = await getTenantById(id);
+    expect(ctx!.lineChannelAccessToken).toBe("tokA");
+    expect(ctx!.lineChannelSecret).toBe("secA");
+    expect(ctx!.hfmApiKey).toBe("keyA");
+    expect(ctx!.targetWallet).toBe(111);
+    expect(ctx!.whitelistUids).toEqual(["U1", "U2"]);
+    expect(ctx!.active).toBe(true);
+  });
+
+  test("getTenantByWebhookId finds the same tenant", async () => {
+    const id = (await listActiveTenants())[0]!.id;
+    const byId = await getTenantById(id);
+    const byWebhook = await getTenantByWebhookId(byId!.webhookId);
+    expect(byWebhook!.id).toBe(id);
+  });
+
+  test("unknown webhook id returns null, inactive tenants excluded from list", async () => {
+    expect(await getTenantByWebhookId("nope")).toBeNull();
+    const id2 = await saveTenant({
+      label: "B",
+      active: false,
+      lineChannelAccessToken: "tokB",
+      lineChannelSecret: "secB",
+      hfmApiKey: "keyB",
+      hfmApiBaseUrl: "https://api.hfaffiliates.com",
+      targetWallet: 222,
+      whitelistEnabled: true,
+    });
+    const actives = await listActiveTenants();
+    expect(actives.find((t) => t.id === id2)).toBeUndefined();
+  });
+
+  test("saveTenant update keeps secrets when fields are empty strings", async () => {
+    const id = await saveTenant({
+      label: "C",
+      active: true,
+      lineChannelAccessToken: "tokC",
+      lineChannelSecret: "secC",
+      hfmApiKey: "keyC",
+      hfmApiBaseUrl: "https://api.hfaffiliates.com",
+      targetWallet: 333,
+      whitelistEnabled: true,
+    });
+    await saveTenant(
+      {
+        label: "C2",
+        active: true,
+        lineChannelAccessToken: "",
+        lineChannelSecret: "",
+        hfmApiKey: "",
+        hfmApiBaseUrl: "https://api.hfaffiliates.com",
+        targetWallet: 334,
+        whitelistEnabled: true,
+      },
+      id,
+    );
+    const ctx = await getTenantById(id);
+    expect(ctx!.label).toBe("C2");
+    expect(ctx!.lineChannelAccessToken).toBe("tokC");
+    expect(ctx!.targetWallet).toBe(334);
+  });
+
+  test("cache is used within TTL and expires after TTL", async () => {
+    const id = (await listActiveTenants()).find((t) => t.label === "A")!.id;
+    const first = await getTenantById(id);
+    await addWhitelistUid(db, id, "U3", null);
+    const cached = await getTenantById(id);
+    expect(cached!.whitelistUids).toEqual(first!.whitelistUids); // still cached
+    fakeNow += TENANT_CACHE_TTL_MS + 1;
+    const fresh = await getTenantById(id);
+    expect(fresh!.whitelistUids).toContain("U3"); // cache expired
+  });
+
+  test("invalidateTenantCache takes effect immediately", async () => {
+    const id = (await listActiveTenants()).find((t) => t.label === "A")!.id;
+    await getTenantById(id);
+    await addWhitelistUid(db, id, "U4", null);
+    invalidateTenantCache(id);
+    expect((await getTenantById(id))!.whitelistUids).toContain("U4");
+  });
+
+  test("saveTenant invalidates the cache for the saved tenant", async () => {
+    const id = (await listActiveTenants()).find((t) => t.label === "A")!.id;
+    await getTenantById(id);
+    await saveTenant(
+      {
+        label: "A",
+        active: true,
+        lineChannelAccessToken: "tokA2",
+        lineChannelSecret: "secA",
+        hfmApiKey: "keyA",
+        hfmApiBaseUrl: "https://api.hfaffiliates.com",
+        targetWallet: 111,
+        whitelistEnabled: true,
+      },
+      id,
+    );
+    expect((await getTenantById(id))!.lineChannelAccessToken).toBe("tokA2");
+  });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+```bash
+bun test tests/tenant-config.service.test.ts
+```
+
+Expected: FAIL with `Cannot find module '../src/services/tenant-config.service'`.
+
+- [ ] **Step 3: Implement the service**
+
+```ts
+// apps/api/src/services/tenant-config.service.ts
+import { getDb, type DrizzleDb } from "../db/connection";
+import {
+  getTenantRowById,
+  getTenantRowByWebhookId,
+  insertTenantRow,
+  listTenantRows,
+  listWhitelistUids,
+  updateTenantRow,
+} from "../repositories/tenant.repository";
+import { decryptSecret } from "../utils/crypto";
+import { logger, logError } from "../utils/logger";
+import type { TenantConfig, TenantInput, TenantRow, TenantTestResult } from "../types/tenant.types";
+
+// 60 seconds: the UI saves invalidate immediately, so this TTL only guards
+// against direct database edits or a future second process.
+export const TENANT_CACHE_TTL_MS = 60_000;
+
+interface CacheEntry {
+  config: TenantConfig;
+  cachedAt: number;
+}
+
+let cache = new Map<number, CacheEntry>();
+let clock: () => number = Date.now;
+
+// Tests inject a fake clock; production code never touches this.
+export function __setTenantClockForTests(fn: () => number): void {
+  clock = fn;
+}
+
+async function resolveConfig(db: DrizzleDb, row: TenantRow): Promise<TenantConfig> {
+  // A decrypt failure here means CONFIG_ENCRYPTION_KEY changed or the row is
+  // corrupt. Fail this tenant loudly; never serve a half-decrypted config.
+  return {
+    id: row.id,
+    webhookId: row.webhookId,
+    label: row.label,
+    active: row.active === 1,
+    lineChannelAccessToken: decryptSecret(row.lineChannelAccessTokenEnc),
+    lineChannelSecret: decryptSecret(row.lineChannelSecretEnc),
+    lineBotUserId: row.lineBotUserId,
+    lineBasicId: row.lineBasicId,
+    lineDisplayName: row.lineDisplayName,
+    hfmApiKey: decryptSecret(row.hfmApiKeyEnc),
+    hfmApiBaseUrl: row.hfmApiBaseUrl,
+    targetWallet: row.targetWallet,
+    whitelistEnabled: row.whitelistEnabled === 1,
+    whitelistUids: await listWhitelistUids(db, row.id),
+    lastTestedAt: row.lastTestedAt,
+    lastTestResult: parseTestResult(row.lastTestResult),
+  };
+}
+
+function parseTestResult(raw: string | null): TenantTestResult | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as TenantTestResult;
+  } catch {
+    logError("tenant-config", new Error("Unparseable last_test_result, ignoring"));
+    return null;
+  }
+}
+
+async function cached(
+  db: DrizzleDb,
+  row: TenantRow,
+): Promise<TenantConfig> {
+  const hit = cache.get(row.id);
+  if (hit && clock() - hit.cachedAt < TENANT_CACHE_TTL_MS) return hit.config;
+  const config = await resolveConfig(db, row);
+  cache.set(row.id, { config, cachedAt: clock() });
+  return config;
+}
+
+export async function getTenantById(id: number): Promise<TenantConfig | null> {
+  const row = await getTenantRowById(getDb(), id);
+  return row ? cached(getDb(), row) : null;
+}
+
+export async function getTenantByWebhookId(
+  webhookId: string,
+): Promise<TenantConfig | null> {
+  const row = await getTenantRowByWebhookId(getDb(), webhookId);
+  return row ? cached(getDb(), row) : null;
+}
+
+export async function listActiveTenants(): Promise<TenantConfig[]> {
+  const rows = (await listTenantRows(getDb())).filter((r) => r.active === 1);
+  return Promise.all(rows.map((r) => cached(getDb(), r)));
+}
+
+export function invalidateTenantCache(tenantId?: number): void {
+  if (tenantId === undefined) cache.clear();
+  else cache.delete(tenantId);
+}
+
+export async function saveTenant(input: TenantInput, id?: number): Promise<number> {
+  const db = getDb();
+  const tenantId = id
+    ? (await updateTenantRow(db, id, input), id)
+    : await insertTenantRow(db, input);
+  invalidateTenantCache(tenantId);
+  logger.info({ tenantId }, "tenant config saved, cache invalidated");
+  return tenantId;
+}
+```
+
+- [ ] **Step 4: Run the tests**
+
+```bash
+bun test tests/tenant-config.service.test.ts
+```
+
+Expected: all PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/services/tenant-config.service.ts tests/tenant-config.service.test.ts
+git commit -m "feat: add cached tenant config service"
+```
+
+---
+
+### Task 5: One-time bootstrap seed from the old env vars
+
+**Files:**
+- Create: `apps/api/src/db/bootstrap.ts`
+- Test: `apps/api/tests/bootstrap.test.ts`
+
+Decision Q6: on boot, if the `tenants` table is empty and the old env vars are present, one active tenant is seeded from them, and the boot log prints the generated webhook id so the operator can paste `https://<host>/webhook?oa=<webhook_id>` into the existing LINE console.
+After the seed, per-tenant env vars are never read again.
+There is deliberately no env fallback afterwards: a missing field must fail loudly, not silently borrow another OA's wallet.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// apps/api/tests/bootstrap.test.ts
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { createTestDb, closeTestDb } from "./db-helpers";
+import { seedDefaultTenantFromEnv } from "../src/db/bootstrap";
+import { countTenants } from "../src/repositories/tenant.repository";
+import { getActiveUids } from "../src/repositories/recipient.repository";
+import { getTenantConfigForTests } from "../src/services/tenant-config.service";
+import { resetDbForTests } from "../src/db/connection";
+
+process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString("base64");
+
+const TEST_DATABASE_URL =
+  process.env.TEST_DATABASE_URL ?? "postgresql://test:test@localhost:5433/hfm_test";
+
+let db: ReturnType<typeof createTestDb> extends Promise<infer T> ? T["db"] : never;
+let client: ReturnType<typeof import("postgres")>;
+
+beforeAll(async () => {
+  process.env.DATABASE_URL = TEST_DATABASE_URL;
+  const t = await createTestDb();
+  db = t.db;
+  client = t.client;
+});
+
+afterAll(async () => {
+  await closeTestDb(client);
+  resetDbForTests();
+  delete process.env.DATABASE_URL;
+});
+
+describe("bootstrap seed", () => {
+  test("seeds one tenant from env exactly once", async () => {
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = "prod_token";
+    process.env.LINE_CHANNEL_SECRET = "prod_secret";
+    process.env.HFM_API_KEY = "prod_hfm_key";
+    process.env.HFM_API_BASE_URL = "https://api.hfaffiliates.com";
+    process.env.TARGET_WALLET = "30506525";
+    process.env.LINE_WHITELIST_ENABLED = "true";
+    process.env.LINE_WHITELIST_UIDS = "Uw1,Uw2";
+    process.env.LINE_NOTIFY_UIDS = "Un1,Un2";
+
+    const id = await seedDefaultTenantFromEnv(db);
+    expect(id).not.toBeNull();
+    expect(await countTenants(db)).toBe(1);
+
+    const ctx = await getTenantConfigForTests(db, id!);
+    expect(ctx!.lineChannelAccessToken).toBe("prod_token");
+    expect(ctx!.targetWallet).toBe(30506525);
+    expect(ctx!.whitelistUids).toEqual(["Uw1", "Uw2"]);
+    expect(await getActiveUids(db, id!)).toEqual(["Un1", "Un2"]);
+
+    // Second boot must not seed again, even if env still present.
+    const again = await seedDefaultTenantFromEnv(db);
+    expect(again).toBeNull();
+    expect(await countTenants(db)).toBe(1);
+  });
+
+  test("no env vars and empty table seeds nothing", async () => {
+    delete process.env.LINE_CHANNEL_ACCESS_TOKEN;
+    delete process.env.LINE_CHANNEL_SECRET;
+    delete process.env.HFM_API_KEY;
+    expect(await seedDefaultTenantFromEnv(db)).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+```bash
+bun test tests/bootstrap.test.ts
+```
+
+Expected: FAIL with `Cannot find module '../src/db/bootstrap'`.
+
+- [ ] **Step 3: Implement `bootstrap.ts`**
+
+```ts
+// apps/api/src/db/bootstrap.ts
+import type { DrizzleDb } from "./connection";
+import { countTenants, insertTenantRow, addWhitelistUid } from "../repositories/tenant.repository";
+import { addRecipient } from "../repositories/recipient.repository";
+import { logger } from "../utils/logger";
+
+function splitCsv(raw: string | undefined): string[] {
+  return [
+    ...new Set(
+      (raw ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0),
+    ),
+  ];
+}
+
+function isFalseLike(raw: string | undefined): boolean {
+  return ["false", "0", "off", "no"].includes((raw ?? "").trim().toLowerCase());
+}
+
+// Runs once at boot inside initDb. This is the ONLY code allowed to read the
+// eight per-OA env variables, and only when the tenants table is empty.
+// Returns the new tenant id, or null when nothing was seeded.
+export async function seedDefaultTenantFromEnv(
+  db: DrizzleDb,
+): Promise<number | null> {
+  if ((await countTenants(db)) > 0) return null;
+
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
+  const secret = process.env.LINE_CHANNEL_SECRET?.trim();
+  const hfmKey = process.env.HFM_API_KEY?.trim();
+  const targetWallet = Number(process.env.TARGET_WALLET);
+
+  if (!token || !secret || !hfmKey || !Number.isFinite(targetWallet) || targetWallet <= 0) {
+    logger.warn(
+      "tenants table is empty and per-OA env vars are missing; nothing seeded. " +
+        "Create the first tenant through the internal UI (/internal/config).",
+    );
+    return null;
+  }
+
+  const id = await insertTenantRow(db, {
+    label: process.env.LINE_OA_LABEL?.trim() || "Default OA",
+    active: true,
+    lineChannelAccessToken: token,
+    lineChannelSecret: secret,
+    hfmApiKey: hfmKey,
+    hfmApiBaseUrl:
+      process.env.HFM_API_BASE_URL?.trim() || "https://api.hfaffiliates.com",
+    targetWallet,
+    whitelistEnabled: !isFalseLike(process.env.LINE_WHITELIST_ENABLED),
+  });
+
+  for (const uid of splitCsv(process.env.LINE_WHITELIST_UIDS)) {
+    await addWhitelistUid(db, id, uid, "seeded");
+  }
+  for (const uid of splitCsv(process.env.LINE_NOTIFY_UIDS)) {
+    await addRecipient(db, id, uid, "seeded");
+  }
+
+  const webhookId = (
+    await import("../repositories/tenant.repository").then((m) =>
+      m.getTenantRowById(db, id),
+    )
+  )!.webhookId;
+
+  logger.info(
+    { tenantId: id, webhookId },
+    `[bootstrap] seeded default tenant from env. Set the LINE webhook URL to: /webhook?oa=${webhookId}`,
+  );
+  return id;
+}
+```
+
+Note: `LINE_OA_LABEL` is a new optional env var used only by this seed.
+Add it to `.env.example` in Task 26 with the other first-boot-only variables.
+Also add `getTenantConfigForTests(db, id)` to `tenant-config.service.ts`: a small export that resolves one tenant against an explicit db handle, used by tests that do not run through the global `getDb()`.
+
+- [ ] **Step 4: Run the tests**
+
+```bash
+bun test tests/bootstrap.test.ts
+```
+
+Expected: all PASS.
+This task depends on `addRecipient(db, tenantId, lineUid, label)` and `getActiveUids(db, tenantId)` from Task 11.
+Implement those two functions first if you execute this task before Task 11, in the exact shape the contracts define.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/db/bootstrap.ts tests/bootstrap.test.ts
+git commit -m "feat: seed first tenant from env on boot"
+```
+
+---

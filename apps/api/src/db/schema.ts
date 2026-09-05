@@ -105,3 +105,56 @@ export const clientRequestSnapshotRows = pgTable(
     ),
   ],
 );
+
+export const tenants = pgTable("tenants", {
+  id: serial("id").primaryKey(),
+  webhookId: text("webhook_id").notNull().unique(),
+  label: text("label").notNull(),
+  active: integer("active").notNull().default(0),
+  lineChannelAccessTokenEnc: text("line_channel_access_token_enc").notNull(),
+  lineChannelSecretEnc: text("line_channel_secret_enc").notNull(),
+  lineBotUserId: text("line_bot_user_id"),
+  lineBasicId: text("line_basic_id"),
+  lineDisplayName: text("line_display_name"),
+  hfmApiKeyEnc: text("hfm_api_key_enc").notNull(),
+  hfmApiBaseUrl: text("hfm_api_base_url")
+    .notNull()
+    .default("https://api.hfaffiliates.com"),
+  targetWallet: integer("target_wallet").notNull(),
+  whitelistEnabled: integer("whitelist_enabled").notNull().default(1),
+  keyVersion: integer("key_version").notNull().default(1),
+  lastTestedAt: timestamp("last_tested_at", { mode: "string" }),
+  lastTestResult: text("last_test_result"),
+  createdAt: timestamp("created_at", { mode: "string" })
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: timestamp("updated_at", { mode: "string" })
+    .notNull()
+    .default(sql`now()`),
+});
+
+export const tenantWhitelistUids = pgTable(
+  "tenant_whitelist_uids",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: integer("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    lineUid: text("line_uid").notNull(),
+    label: text("label"),
+    createdAt: timestamp("created_at", { mode: "string" })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [unique("tenant_whitelist_uids_tenant_line_uid_unique").on(t.tenantId, t.lineUid)],
+);
+
+export const tenantHealthState = pgTable("tenant_health_state", {
+  tenantId: integer("tenant_id")
+    .primaryKey()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  healthy: integer("healthy").notNull(),
+  changedAt: timestamp("changed_at", { mode: "string" })
+    .notNull()
+    .default(sql`now()`),
+});

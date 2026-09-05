@@ -1641,7 +1641,10 @@ git commit -m "feat: seed first tenant from env on boot"
 ```
 
 ---
-### Task 6: Add `tenant_id` to the seven existing tables
+### Task 6: Add `tenant_id` to the six legacy tables
+
+Six tables get a real `tenant_id` column: `client_snapshots`, `notify_recipients`, `daily_report_notifications`, `line_users`, `report_range_snapshots`, `client_request_snapshots`.
+The seventh data table, `client_request_snapshot_rows`, stays column-free on purpose: it is scoped through its parent `client_request_snapshots(id)`.
 
 **Files:**
 - Modify: `apps/api/src/db/connection.ts` (`initDb`)
@@ -3248,6 +3251,7 @@ git commit -m "feat: schedule per-tenant daily report at 05:00 ICT"
 - Modify: `apps/api/src/index.ts`
 - Modify: `apps/api/src/routes/internal.ts`
 - Test: `apps/api/tests/health.test.ts`
+- Test: `apps/api/tests/line-uids.test.ts`
 
 - [ ] **Step 1: Update `index.ts`**
 
@@ -3324,12 +3328,50 @@ internal.get("/health/tenants", async (c) => {
 });
 ```
 
-- [ ] **Step 3: Update `tests/health.test.ts`**
+- [ ] **Step 3: Update `/internal/line-uids` for tenants**
+
+`listLineUsers(db)` gained a `tenantId` in Task 11, so this route must choose one.
+It accepts an optional `?tenant=<id|webhookId|label>`: with the param it lists that tenant only, without it it lists every tenant's users.
+
+```ts
+internal.get("/line-uids", async (c) => {
+  const db = getDb();
+  const selector = c.req.query("tenant");
+  if (selector) {
+    const rows = await listTenantRows(db);
+    const asNumber = Number(selector);
+    const row = Number.isInteger(asNumber) && asNumber > 0
+      ? rows.find((r) => r.id === asNumber)
+      : rows.find((r) => r.webhookId === selector || r.label === selector);
+    if (!row) return c.json({ error: "Unknown tenant" }, 404);
+    const users = await listLineUsers(db, row.id);
+    return c.json({
+      tenant: { id: row.id, label: row.label },
+      count: Math.min(users.length, MAX_LINE_UIDS),
+      truncated: users.length > MAX_LINE_UIDS,
+      uids: users.slice(0, MAX_LINE_UIDS).map((u) => u.line_uid),
+      users: users.slice(0, MAX_LINE_UIDS),
+    });
+  }
+  const tenants = await listTenantRows(db);
+  const all = await Promise.all(
+    tenants.map(async (t) => ({
+      tenant: { id: t.id, label: t.label },
+      users: (await listLineUsers(db, t.id)).slice(0, MAX_LINE_UIDS),
+    })),
+  );
+  return c.json({ tenants: all });
+});
+```
+
+Update `tests/line-uids.test.ts`: seed two tenants with distinct uids, assert `?tenant=<A>` returns only A's uids, and that the no-param response separates the two.
+
+- [ ] **Step 4: Update `tests/health.test.ts`**
 
 The HFM stub is removed from the health test; `checks.hfm_api` no longer exists.
 Add a test that `/internal/health` returns 200 even when the HFM upstream is unreachable (stub `fetch` to reject), and a test that `/internal/health/tenants` returns one entry per tenant.
 
-- [ ] **Step 4: Run the full suite and typecheck**
+- [ ] **Step 5: Run the full suite and typecheck**
 
 ```bash
 bun test && bun run typecheck
@@ -3337,10 +3379,10 @@ bun test && bun run typecheck
 
 Expected: all PASS, no type errors.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/index.ts src/routes/internal.ts src/db/connection.ts tests/health.test.ts
+git add src/index.ts src/routes/internal.ts tests/health.test.ts tests/line-uids.test.ts
 git commit -m "feat: startup warm per tenant, liveness health"
 ```
 
@@ -4215,6 +4257,11 @@ services:
 
   postgres-test:
     image: postgres:16-alpine
+    container_name: hfm-postgres-test
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: hfm_test
     ports: ["127.0.0.1:5433:5432"]
     tmpfs: [/var/lib/postgresql/data]
 ```

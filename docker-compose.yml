@@ -1,9 +1,11 @@
 services:
   bot:
-    build: .
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
     container_name: hfm-line-bot
     restart: unless-stopped
-    env_file: .env
+    env_file: apps/api/.env
     ports:
       - "127.0.0.1:${PORT:-3000}:3000"
     environment:
@@ -15,12 +17,14 @@ services:
         max-file: "3"
     deploy:
       resources:
+        # Raised from 512M: each tenant holds its own last-trade map in
+        # memory, and the number of tenants grows over time.
         limits:
           cpus: "0.75"
-          memory: 512M
+          memory: 1G
         reservations:
           cpus: "0.25"
-          memory: 256M
+          memory: 512M
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3000/internal/health?key=$$INTERNAL_API_KEY || exit 1"]
       interval: 30s

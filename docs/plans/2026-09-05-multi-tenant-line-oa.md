@@ -616,7 +616,7 @@ git commit -m "feat: add AES-256-GCM secret encryption helpers"
 
 Three new tables: `tenants` (one row per LINE OA), `tenant_whitelist_uids` (per OA whitelist), and `tenant_health_state` (healthcheck edge state, replacing the module variable).
 
-- [ ] **Step 1: Add drizzle table definitions to `schema.ts`**
+- [x] **Step 1: Add drizzle table definitions to `schema.ts`**
 
 Append to `apps/api/src/db/schema.ts`:
 
@@ -675,7 +675,7 @@ export const tenantHealthState = pgTable("tenant_health_state", {
 });
 ```
 
-- [ ] **Step 2: Add the same DDL to `initDb()` in `connection.ts`**
+- [x] **Step 2: Add the same DDL to `initDb()` in `connection.ts`**
 
 Inside the existing `db.execute(sql\`...\`)` call in `initDb`, before the existing `CREATE TABLE IF NOT EXISTS client_snapshots` block, add:
 
@@ -717,7 +717,7 @@ CREATE TABLE IF NOT EXISTS tenant_health_state (
 );
 ```
 
-- [ ] **Step 3: Update `tests/db-helpers.ts`**
+- [x] **Step 3: Update `tests/db-helpers.ts`**
 
 Add to the front of the DROP block (children before parents):
 
@@ -729,7 +729,7 @@ DROP TABLE IF EXISTS tenants CASCADE;
 
 Add the same three `CREATE TABLE IF NOT EXISTS` statements from Step 2 to the create block.
 
-- [ ] **Step 4: Verify with a repository smoke test run**
+- [x] **Step 4: Verify with a repository smoke test run**
 
 ```bash
 bun test tests/line-user.repository.test.ts
@@ -737,12 +737,14 @@ bun test tests/line-user.repository.test.ts
 
 Expected: PASS (existing tests still green against the new schema shape).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/db/schema.ts src/db/connection.ts tests/db-helpers.ts
 git commit -m "feat: add tenants, whitelist, health-state tables"
 ```
+
+> Deviation: the file watcher auto-committed the three code files (bca8f0a "chore: update schema", 8c4aa8c "chore: update 2 files") before the manual commit could run, so the plan's commit message was not used and history was left as published.
 
 ---
 ### Task 3: Tenant types and repository

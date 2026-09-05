@@ -1,7 +1,40 @@
 import { expect, test, describe, afterEach } from "bun:test";
-import { pushToAll, replyOrPushText, replyOrPushFlex } from "../src/services/line.service";
+import {
+  pushToAll,
+  pushText,
+  replyOrPushText,
+  replyOrPushFlex,
+  fetchBotInfo,
+} from "../src/services/line.service";
+import type { TenantConfig } from "../src/types/tenant.types";
 
 const ORIGINAL_FETCH = globalThis.fetch;
+
+function makeCtx(over: Partial<TenantConfig> = {}): TenantConfig {
+  return {
+    id: 1,
+    webhookId: "wh-1",
+    label: "tenant",
+    active: true,
+    lineChannelAccessToken: "tok",
+    lineChannelSecret: "secret",
+    lineBotUserId: null,
+    lineBasicId: null,
+    lineDisplayName: null,
+    hfmApiKey: "hfm",
+    hfmApiBaseUrl: "https://api.hfaffiliates.com",
+    targetWallet: 0,
+    whitelistEnabled: true,
+    whitelistUids: [],
+    lastTestedAt: null,
+    lastTestResult: null,
+    ...over,
+  };
+}
+
+const ctx = makeCtx();
+const ctxA = makeCtx({ id: 1, lineChannelAccessToken: "tokA" });
+const ctxB = makeCtx({ id: 2, lineChannelAccessToken: "tokB" });
 
 describe("pushToAll", () => {
   afterEach(() => {
@@ -16,7 +49,7 @@ describe("pushToAll", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await pushToAll(["U001", "U002", "U003"], "hello");
+    await pushToAll(ctx, ["U001", "U002", "U003"], "hello");
     expect(calls).toEqual(["U001", "U002", "U003"]);
   });
 
@@ -28,7 +61,7 @@ describe("pushToAll", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await pushToAll(["U001"], "test message");
+    await pushToAll(ctx, ["U001"], "test message");
     expect(messages).toEqual([{ to: "U001", text: "test message" }]);
   });
 
@@ -39,7 +72,7 @@ describe("pushToAll", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await pushToAll([], "hello");
+    await pushToAll(ctx, [], "hello");
     expect(called).toBe(false);
   });
 
@@ -54,7 +87,7 @@ describe("pushToAll", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await expect(pushToAll(["U001", "U002", "U003"], "hello")).rejects.toThrow();
+    await expect(pushToAll(ctx, ["U001", "U002", "U003"], "hello")).rejects.toThrow();
     expect(calls).toEqual(["U001", "U002"]);
   });
 });
@@ -71,7 +104,7 @@ describe("replyOrPush", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await replyOrPushText("token123", "U001", "hello");
+    await replyOrPushText(ctx, "token123", "U001", "hello");
     expect(urls).toEqual(["https://api.line.me/v2/bot/message/reply"]);
   });
 
@@ -86,7 +119,7 @@ describe("replyOrPush", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await replyOrPushFlex("expired", "U001", "alt text", { type: "bubble" });
+    await replyOrPushFlex(ctx, "expired", "U001", "alt text", { type: "bubble" });
 
     expect(calls.map((c) => c.url)).toEqual([
       "https://api.line.me/v2/bot/message/reply",
@@ -105,6 +138,46 @@ describe("replyOrPush", () => {
     globalThis.fetch = (async () =>
       new Response("nope", { status: 400 })) as unknown as typeof globalThis.fetch;
 
-    await expect(replyOrPushText("expired", "U001", "hello")).rejects.toThrow();
+    await expect(replyOrPushText(ctx, "expired", "U001", "hello")).rejects.toThrow();
+  });
+});
+
+describe("tenant isolation", () => {
+  afterEach(() => {
+    globalThis.fetch = ORIGINAL_FETCH;
+  });
+
+  test("two tenants push with their own tokens", async () => {
+    const seen: Array<{ auth: string; to: string }> = [];
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+      seen.push({
+        auth: String((init!.headers as Record<string, string>).Authorization),
+        to: JSON.parse(String(init!.body)).to,
+      });
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch;
+
+    await pushText(ctxA, "U123", "hi");
+    await pushText(ctxB, "U123", "hi");
+    expect(seen.map((s) => s.auth)).toEqual(["Bearer tokA", "Bearer tokB"]);
+  });
+});
+
+describe("fetchBotInfo", () => {
+  afterEach(() => {
+    globalThis.fetch = ORIGINAL_FETCH;
+  });
+
+  test("fetchBotInfo returns identity or null", async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({
+        userId: "U827", basicId: "@abc", displayName: "Test",
+      }), { status: 200 })) as typeof fetch;
+    expect(await fetchBotInfo("tok")).toEqual({
+      userId: "U827", basicId: "@abc", displayName: "Test",
+    });
+
+    globalThis.fetch = (async () => new Response("{}", { status: 401 })) as typeof fetch;
+    expect(await fetchBotInfo("bad")).toBeNull();
   });
 });

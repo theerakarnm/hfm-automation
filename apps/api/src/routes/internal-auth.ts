@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
 import { getCookie } from "hono/cookie";
 import type { Context, Next } from "hono";
 
-const COOKIE_NAME = "hfm_admin";
+export const COOKIE_NAME = "hfm_admin";
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // one shift, not forever
 
 // The internal UI stores its CSRF token in c.var. Hono context variables are

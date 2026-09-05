@@ -56,7 +56,10 @@ function computeSig(body: string, secret: string): string {
 
 async function waitFor(
   predicate: () => boolean,
-  timeoutMs = 500
+  // 2s matches the explicit budgets below: the handlers chain multiple
+  // background awaits (HFM + last-trade + LINE reply) and the default 500ms
+  // flaked under full-suite DB load.
+  timeoutMs = 2_000
 ): Promise<void> {
   const startedAt = Date.now();
   while (!predicate()) {

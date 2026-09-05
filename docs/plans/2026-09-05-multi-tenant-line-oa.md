@@ -3839,7 +3839,13 @@ git commit -m "feat: tenant list and edit form UI"
 - Modify: `apps/api/src/routes/internal-config.tsx`
 - Test: `apps/api/tests/internal-config.test.ts`
 
-- [ ] **Step 1: Tests**
+- [x] **Step 1: Tests**
+
+> Deviation: the snippet referenced undefined scaffolding (`app`, `db`, `csrf`, `adminCookie()` with no args, `saveWithLabel`, `stubBotInfo`), so the tests live in a `describe` block with per-test app/cookie/csrf/db setup plus those helpers; a `csrfFromCookie` helper extracts the token from the session cookie like the form would.
+> Deviation: every save test stubs `globalThis.fetch` (default stub: bot info 401) because the handler always calls `fetchBotInfo` after saving; tests must never reach the real api.line.me.
+> Deviation: the warning test follows the 302 redirect and asserts the warning on the edit page it points at, because the handler surfaces the warning through `?warn=` on the redirect target, not in the POST response body.
+> Deviation: `row!.displayName` corrected to `row!.lineDisplayName` (the TenantRow field name from the shared contracts); fetch stubs cast through `unknown` to satisfy tsc.
+> Deviation: added three tests beyond the snippet (CSRF missing/wrong -> 403, invalid input -> 400 error page, rotate changes webhook id and shows old/new URLs) to cover the CSRF gate, the validation branch, and the new rotate route.
 
 ```ts
 test("save with empty secret fields keeps stored values", async () => {
@@ -3876,7 +3882,10 @@ test("bot info failure still saves and shows a warning", async () => {
 });
 ```
 
-- [ ] **Step 2: Implement the handlers**
+- [x] **Step 2: Implement the handlers**
+
+> Deviation: `if (!requireCsrf(c))` corrected to `if (!(await requireCsrf(c)))` because `requireCsrf` returns a Promise; without the await the 403 branch can never fire (verified by the CSRF tests).
+> Deviation: GET `/internal/config/:id` renders the `?warn=` query as a badge so the redirected warning is actually visible; the rotate handler also runs the CSRF check (Q5: mutating forms carry a CSRF token) and was given a test.
 
 The save handler:
 
@@ -3929,7 +3938,7 @@ async function handleSave(c: Context, id?: number) {
 
 Add `POST /internal/config/:id/rotate` that calls `rotateWebhookId(db, id)` and `invalidateTenantCache(id)`, and renders a page telling the operator to update the URL in the LINE console immediately.
 
-- [ ] **Step 3: Run, commit**
+- [x] **Step 3: Run, commit**
 
 ```bash
 bun test tests/internal-config.test.ts

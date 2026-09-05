@@ -1,9 +1,13 @@
 // apps/api/tests/internal-config.test.ts
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { Hono } from "hono";
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
+import * as schema from "../src/db/schema";
 import { createTestDb, closeTestDb } from "./db-helpers";
-import { resetDbForTests } from "../src/db/connection";
-import { insertTenantRow } from "../src/repositories/tenant.repository";
+import { resetDbForTests, type DrizzleDb } from "../src/db/connection";
+import { insertTenantRow, getTenantRowById } from "../src/repositories/tenant.repository";
+import { getTenantById, invalidateTenantCache } from "../src/services/tenant-config.service";
 import type { TenantInput } from "../src/types/tenant.types";
 
 const TEST_DATABASE_URL =
@@ -151,5 +155,172 @@ describe("GET /internal/config/:id and /new", () => {
     const res = await app.request(`/internal/config/${tenantId}`);
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/internal/login");
+  });
+});
+
+// POST /internal/config/:id and /new are the save path. Every test stubs
+// globalThis.fetch, because the handler verifies the LINE token against
+// api.line.me right after saving: tests must never reach the real network.
+describe("POST /internal/config/:id (save)", () => {
+  let app: Hono;
+  let cookie: string;
+  let csrf: string;
+  let db: DrizzleDb;
+  let client: postgres.Sql;
+  const realFetch = globalThis.fetch;
+
+  // The session cookie embeds the CSRF token (see routes/internal-auth.ts),
+  // so the test can extract it exactly like the rendered form would carry it.
+  function csrfFromCookie(adminCookieValue: string): string {
+    const value = adminCookieValue.slice(adminCookieValue.indexOf("=") + 1);
+    return value.split(".")[1]!;
+  }
+
+  function stubBotInfo(body: {
+    userId: string;
+    basicId?: string;
+    displayName?: string;
+  }): typeof fetch {
+    return (async () =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof fetch;
+  }
+
+  // Default stub for tests that do not care about bot info: a failing
+  // verification keeps the save path exercised without any network access.
+  function stubFailedBotInfo(): typeof fetch {
+    return (async () => new Response("{}", { status: 401 })) as unknown as typeof fetch;
+  }
+
+  function saveWithLabel(label: string): RequestInit {
+    return {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: formBody({
+        csrf,
+        label,
+        lineChannelAccessToken: "",
+        lineChannelSecret: "",
+        hfmApiKey: "",
+        hfmApiBaseUrl: "https://api.hfaffiliates.com",
+        targetWallet: "42",
+        whitelistEnabled: "on",
+        active: "on",
+      }),
+    };
+  }
+
+  beforeEach(async () => {
+    globalThis.fetch = stubFailedBotInfo();
+    invalidateTenantCache();
+    app = await createInternalApp();
+    cookie = await adminCookie(app);
+    csrf = csrfFromCookie(cookie);
+    client = postgres(TEST_DATABASE_URL, { max: 1 });
+    db = drizzle(client, { schema });
+  });
+
+  afterEach(async () => {
+    globalThis.fetch = realFetch;
+    invalidateTenantCache();
+    await client.end();
+  });
+
+  test("save with empty secret fields keeps stored values", async () => {
+    const before = await getTenantRowById(db, tenantId);
+    await app.request(`/internal/config/${tenantId}`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: formBody({ csrf, label: "New label", lineChannelAccessToken: "", lineChannelSecret: "", hfmApiKey: "", hfmApiBaseUrl: "https://api.hfaffiliates.com", targetWallet: "42", whitelistEnabled: "on", active: "on" }),
+    });
+    const after = await getTenantRowById(db, tenantId);
+    expect(after!.label).toBe("New label");
+    expect(after!.lineChannelAccessTokenEnc).toBe(before!.lineChannelAccessTokenEnc);
+  });
+
+  test("save invalidates the tenant cache immediately", async () => {
+    await getTenantById(tenantId); // prime cache
+    await app.request(`/internal/config/${tenantId}`, saveWithLabel("Cache check"));
+    expect((await getTenantById(tenantId))!.label).toBe("Cache check");
+  });
+
+  test("save fetches bot info and stores identity", async () => {
+    globalThis.fetch = stubBotInfo({ userId: "U777", displayName: "My OA" });
+    await app.request(`/internal/config/${tenantId}`, saveWithLabel("Identity"));
+    const row = await getTenantRowById(db, tenantId);
+    expect(row!.lineBotUserId).toBe("U777");
+    expect(row!.lineDisplayName).toBe("My OA");
+  });
+
+  test("bot info failure still saves and shows a warning", async () => {
+    globalThis.fetch = stubFailedBotInfo();
+    const res = await app.request(`/internal/config/${tenantId}`, saveWithLabel("Warn me"));
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location")!;
+    expect(decodeURIComponent(location)).toContain("LINE token could not be verified");
+    // The warning is surfaced by the edit page the redirect points at.
+    const page = await app.request(location, { headers: { cookie } });
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain("LINE token could not be verified");
+    expect((await getTenantRowById(db, tenantId))!.label).toBe("Warn me");
+  });
+
+  test("save without csrf is rejected with 403", async () => {
+    const res = await app.request(`/internal/config/${tenantId}`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: formBody({ label: "No csrf" }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("save with a wrong csrf is rejected with 403", async () => {
+    const res = await app.request(`/internal/config/${tenantId}`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: formBody({ csrf: "not-the-session-token", label: "Wrong csrf" }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("invalid input renders an error page with status 400", async () => {
+    const res = await app.request("/internal/config/new", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: formBody({
+        csrf,
+        label: "",
+        lineChannelAccessToken: "",
+        lineChannelSecret: "",
+        hfmApiKey: "",
+        hfmApiBaseUrl: "http://insecure.example",
+        targetWallet: "-1",
+      }),
+    });
+    expect(res.status).toBe(400);
+    const html = await res.text();
+    expect(html).toContain("label is required");
+    expect(html).toContain("access token is required");
+    expect(html).toContain("base URL must be https");
+    expect(html).toContain("target wallet must be a positive integer");
+  });
+
+  test("rotate changes the webhook id and shows old and new urls", async () => {
+    const before = await getTenantRowById(db, tenantId);
+    const res = await app.request(`/internal/config/${tenantId}/rotate`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded" },
+      body: formBody({ csrf }),
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain(before!.webhookId);
+    const after = await getTenantRowById(db, tenantId);
+    expect(after!.webhookId).not.toBe(before!.webhookId);
+    expect(html).toContain(after!.webhookId);
+    expect(html).toContain("LINE Developers Console");
   });
 });

@@ -6,11 +6,19 @@
 // autofill.
 import { Hono } from "hono";
 import type { Context } from "hono";
-import type { TenantRow, TenantTestResult } from "../types/tenant.types";
+import type { TenantInput, TenantRow, TenantTestResult } from "../types/tenant.types";
 import { decryptSecret, maskSecret } from "../utils/crypto";
 import { logError } from "../utils/logger";
 import { getDb } from "../db/connection";
-import { getTenantRowById, listTenantRows } from "../repositories/tenant.repository";
+import {
+  getTenantRowById,
+  listTenantRows,
+  rotateWebhookId,
+  updateTenantLineIdentity,
+} from "../repositories/tenant.repository";
+import { invalidateTenantCache, saveTenant } from "../services/tenant-config.service";
+import { fetchBotInfo } from "../services/line.service";
+import { requireCsrf } from "./internal-auth";
 
 // requireAdmin stores the CSRF token in c.var. The route is mounted on the
 // untyped internal app, so the variable is read through this narrow cast,
@@ -66,6 +74,66 @@ function storedMask(enc: string): string {
     logError("internal-config", error);
     return "unreadable";
   }
+}
+
+function errorPage(errors: string[]) {
+  return (
+    <Layout title="Save failed - HFM internal">
+      <h1>Save failed</h1>
+      <p>Nothing was saved. Fix the following and try again:</p>
+      <ul>
+        {errors.map((error) => <li>{error}</li>)}
+      </ul>
+      <p><a href="/internal/config">Back to the tenant list</a></p>
+    </Layout>
+  );
+}
+
+// Shared POST body for create and edit. Saves through tenant-config.service
+// (which encrypts and invalidates the cache), then pins the bot identity.
+async function handleSave(c: Context, id?: number) {
+  if (!(await requireCsrf(c))) return c.text("Forbidden", 403);
+  const form = await c.req.parseBody();
+  const input: TenantInput = {
+    label: String(form.label ?? "").trim(),
+    active: form.active === "on",
+    lineChannelAccessToken: String(form.lineChannelAccessToken ?? ""),
+    lineChannelSecret: String(form.lineChannelSecret ?? ""),
+    hfmApiKey: String(form.hfmApiKey ?? ""),
+    hfmApiBaseUrl: String(form.hfmApiBaseUrl ?? "").trim() || "https://api.hfaffiliates.com",
+    targetWallet: Number(form.targetWallet),
+    whitelistEnabled: form.whitelistEnabled === "on",
+  };
+
+  // Validation: fail loudly, never half-save a tenant.
+  const errors: string[] = [];
+  if (!input.label) errors.push("label is required");
+  if (!Number.isInteger(input.targetWallet) || input.targetWallet <= 0) {
+    errors.push("target wallet must be a positive integer");
+  }
+  if (!input.hfmApiBaseUrl.startsWith("https://")) errors.push("base URL must be https");
+  if (id === undefined) {
+    if (!input.lineChannelAccessToken) errors.push("access token is required");
+    if (!input.lineChannelSecret) errors.push("channel secret is required");
+    if (!input.hfmApiKey) errors.push("HFM API key is required");
+  }
+  if (errors.length > 0) return c.html(errorPage(errors), 400);
+
+  const tenantId = await saveTenant(input, id);
+
+  // Verify the token and pin the bot identity. A failure is a warning, not
+  // an error: the user explicitly chose that tests never block saving.
+  let warning: string | null = null;
+  const token = input.lineChannelAccessToken ||
+    decryptSecret((await getTenantRowById(getDb(), tenantId))!.lineChannelAccessTokenEnc);
+  const identity = await fetchBotInfo(token);
+  if (identity) {
+    await updateTenantLineIdentity(getDb(), tenantId, identity);
+  } else {
+    warning = "LINE token could not be verified. Check it before going live.";
+  }
+
+  return c.redirect(`/internal/config/${tenantId}${warning ? `?warn=${encodeURIComponent(warning)}` : ""}`);
 }
 
 function TenantForm({ row, csrf }: { row?: TenantRow; csrf: string }) {
@@ -157,14 +225,47 @@ internalConfigRoutes.get("/:id", async (c) => {
   if (!Number.isInteger(id) || id <= 0) return c.notFound();
   const row = await getTenantRowById(getDb(), id);
   if (!row) return c.notFound();
+  const warn = c.req.query("warn");
   return c.html(
     <Layout title={`Edit ${row.label} - HFM internal`}>
       <h1>Edit tenant: {row.label}</h1>
       <p><a href="/internal/config">Back to the tenant list</a></p>
+      {warn ? <p class="badge-warn">{warn}</p> : null}
       <p>
         Test status: <TestBadge row={row} /> · Webhook URL: <code>{webhookUrl(row.webhookId)}</code>
       </p>
       <TenantForm row={row} csrf={csrfFrom(c)} />
+    </Layout>,
+  );
+});
+
+internalConfigRoutes.post("/new", (c) => handleSave(c));
+
+internalConfigRoutes.post("/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) return c.notFound();
+  return handleSave(c, id);
+});
+
+// Rotating the webhook id kills the old URL instantly: the webhook resolver
+// finds no tenant for it and answers 404. The operator must paste the new
+// URL into the LINE Developers Console right away, so the response is a
+// page that shows both URLs instead of a silent redirect.
+internalConfigRoutes.post("/:id/rotate", async (c) => {
+  if (!(await requireCsrf(c))) return c.text("Forbidden", 403);
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) return c.notFound();
+  const row = await getTenantRowById(getDb(), id);
+  if (!row) return c.notFound();
+  const newWebhookId = await rotateWebhookId(getDb(), id);
+  invalidateTenantCache(id);
+  return c.html(
+    <Layout title="Webhook URL rotated - HFM internal">
+      <h1>Webhook URL rotated</h1>
+      <p>Update the webhook URL in the LINE Developers Console immediately. The old URL stops working right now.</p>
+      <p>Old URL: <code>{webhookUrl(row.webhookId)}</code></p>
+      <p>New URL: <code>{webhookUrl(newWebhookId)}</code></p>
+      <p><a href={`/internal/config/${id}`}>Back to the tenant</a></p>
     </Layout>,
   );
 });

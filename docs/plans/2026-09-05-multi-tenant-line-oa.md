@@ -820,7 +820,6 @@ export interface TenantInput {
 ```ts
 // apps/api/tests/tenant.repository.test.ts
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { createTestDb, closeTestDb } from "./db-helpers";
 import {
   insertTenantRow,
   getTenantRowByWebhookId,
@@ -1159,7 +1158,6 @@ The cache is invalidated the moment the UI saves, and also expires after 60 seco
 ```ts
 // apps/api/tests/tenant-config.service.test.ts
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from "bun:test";
-import { createTestDb, closeTestDb } from "./db-helpers";
 import {
   getTenantById,
   getTenantByWebhookId,
@@ -1177,11 +1175,11 @@ import type { DrizzleDb } from "../src/db/connection";
 
 process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 5).toString("base64");
 
-const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ?? "postgresql://test:test@localhost:5433/hfm_test";
+import { createTestDb, closeTestDb, TEST_DATABASE_URL } from "./db-helpers";
+import type postgres from "postgres";
 
 let db: DrizzleDb;
-let client: ReturnType<typeof import("postgres")>;
+let client: postgres.Sql;
 let fakeNow = 1_000_000;
 
 beforeAll(async () => {
@@ -1471,7 +1469,6 @@ There is deliberately no env fallback afterwards: a missing field must fail loud
 ```ts
 // apps/api/tests/bootstrap.test.ts
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { createTestDb, closeTestDb } from "./db-helpers";
 import { seedDefaultTenantFromEnv } from "../src/db/bootstrap";
 import { countTenants } from "../src/repositories/tenant.repository";
 import { getActiveUids } from "../src/repositories/recipient.repository";
@@ -1480,11 +1477,12 @@ import { resetDbForTests } from "../src/db/connection";
 
 process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString("base64");
 
-const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ?? "postgresql://test:test@localhost:5433/hfm_test";
+import { createTestDb, closeTestDb, TEST_DATABASE_URL } from "./db-helpers";
+import type { DrizzleDb } from "../src/db/connection";
+import type postgres from "postgres";
 
-let db: ReturnType<typeof createTestDb> extends Promise<infer T> ? T["db"] : never;
-let client: ReturnType<typeof import("postgres")>;
+let db: DrizzleDb;
+let client: postgres.Sql;
 
 beforeAll(async () => {
   process.env.DATABASE_URL = TEST_DATABASE_URL;
@@ -1662,7 +1660,6 @@ Order inside `initDb()`, with a comment explaining it: create the new tables fro
 ```ts
 // apps/api/tests/tenant-migration.test.ts
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { createTestDb, closeTestDb } from "./db-helpers";
 import { db as rawDb } from "./db-helpers";
 import { sql } from "drizzle-orm";
 import { insertTenantRow } from "../src/repositories/tenant.repository";
@@ -1677,11 +1674,12 @@ The rest of the test:
 ```ts
 process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 11).toString("base64");
 
-const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ?? "postgresql://test:test@localhost:5433/hfm_test";
+import { createTestDb, closeTestDb, TEST_DATABASE_URL } from "./db-helpers";
+import type { DrizzleDb } from "../src/db/connection";
+import type postgres from "postgres";
 
-let db: ReturnType<typeof rawDb> extends never ? never : any;
-let client: ReturnType<typeof import("postgres")>;
+let db: DrizzleDb;
+let client: postgres.Sql;
 
 const INPUT = (wallet: number) => ({
   label: `OA ${wallet}`,
@@ -3971,9 +3969,6 @@ import { Glob } from "bun";
 import path from "node:path";
 
 process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 31).toString("base64");
-const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ?? "postgresql://test:test@localhost:5433/hfm_test";
-
 const UID_A = "Uaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const UID_B = "Ubbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const BOT_A = "Ubotbotbotbotbotbotbotbotbotbot1";

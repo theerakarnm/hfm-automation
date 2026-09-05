@@ -3022,7 +3022,12 @@ git commit -m "refactor: thread tenant ctx through webhook handlers"
 - Create: `apps/api/src/repositories/daily-notification.repository.ts`
 - Test: `apps/api/tests/daily-client-report.test.ts`
 
-- [ ] **Step 1: Add the cross-tenant report test**
+- [x] **Step 1: Add the cross-tenant report test**
+
+> Deviation: the plan snippet's stubbed-fetch comment says `fetchClientsByRange`, but the
+> report path injects `fetchClientsFn`, so the tests stub `fetchClientsFn` per tenant (same intent:
+> a different stubbed client set per tenant). Both plan tests were kept verbatim in intent, with a
+> third `runDailyClientReport` isolation test added (A pushes only to A's uids, never B's numbers).
 
 ```ts
 test("two tenants with different wallets produce different reports on the same date", async () => {
@@ -3041,7 +3046,14 @@ test("daily_report_notifications for A does not suppress B", async () => {
 });
 ```
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
+
+> Deviation: `daily-notification.repository.ts` was not created here; Task 6 had already created it
+> byte-identical to the snippet above, so it is reused as instructed.
+> Deviation: `examples/cron-registration.ts` (the INITIAL.md reference example, not a plan file)
+> called `runDailyClientReport()` with no args, which the shared-contract signature `(ctx, options?)`
+> rejects at typecheck. It was updated minimally to loop `listActiveTenants()` and pass each ctx,
+> matching decision Q16, so the typecheck delta stays confined to later-task files.
 
 `apps/api/src/repositories/daily-notification.repository.ts`:
 
@@ -3087,7 +3099,7 @@ In `daily-client-report.ts`:
 - every snapshot read/write passes `ctx.id` as the tenant id
 - pushes use `pushToAll(ctx, uids, text)`
 
-- [ ] **Step 3: Run**
+- [x] **Step 3: Run**
 
 ```bash
 bun test tests/daily-client-report.test.ts
@@ -3095,7 +3107,10 @@ bun test tests/daily-client-report.test.ts
 
 Expected: all PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
+
+> Deviation: the docs watcher auto-committed the code files mid-task under its own messages, so the
+> watcher commits were squashed back into this step's single `refactor: daily report per tenant` commit.
 
 ```bash
 git add src/jobs/daily-client-report.ts src/repositories/daily-notification.repository.ts tests/daily-client-report.test.ts

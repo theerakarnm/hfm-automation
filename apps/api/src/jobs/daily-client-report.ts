@@ -1,7 +1,8 @@
-import { eq, count } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { DrizzleDb } from "../db/connection";
 import { getDb } from "../db/connection";
-import { clientSnapshots, dailyReportNotifications } from "../db/schema";
+import { clientSnapshots } from "../db/schema";
+import type { TenantConfig } from "../types/tenant.types";
 import type { HFMClientRow, HFMClientsResult } from "../types/hfm.types";
 import { countByDate, insertMany, purgeOlderThan, getLatestSnapshotDateBefore } from "../repositories/snapshot.repository";
 import {
@@ -9,7 +10,8 @@ import {
   getLatestRequestSnapshotBefore,
   type RequestSnapshotRow,
 } from "../repositories/request-snapshot.repository";
-import { seedFromEnv, getActiveUids } from "../repositories/recipient.repository";
+import { getActiveUids } from "../repositories/recipient.repository";
+import { markDailyReportSent, isDailyReportSent } from "../repositories/daily-notification.repository";
 import { fetchClients, normalizeClientRow } from "../services/hfm.service";
 import { pushToAll } from "../services/line.service";
 import {
@@ -22,13 +24,10 @@ import {
 
 export type ReportPeriod = "day" | "week" | "month";
 
-function getTargetWallet(): { wallet: number; label: string } {
-  const raw = Number(process.env.TARGET_WALLET);
-  return {
-    wallet: Number.isNaN(raw) || raw === 0 ? 0 : raw,
-    label: process.env.TARGET_WALLET?.trim() || "N/A",
-  };
-}
+// Everything in this job is scoped by ctx: the snapshots it reads and
+// writes, the "already notified" guard, and the recipient list all belong
+// to one tenant, so two tenants on the same date never see each other's
+// numbers or suppress each other's notifications.
 
 function dedupeByCompositeKey(rows: HFMClientRow[]): HFMClientRow[] {
   const seen = new Set<string>();
@@ -49,12 +48,18 @@ function extractWalletIds(rows: HFMClientRow[]): Set<number> {
 
 async function getWalletIdsFromNightlySnapshot(
   db: DrizzleDb,
+  tenantId: number,
   date: string,
 ): Promise<Set<number>> {
   const rows = await db
     .selectDistinct({ clientId: clientSnapshots.clientId })
     .from(clientSnapshots)
-    .where(eq(clientSnapshots.snapshotDate, date));
+    .where(
+      and(
+        eq(clientSnapshots.tenantId, tenantId),
+        eq(clientSnapshots.snapshotDate, date),
+      ),
+    );
   return new Set(rows.map((r) => r.clientId));
 }
 
@@ -217,37 +222,14 @@ export interface RunDailyClientReportOptions {
   reportPeriod?: ReportPeriod;
 }
 
-async function hasDailyReportNotificationSent(
-  db: DrizzleDb,
-  date: string,
-): Promise<boolean> {
-  const rows = await db
-    .select({ count: count() })
-    .from(dailyReportNotifications)
-    .where(eq(dailyReportNotifications.snapshotDate, date));
-  return (rows[0]?.count ?? 0) > 0;
-}
-
-async function markDailyReportNotificationSent(
-  db: DrizzleDb,
-  date: string,
-): Promise<void> {
-  await db
-    .insert(dailyReportNotifications)
-    .values({ snapshotDate: date })
-    .onConflictDoUpdate({
-      target: dailyReportNotifications.snapshotDate,
-      set: { sentAt: new Date().toISOString() },
-    });
-}
-
 async function ensureTodaySnapshot(
   db: DrizzleDb,
+  tenantId: number,
   today: string,
   fetchCurrent: () => Promise<HFMClientsResult>,
   maxRetries = 3,
 ): Promise<boolean> {
-  const existingTodayCount = await countByDate(db, today);
+  const existingTodayCount = await countByDate(db, tenantId, today);
   if (existingTodayCount > 0) return true;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -255,10 +237,19 @@ async function ensureTodaySnapshot(
     let reason: string;
     if (result.ok) {
       const normalized = dedupeByCompositeKey(result.data).map(normalizeClientRow);
-      // Never mark the day as done on an empty fetch — return false so the
+      // Never mark the day as done on an empty fetch - return false so the
       // notification stays unmarked and a later run can retry this date.
       if (normalized.length > 0) {
-        await insertMany(db, today, normalized);
+        await insertMany(
+          db,
+          tenantId,
+          normalized.map((row) => ({
+            snapshotDate: today,
+            clientId: row.client_id,
+            name: row.full_name ?? null,
+            email: row.email ?? null,
+          })),
+        );
         return true;
       }
       reason = "empty client list";
@@ -281,13 +272,14 @@ async function ensureTodaySnapshot(
 }
 
 async function buildReportMessages(
+  ctx: TenantConfig,
   db: DrizzleDb,
   now: Date,
   today: string,
   fetchCurrent: () => Promise<HFMClientsResult>,
   period: ReportPeriod,
 ): Promise<string[]> {
-  const { label: targetLabel } = getTargetWallet();
+  const targetLabel = String(ctx.targetWallet);
 
   const result = await fetchCurrent();
 
@@ -300,16 +292,16 @@ async function buildReportMessages(
 
   if (period === "day") {
     const yesterday = getPreviousIctDateString(now);
-    const yesterdayExists = (await countByDate(db, yesterday)) > 0;
+    const yesterdayExists = (await countByDate(db, ctx.id, yesterday)) > 0;
 
     if (!yesterdayExists) {
-      await insertRequestSnapshot(db, today, currentRows);
+      await insertRequestSnapshot(db, ctx.id, today, currentRows);
       return [`The report of yesterday (${formatShortDate(yesterday)}) was not found.`];
     }
 
-    const yesterdayWalletIds = await getWalletIdsFromNightlySnapshot(db, yesterday);
+    const yesterdayWalletIds = await getWalletIdsFromNightlySnapshot(db, ctx.id, yesterday);
     if (yesterdayWalletIds.size === 0) {
-      await insertRequestSnapshot(db, today, currentRows);
+      await insertRequestSnapshot(db, ctx.id, today, currentRows);
       return [`The report of yesterday (${formatShortDate(yesterday)}) was not found.`];
     }
 
@@ -328,7 +320,7 @@ async function buildReportMessages(
       }),
     );
 
-    const prevRequest = await getLatestRequestSnapshotBefore(db, today);
+    const prevRequest = await getLatestRequestSnapshotBefore(db, ctx.id, today);
     if (prevRequest) {
       const prevMissing = findMissingFromRequestSnapshots(prevRequest.rows, currentWalletIds);
       const prevNew = findNewFromRequestSnapshots(prevRequest.rows, currentWalletIds);
@@ -347,23 +339,23 @@ async function buildReportMessages(
       );
     }
 
-    await insertRequestSnapshot(db, today, currentRows);
+    await insertRequestSnapshot(db, ctx.id, today, currentRows);
     return messages;
   }
 
   if (period === "week") {
     const lastWeek = getLastWeekRange(now);
     const lastWeekSunday = lastWeek.to;
-    const lastWeekExists = (await countByDate(db, lastWeekSunday)) > 0;
+    const lastWeekExists = (await countByDate(db, ctx.id, lastWeekSunday)) > 0;
 
     if (!lastWeekExists) {
-      await insertRequestSnapshot(db, today, currentRows);
+      await insertRequestSnapshot(db, ctx.id, today, currentRows);
       return [`The report of last week (${formatShortDate(lastWeekSunday)}) was not found.`];
     }
 
-    const lastWeekWalletIds = await getWalletIdsFromNightlySnapshot(db, lastWeekSunday);
+    const lastWeekWalletIds = await getWalletIdsFromNightlySnapshot(db, ctx.id, lastWeekSunday);
     if (lastWeekWalletIds.size === 0) {
-      await insertRequestSnapshot(db, today, currentRows);
+      await insertRequestSnapshot(db, ctx.id, today, currentRows);
       return [`The report of last week (${formatShortDate(lastWeekSunday)}) was not found.`];
     }
 
@@ -384,7 +376,7 @@ async function buildReportMessages(
       }),
     );
 
-    const prevRequest = await getLatestRequestSnapshotBefore(db, today);
+    const prevRequest = await getLatestRequestSnapshotBefore(db, ctx.id, today);
     if (prevRequest) {
       const prevMissing = findMissingFromRequestSnapshots(prevRequest.rows, currentWalletIds);
       const prevNew = findNewFromRequestSnapshots(prevRequest.rows, currentWalletIds);
@@ -403,23 +395,23 @@ async function buildReportMessages(
       );
     }
 
-    await insertRequestSnapshot(db, today, currentRows);
+    await insertRequestSnapshot(db, ctx.id, today, currentRows);
     return messages;
   }
 
   if (period === "month") {
     const lastMonth = getLastMonthRange(now);
     const lastMonthEnd = lastMonth.to;
-    const lastMonthExists = (await countByDate(db, lastMonthEnd)) > 0;
+    const lastMonthExists = (await countByDate(db, ctx.id, lastMonthEnd)) > 0;
 
     if (!lastMonthExists) {
-      await insertRequestSnapshot(db, today, currentRows);
+      await insertRequestSnapshot(db, ctx.id, today, currentRows);
       return [`The report of last month (${formatShortDate(lastMonthEnd)}) was not found.`];
     }
 
-    const lastMonthWalletIds = await getWalletIdsFromNightlySnapshot(db, lastMonthEnd);
+    const lastMonthWalletIds = await getWalletIdsFromNightlySnapshot(db, ctx.id, lastMonthEnd);
     if (lastMonthWalletIds.size === 0) {
-      await insertRequestSnapshot(db, today, currentRows);
+      await insertRequestSnapshot(db, ctx.id, today, currentRows);
       return [`The report of last month (${formatShortDate(lastMonthEnd)}) was not found.`];
     }
 
@@ -440,7 +432,7 @@ async function buildReportMessages(
       }),
     );
 
-    const prevRequest = await getLatestRequestSnapshotBefore(db, today);
+    const prevRequest = await getLatestRequestSnapshotBefore(db, ctx.id, today);
     if (prevRequest) {
       const prevMissing = findMissingFromRequestSnapshots(prevRequest.rows, currentWalletIds);
       const prevNew = findNewFromRequestSnapshots(prevRequest.rows, currentWalletIds);
@@ -459,37 +451,41 @@ async function buildReportMessages(
       );
     }
 
-    await insertRequestSnapshot(db, today, currentRows);
+    await insertRequestSnapshot(db, ctx.id, today, currentRows);
     return messages;
   }
 
   throw new Error(`Unknown report period: ${period}`);
 }
 
-export async function generateReportForUser(options: RunDailyClientReportOptions = {}): Promise<string[]> {
+export async function generateReportForUser(
+  ctx: TenantConfig,
+  options: RunDailyClientReportOptions = {},
+): Promise<string[]> {
   const now = options.now ?? new Date();
   const db = options.db ?? getDb();
-  const fetchCurrent = options.fetchClientsFn ?? fetchClients;
+  const fetchCurrent = options.fetchClientsFn ?? (() => fetchClients(ctx));
   const period = options.reportPeriod ?? "day";
 
   const today = getIctDateString(now);
-  return await buildReportMessages(db, now, today, fetchCurrent, period);
+  return await buildReportMessages(ctx, db, now, today, fetchCurrent, period);
 }
 
-export async function runDailyClientReport(options: RunDailyClientReportOptions = {}): Promise<void> {
+export async function runDailyClientReport(
+  ctx: TenantConfig,
+  options: RunDailyClientReportOptions = {},
+): Promise<void> {
   const now = options.now ?? new Date();
   const db = options.db ?? getDb();
-  const fetchCurrent = options.fetchClientsFn ?? fetchClients;
-  const pushAll = options.pushToAllFn ?? pushToAll;
-
-  await seedFromEnv(db, process.env.LINE_NOTIFY_UIDS ?? "");
+  const fetchCurrent = options.fetchClientsFn ?? (() => fetchClients(ctx));
+  const pushAll = options.pushToAllFn ?? ((uids: string[], text: string) => pushToAll(ctx, uids, text));
 
   const today = getIctDateString(now);
 
-  const snapshotOk = await ensureTodaySnapshot(db, today, fetchCurrent);
+  const snapshotOk = await ensureTodaySnapshot(db, ctx.id, today, fetchCurrent);
 
-  if (await hasDailyReportNotificationSent(db, today)) {
-    console.warn(`[cron] daily-client-report notification already sent for ${today}; skipping`);
+  if (await isDailyReportSent(db, ctx.id, today)) {
+    console.warn(`[cron] daily-client-report notification already sent for tenant ${ctx.id} on ${today}; skipping`);
     return;
   }
 
@@ -497,9 +493,9 @@ export async function runDailyClientReport(options: RunDailyClientReportOptions 
   let baselineDate = yesterday;
   let baselineLabel = "Yesterday";
 
-  const yesterdayExists = (await countByDate(db, yesterday)) > 0;
+  const yesterdayExists = (await countByDate(db, ctx.id, yesterday)) > 0;
   if (!yesterdayExists) {
-    const fallbackDate = await getLatestSnapshotDateBefore(db, today);
+    const fallbackDate = await getLatestSnapshotDateBefore(db, ctx.id, today);
     if (fallbackDate) {
       baselineDate = fallbackDate;
       baselineLabel = `Baseline (${formatShortDate(fallbackDate)})`;
@@ -510,18 +506,19 @@ export async function runDailyClientReport(options: RunDailyClientReportOptions 
       console.warn(
         `[cron] daily-client-report: no baseline snapshot found before ${today}, skipping notification`,
       );
-      await purgeOlderThan(db, 90, today);
+      await purgeOlderThan(db, ctx.id, 90, today);
       return;
     }
   }
 
-  const uids = await getActiveUids(db);
+  // Recipients live in notify_recipients per tenant; there is no env seed.
+  const uids = await getActiveUids(db, ctx.id);
   if (uids.length === 0) {
     console.warn("[cron] daily-client-report has no active LINE recipients");
   } else if (snapshotOk) {
-    const { label: targetLabel } = getTargetWallet();
-    const todayWalletIds = await getWalletIdsFromNightlySnapshot(db, today);
-    const baselineWalletIds = await getWalletIdsFromNightlySnapshot(db, baselineDate);
+    const targetLabel = String(ctx.targetWallet);
+    const todayWalletIds = await getWalletIdsFromNightlySnapshot(db, ctx.id, today);
+    const baselineWalletIds = await getWalletIdsFromNightlySnapshot(db, ctx.id, baselineDate);
     const todayCount = todayWalletIds.size;
     const baselineCount = baselineWalletIds.size;
     const missing = findMissingFromSets(baselineWalletIds, todayWalletIds);
@@ -536,10 +533,10 @@ export async function runDailyClientReport(options: RunDailyClientReportOptions 
       newIds: newW,
     });
     await pushAll(uids, message);
-    await markDailyReportNotificationSent(db, today);
+    await markDailyReportSent(db, ctx.id, today);
   } else {
     console.warn(`[cron] daily-client-report: today snapshot failed, skipping notification`);
   }
 
-  await purgeOlderThan(db, 90, today);
+  await purgeOlderThan(db, ctx.id, 90, today);
 }

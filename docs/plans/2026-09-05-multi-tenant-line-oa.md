@@ -2232,7 +2232,7 @@ git commit -m "refactor: thread tenant ctx through hfm service"
 - Modify: `apps/api/src/services/line.service.ts`
 - Test: `apps/api/tests/line.service.test.ts`
 
-- [ ] **Step 1: Add the isolation test and `fetchBotInfo` test**
+- [x] **Step 1: Add the isolation test and `fetchBotInfo` test**
 
 ```ts
 test("two tenants push with their own tokens", async () => {
@@ -2264,7 +2264,7 @@ test("fetchBotInfo returns identity or null", async () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 bun test tests/line.service.test.ts

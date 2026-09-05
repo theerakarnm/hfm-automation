@@ -1162,7 +1162,7 @@ This is the only module that decrypts secrets.
 It caches resolved `TenantConfig` objects because the webhook must answer LINE within 2 seconds, and cache misses otherwise cost a database round trip plus three AES decrypts.
 The cache is invalidated the moment the UI saves, and also expires after 60 seconds as a safety net against direct database edits.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/api/tests/tenant-config.service.test.ts
@@ -1327,7 +1327,7 @@ describe("tenant-config.service", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 bun test tests/tenant-config.service.test.ts
@@ -1335,7 +1335,7 @@ bun test tests/tenant-config.service.test.ts
 
 Expected: FAIL with `Cannot find module '../src/services/tenant-config.service'`.
 
-- [ ] **Step 3: Implement the service**
+- [x] **Step 3: Implement the service**
 
 ```ts
 // apps/api/src/services/tenant-config.service.ts
@@ -1446,7 +1446,7 @@ export async function saveTenant(input: TenantInput, id?: number): Promise<numbe
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 bun test tests/tenant-config.service.test.ts
@@ -1454,7 +1454,7 @@ bun test tests/tenant-config.service.test.ts
 
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/services/tenant-config.service.ts tests/tenant-config.service.test.ts

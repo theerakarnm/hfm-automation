@@ -2345,7 +2345,7 @@ grep -n "process.env" src/services/line.service.ts
 
 Expected: tests PASS, grep prints nothing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/services/line.service.ts tests/line.service.test.ts

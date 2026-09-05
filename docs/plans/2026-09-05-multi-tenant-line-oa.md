@@ -2446,7 +2446,7 @@ git commit -m "refactor: read whitelist from tenant ctx"
 This is the direct data-leak fix.
 The module-level `let cache` and `let inflight` become `Map`s keyed by `ctx.id`, so tenant B can never be handed tenant A's account-id map.
 
-- [ ] **Step 1: Add the isolation tests**
+- [x] **Step 1: Add the isolation tests**
 
 ```ts
 test("tenant B never receives tenant A's warmed map", async () => {
@@ -2481,13 +2481,15 @@ test("resetLastTradeCache(tenantId) clears only that tenant", async () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+> Deviation: the reference rows `{ id, last_trade }` do not satisfy `HFMClientRow` and the `as const` result is not assignable to `HFMClientsResult` under typecheck; built the rows with the file's existing `makeRow` helper and typed each stub as `() => Promise<HFMClientsResult>` (same intent: tenant-specific fetch stubs, no `as const`). Existing tests were updated to pass `ctxA` as the new first parameter, and the third test's comment stub was implemented as: warm both tenants with `nowMs` frozen at 0, `resetLastTradeCache(ctxA.id)`, A refetches and sees "A2", B returns its cached "B1" through a stub asserted to never be called.
+
+- [x] **Step 2: Run to verify they fail**
 
 ```bash
 bun test tests/last-trade.service.test.ts
 ```
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Replace the two module singletons:
 
@@ -2546,7 +2548,7 @@ Keep every existing comment about the 5 minute TTL, the ~7.4s endpoint, and the 
 `getLastTradeMapWithin(ctx, deadlineMs, options)` passes ctx through unchanged.
 `GetLastTradeMapOptions` is unchanged.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 bun test tests/last-trade.service.test.ts
@@ -2554,7 +2556,7 @@ bun test tests/last-trade.service.test.ts
 
 Expected: all PASS, including the leak test.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/services/last-trade.service.ts tests/last-trade.service.test.ts

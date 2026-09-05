@@ -5,7 +5,7 @@ import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
 import * as schema from "../src/db/schema";
-import { initDb, resetDbForTests } from "../src/db/connection";
+import { getDb, initDb, resetDbForTests } from "../src/db/connection";
 import {
   getLastTradeMap,
   resetLastTradeCache,
@@ -16,8 +16,13 @@ import {
   updateTenantLineIdentity,
   getTenantRowById,
 } from "../src/repositories/tenant.repository";
-import { saveTenant, invalidateTenantCache } from "../src/services/tenant-config.service";
-import type { HFMClientRow } from "../src/types/hfm.types";
+import {
+  saveTenant,
+  invalidateTenantCache,
+  getTenantConfigForTests,
+} from "../src/services/tenant-config.service";
+import { listLineUsers } from "../src/repositories/line-user.repository";
+import type { HFMClientRow, HFMClientsResult } from "../src/types/hfm.types";
 
 const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? "postgresql://jametirakarn@localhost:5432/hfm_test";
@@ -62,6 +67,16 @@ async function waitFor(
   }
 }
 
+// Primes the per-tenant last-trade cache for the seeded tenant, the same
+// way the webhook request path will read it (keyed by ctx.id).
+async function warmLastTradeCache(
+  fetchClientsFn: () => Promise<HFMClientsResult>,
+): Promise<void> {
+  const ctx = await getTenantConfigForTests(getDb(), TENANT_ID);
+  if (!ctx) throw new Error(`test tenant ${TENANT_ID} not found`);
+  await getLastTradeMap(ctx, { fetchClientsFn });
+}
+
 async function setupTestDb() {
   const client = postgres(TEST_DATABASE_URL, { max: 1 });
   const db = drizzle(client, { schema });
@@ -85,6 +100,9 @@ async function setupTestDb() {
   process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 21).toString("base64");
   TENANT_ID = await insertTenantRow(db, INPUT);
   await addWhitelistUid(db, TENANT_ID, UID, null);
+  // Uabc123 is the standard user in the event-processing tests: the
+  // whitelist is tenant-scoped now, so every allowed uid must be seeded.
+  await addWhitelistUid(db, TENANT_ID, "Uabc123", null);
   await updateTenantLineIdentity(db, TENANT_ID, {
     userId: BOT_USER_ID,
     basicId: null,
@@ -196,7 +214,6 @@ describe("webhook", () => {
   });
 
   test("non-whitelisted user receives rejection message", async () => {
-    process.env.LINE_WHITELIST_UIDS = "Uallowed1,Uallowed2";
     const { app } = await importWebhook();
     const body = JSON.stringify({
       destination: BOT_USER_ID,
@@ -246,8 +263,6 @@ describe("webhook", () => {
     expect(pushBody.replyToken).toBe("token123");
     expect(pushBody.messages[0].type).toBe("text");
     expect(pushBody.messages[0].text).toContain("\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C");
-
-    delete process.env.LINE_WHITELIST_UIDS;
   });
 
   test("valid text message event shows loading before fetching HFM", async () => {
@@ -314,12 +329,10 @@ describe("webhook", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await getLastTradeMap({
-      fetchClientsFn: async () => ({
-        ok: true,
-        data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
-      }),
-    });
+    await warmLastTradeCache(async () => ({
+      ok: true,
+      data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
+    }));
 
     const res = app.fetch(
       new Request(`http://localhost/webhook?oa=${webhookId}`, {
@@ -494,9 +507,6 @@ describe("webhook", () => {
   });
 
   test("wallet whose accounts are all archived replies with the partner notice", async () => {
-    // Self-contained whitelist: .env leaks real LINE_WHITELIST_UIDS into
-    // isolated runs (-t), which would reject Uabc123 before the lookup.
-    process.env.LINE_WHITELIST_UIDS = "Uabc123";
     const { app } = await importWebhook();
     const body = JSON.stringify({
       destination: BOT_USER_ID,
@@ -639,12 +649,10 @@ describe("webhook", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await getLastTradeMap({
-      fetchClientsFn: async () => ({
-        ok: true,
-        data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
-      }),
-    });
+    await warmLastTradeCache(async () => ({
+      ok: true,
+      data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
+    }));
 
     const response = await app.fetch(
       new Request(`http://localhost/webhook?oa=${webhookId}`, {
@@ -735,12 +743,10 @@ describe("webhook", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await getLastTradeMap({
-      fetchClientsFn: async () => ({
-        ok: true,
-        data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
-      }),
-    });
+    await warmLastTradeCache(async () => ({
+      ok: true,
+      data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
+    }));
 
     const response = await app.fetch(
       new Request(`http://localhost/webhook?oa=${webhookId}`, {
@@ -759,7 +765,6 @@ describe("webhook", () => {
   });
 
   test("a non-whitelisted user gets no retry notice when their rejection fails", async () => {
-    process.env.LINE_WHITELIST_UIDS = "Usomeone_else";
     const { app } = await importWebhook();
     const body = JSON.stringify({
       destination: BOT_USER_ID,
@@ -767,7 +772,9 @@ describe("webhook", () => {
         {
           type: "message",
           message: { type: "text", id: "123", text: "98241376" },
-          source: { type: "user", userId: "Uabc123" },
+          // Uabc123 is whitelisted now, so use an unknown uid: its rejection
+          // notice must fail and the catch-all must still stay silent.
+          source: { type: "user", userId: "Ustranger" },
           replyToken: "expired",
           timestamp: 1716000000000,
           mode: "active",
@@ -808,8 +815,12 @@ describe("webhook", () => {
 
   test("a database failure does not stop the lookup reply", async () => {
     const { app } = await importWebhook();
-    process.env.DATABASE_URL = "postgresql://nobody@127.0.0.1:1/none";
-    resetDbForTests();
+
+    // Tenant resolution now reads the tenants table (Task 12), so a fully
+    // unreachable database is a loud 500 by design. The failure the reply
+    // must survive is the one during event processing: break the telemetry
+    // write itself and the customer must still get the lookup reply.
+    await getDb().execute(sql`DROP TABLE line_users`);
 
     const body = JSON.stringify({
       destination: BOT_USER_ID,
@@ -963,9 +974,7 @@ describe("webhook", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await getLastTradeMap({
-      fetchClientsFn: async () => ({ ok: true, data: [] as HFMClientRow[] }),
-    });
+    await warmLastTradeCache(async () => ({ ok: true, data: [] as HFMClientRow[] }));
 
     const res = app.fetch(
       new Request(`http://localhost/webhook?oa=${webhookId}`, {
@@ -1038,9 +1047,7 @@ describe("webhook", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await getLastTradeMap({
-      fetchClientsFn: async () => ({ ok: true, data: [] as HFMClientRow[] }),
-    });
+    await warmLastTradeCache(async () => ({ ok: true, data: [] as HFMClientRow[] }));
 
     const bodyText = JSON.stringify({
       destination: BOT_USER_ID,
@@ -1162,9 +1169,7 @@ describe("webhook", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await getLastTradeMap({
-      fetchClientsFn: async () => ({ ok: true, data: [] as HFMClientRow[] }),
-    });
+    await warmLastTradeCache(async () => ({ ok: true, data: [] as HFMClientRow[] }));
 
     const sendText = async (text: string, replyToken: string) => {
       const bodyText = JSON.stringify({
@@ -1654,6 +1659,63 @@ describe("webhook", () => {
         body,
       });
       expect(res.status).toBe(200);
+    });
+
+    test("a request to tenant A records line_users under tenant A only", async () => {
+      // Seed a second tenant B with its own webhook id (same helper as setup).
+      const seedDb = getDb();
+      const idB = await insertTenantRow(seedDb, { ...INPUT, label: "tenant B" });
+      await updateTenantLineIdentity(seedDb, idB, {
+        userId: "U456",
+        basicId: null,
+        displayName: null,
+      });
+      invalidateTenantCache();
+
+      const { app } = await importWebhook();
+
+      // "hello" is invalid input, so the handler only sends the format-error
+      // reply; every outbound call is stubbed, none reaches a real API.
+      globalThis.fetch = (async (
+        input: Parameters<typeof globalThis.fetch>[0]
+      ) => {
+        void input;
+        return new Response("{}", { status: 200 });
+      }) as unknown as typeof globalThis.fetch;
+
+      const body = bodyFor([
+        {
+          type: "message",
+          message: { type: "text", id: "scope1", text: "hello" },
+          source: { type: "user", userId: UID },
+          replyToken: "reply_scope",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ]);
+      const res = await app.request(`/webhook?oa=${webhookId}`, {
+        method: "POST",
+        headers: { "x-line-signature": computeSig(body, SECRET) },
+        body,
+      });
+      expect(res.status).toBe(200);
+
+      // recordLineUserRequest runs detached from the response; waitFor's
+      // predicate is synchronous, so poll the table directly until the row
+      // lands under tenant A, then assert B stayed empty.
+      const db = getDb();
+      const startedAt = Date.now();
+      let rowsA = await listLineUsers(db, TENANT_ID);
+      while (rowsA.length === 0) {
+        if (Date.now() - startedAt > 2000) {
+          throw new Error("Timed out waiting for the line_users row under tenant A");
+        }
+        await new Promise((r) => setTimeout(r, 10));
+        rowsA = await listLineUsers(db, TENANT_ID);
+      }
+      const rowsB = await listLineUsers(db, idB);
+      expect(rowsA.length).toBe(1);
+      expect(rowsB.length).toBe(0);
     });
   });
 });

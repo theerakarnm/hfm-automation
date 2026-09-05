@@ -2930,7 +2930,7 @@ webhook.post(
 Add `destination?: string` to the `WebhookBody` type in `apps/api/src/types/line.types.ts`.
 Note: LINE requires a response within 2 seconds, which is why `getTenantByWebhookId` must stay cache-backed and must never do the AES round trip on a cache hit.
 
-- [ ] **Step 4: Run the whole webhook suite**
+- [x] **Step 4: Run the whole webhook suite**
 
 ```bash
 bun test tests/webhook.test.ts
@@ -2938,6 +2938,7 @@ bun test tests/webhook.test.ts
 
 Expected: all PASS.
 
+> Deviation: green only after Task 14 removed the dead seedFromEnv import and this task threaded ctx through the handlers (orchestrator note under Task 14).
 > Deviation: not ticked.
 > The run gives 0 pass / 28 fail; every test fails at import time because `src/jobs/daily-client-report.ts` still imports the deleted `seedFromEnv` (removed from `recipient.repository.ts` in Task 11; its callers are Task 14's Files block) and `webhook.ts` imports `generateReportForUser` from that module.
 > With only that import patched in a scratch copy of src+tests, the 7 new routing tests pass 7/7, so the resolver itself is green.
@@ -2961,7 +2962,7 @@ git commit -m "feat: route webhook by tenant webhook id"
 - Modify: `apps/api/src/routes/webhook.ts`
 - Test: `apps/api/tests/webhook.test.ts`
 
-- [ ] **Step 1: Add the scoping test**
+- [x] **Step 1: Add the scoping test**
 
 ```ts
 test("a request to tenant A records line_users under tenant A only", async () => {
@@ -2977,7 +2978,15 @@ test("a request to tenant A records line_users under tenant A only", async () =>
 });
 ```
 
-- [ ] **Step 2: Implement the threading**
+> Deviation: `waitFor(() => true)` returns immediately (its predicate is synchronous), so the test
+> polls `listLineUsers` directly until the row lands under tenant A; fetch is stubbed so the stubbed
+> message flow makes no outbound call.
+> Deviation: the whitelist moved from env (unset = allow everyone) to the per-tenant table, so
+> `setupTestDb` now also seeds `Uabc123` (the standard user in the event-processing tests), the
+> retry-notice test sends `Ustranger` instead, and the now-inert `process.env.LINE_WHITELIST_UIDS`
+> lines were removed. Assertions are unchanged.
+
+- [x] **Step 2: Implement the threading**
 
 Every handler gains `ctx: TenantConfig` as the first parameter, and every service call inside passes it:
 
@@ -2993,13 +3002,24 @@ Every handler gains `ctx: TenantConfig` as the first parameter, and every servic
 
 `recordLineUserRequest(db, ctx.id, uid, event.type)` was already threaded in Task 12.
 
-- [ ] **Step 3: Run**
+- [x] **Step 3: Run**
 
 ```bash
 bun test tests/webhook.test.ts
 ```
 
 Expected: all PASS.
+
+> Deviation: two test-file corrections were needed before the suite could go green:
+> 1. the six last-trade cache-priming calls still used the old `getLastTradeMap({ fetchClientsFn })`
+>    form and are typecheck errors against the `(ctx, options)` signature; they now go through a
+>    `warmLastTradeCache` helper that resolves the seeded tenant via `getTenantConfigForTests`.
+> 2. "a database failure does not stop the lookup reply" pointed `DATABASE_URL` at a dead host, but
+>    tenant resolution now reads the tenants table (Task 12), so an unreachable database is a loud 500
+>    by design; the test now drops `line_users` instead, which breaks exactly the fire-and-forget
+>    telemetry write that the reply must survive. The assertion is unchanged.
+> `bun run typecheck` still reports five pre-existing errors in `tests/line-uids.test.ts`
+> (old-signature calls); that file is Task 17's Files block and was left untouched.
 
 - [ ] **Step 4: Commit**
 

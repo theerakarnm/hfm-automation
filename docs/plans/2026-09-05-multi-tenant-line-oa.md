@@ -3353,7 +3353,7 @@ git commit -m "feat: schedule per-tenant daily report at 05:00 ICT"
 - Test: `apps/api/tests/health.test.ts`
 - Test: `apps/api/tests/line-uids.test.ts`
 
-- [ ] **Step 1: Update `index.ts`**
+- [x] **Step 1: Update `index.ts`**
 
 ```ts
 // Fail fast: a process that cannot decrypt its tenants is not servable.
@@ -3391,7 +3391,7 @@ registerJobs();
 
 `initDb` in `connection.ts` now calls `seedDefaultTenantFromEnv(db)` between table creation and migration, as Task 6 specified.
 
-- [ ] **Step 2: Split the health endpoint**
+- [x] **Step 2: Split the health endpoint**
 
 `GET /internal/health` becomes database and process only:
 
@@ -3428,7 +3428,7 @@ internal.get("/health/tenants", async (c) => {
 });
 ```
 
-- [ ] **Step 3: Update `/internal/line-uids` for tenants**
+- [x] **Step 3: Update `/internal/line-uids` for tenants**
 
 `listLineUsers(db)` gained a `tenantId` in Task 11, so this route must choose one.
 It accepts an optional `?tenant=<id|webhookId|label>`: with the param it lists that tenant only, without it it lists every tenant's users.
@@ -3466,18 +3466,20 @@ internal.get("/line-uids", async (c) => {
 
 Update `tests/line-uids.test.ts`: seed two tenants with distinct uids, assert `?tenant=<A>` returns only A's uids, and that the no-param response separates the two.
 
-- [ ] **Step 4: Update `tests/health.test.ts`**
+- [x] **Step 4: Update `tests/health.test.ts`**
 
 The HFM stub is removed from the health test; `checks.hfm_api` no longer exists.
 Add a test that `/internal/health` returns 200 even when the HFM upstream is unreachable (stub `fetch` to reject), and a test that `/internal/health/tenants` returns one entry per tenant.
 
-- [ ] **Step 5: Run the full suite and typecheck**
+- [x] **Step 5: Run the full suite and typecheck**
 
 ```bash
 bun test && bun run typecheck
 ```
 
 Expected: all PASS, no type errors.
+
+> Deviation: `bun test` passes fully (254 pass, 0 fail across 22 files). `bun run typecheck` still reports 10 errors, all confined to scripts/fetch-client-performance-range.ts, scripts/seed-mock-client-snapshots.ts, scripts/trigger-daily-client-report.ts, scripts/trigger-hfm-healthcheck.ts, owned by Task 25. Zero errors anywhere else, matching the Task 16 interval.
 
 - [ ] **Step 6: Commit**
 

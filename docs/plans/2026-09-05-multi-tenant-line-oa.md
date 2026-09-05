@@ -2954,6 +2954,9 @@ git commit -m "feat: route webhook by tenant webhook id"
 
 ### Task 13: Thread `ctx` through the event handlers
 
+> Deviation (orchestrator): executed AFTER Task 14, see the note there.
+> Also finish Task 12 Step 4 (full webhook suite) once yours pass, with a deviation note cross-referencing Task 14.
+
 **Files:**
 - Modify: `apps/api/src/routes/webhook.ts`
 - Test: `apps/api/tests/webhook.test.ts`
@@ -3008,6 +3011,11 @@ git commit -m "refactor: thread tenant ctx through webhook handlers"
 ---
 
 ### Task 14: Daily report per tenant
+
+> Deviation (orchestrator): this task is executed BEFORE Task 13.
+> Task 11 deleted `seedFromEnv`, but this file still imports it, which breaks module linking for `webhook.ts` (it imports `generateReportForUser` from here).
+> Task 12's executor proved the webhook resolver green once this import is gone.
+> Task 12 Step 4 and Task 13 Step 3 can only pass after this task lands.
 
 **Files:**
 - Modify: `apps/api/src/jobs/daily-client-report.ts`

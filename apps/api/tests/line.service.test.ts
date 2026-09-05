@@ -155,7 +155,7 @@ describe("tenant isolation", () => {
         to: JSON.parse(String(init!.body)).to,
       });
       return new Response("{}", { status: 200 });
-    }) as typeof fetch;
+    }) as unknown as typeof globalThis.fetch;
 
     await pushText(ctxA, "U123", "hi");
     await pushText(ctxB, "U123", "hi");
@@ -172,12 +172,12 @@ describe("fetchBotInfo", () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({
         userId: "U827", basicId: "@abc", displayName: "Test",
-      }), { status: 200 })) as typeof fetch;
+      }), { status: 200 })) as unknown as typeof globalThis.fetch;
     expect(await fetchBotInfo("tok")).toEqual({
       userId: "U827", basicId: "@abc", displayName: "Test",
     });
 
-    globalThis.fetch = (async () => new Response("{}", { status: 401 })) as typeof fetch;
+    globalThis.fetch = (async () => new Response("{}", { status: 401 })) as unknown as typeof globalThis.fetch;
     expect(await fetchBotInfo("bad")).toBeNull();
   });
 });

@@ -76,6 +76,9 @@ export async function initDb(db?: DrizzleDb | PostgresJsDatabase<Record<string, 
       label      TEXT,
       active     INTEGER NOT NULL DEFAULT 1
     );
+    -- Interim nullable tenant_id so the tenant-scoped repository functions
+    -- work before Task 6's migration backfills it and sets NOT NULL.
+    ALTER TABLE notify_recipients ADD COLUMN IF NOT EXISTS tenant_id INTEGER;
 
     CREATE TABLE IF NOT EXISTS daily_report_notifications (
       snapshot_date TEXT PRIMARY KEY,

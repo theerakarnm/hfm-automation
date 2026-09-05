@@ -104,3 +104,14 @@ export async function saveTenant(input: TenantInput, id?: number): Promise<numbe
   logger.info({ tenantId }, "tenant config saved, cache invalidated");
   return tenantId;
 }
+
+// Tests that run against an explicit db handle instead of the global getDb()
+// resolve tenants through this. It bypasses the cache on purpose: tests need
+// fresh reads after direct inserts and seeded rows.
+export async function getTenantConfigForTests(
+  db: DrizzleDb,
+  id: number,
+): Promise<TenantConfig | null> {
+  const row = await getTenantRowById(db, id);
+  return row ? resolveConfig(db, row) : null;
+}

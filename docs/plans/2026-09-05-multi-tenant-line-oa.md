@@ -1473,7 +1473,7 @@ Decision Q6: on boot, if the `tenants` table is empty and the old env vars are p
 After the seed, per-tenant env vars are never read again.
 There is deliberately no env fallback afterwards: a missing field must fail loudly, not silently borrow another OA's wallet.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/api/tests/bootstrap.test.ts
@@ -1542,7 +1542,7 @@ describe("bootstrap seed", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 bun test tests/bootstrap.test.ts
@@ -1550,7 +1550,7 @@ bun test tests/bootstrap.test.ts
 
 Expected: FAIL with `Cannot find module '../src/db/bootstrap'`.
 
-- [ ] **Step 3: Implement `bootstrap.ts`**
+- [x] **Step 3: Implement `bootstrap.ts`**
 
 ```ts
 // apps/api/src/db/bootstrap.ts
@@ -1632,7 +1632,7 @@ Note: `LINE_OA_LABEL` is a new optional env var used only by this seed.
 Add it to `.env.example` in Task 26 with the other first-boot-only variables.
 Also add `getTenantConfigForTests(db, id)` to `tenant-config.service.ts`: a small export that resolves one tenant against an explicit db handle, used by tests that do not run through the global `getDb()`.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 bun test tests/bootstrap.test.ts
@@ -1641,8 +1641,10 @@ bun test tests/bootstrap.test.ts
 Expected: all PASS.
 This task depends on `addRecipient(db, tenantId, lineUid, label)` and `getActiveUids(db, tenantId)` from Task 11.
 Implement those two functions first if you execute this task before Task 11, in the exact shape the contracts define.
+> Deviation: executed before Tasks 6 and 11, so `addRecipient`/`getActiveUids` needed an interim nullable `tenant_id` column on `notify_recipients`, added to `src/db/schema.ts`, `src/db/connection.ts` (`initDb`: `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`), and `tests/db-helpers.ts`. Task 6's guarded migration (backfill + NOT NULL + FK + composite unique) still runs unchanged on top of it.
+> Deviation: `getActiveUids(db, tenantId?)` takes `tenantId` as optional instead of required, because `jobs/hfm-healthcheck.ts` and `jobs/daily-client-report.ts` still call `getActiveUids(db)` with no tenant context until Task 11/13/16, and their tests seed recipients without creating tenants, so a required parameter cannot be satisfied yet. The tenant filter applies whenever `tenantId` is provided.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/db/bootstrap.ts tests/bootstrap.test.ts

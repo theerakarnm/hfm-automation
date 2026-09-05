@@ -32,6 +32,8 @@ export const clientSnapshots = pgTable(
 
 export const notifyRecipients = pgTable("notify_recipients", {
   id: serial("id").primaryKey(),
+  // Nullable interim column: Task 6's migration backfills it and sets NOT NULL.
+  tenantId: integer("tenant_id").references(() => tenants.id),
   lineUid: text("line_uid").notNull().unique(),
   label: text("label"),
   active: integer("active").notNull().default(1),

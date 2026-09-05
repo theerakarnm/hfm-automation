@@ -74,6 +74,9 @@ export async function createTestDb() {
 
     CREATE TABLE IF NOT EXISTS notify_recipients (
       id         SERIAL PRIMARY KEY,
+      -- Nullable interim column: Task 6 replaces this block with the final
+      -- NOT NULL + UNIQUE(tenant_id, line_uid) shape.
+      tenant_id  INTEGER REFERENCES tenants(id),
       line_uid   TEXT NOT NULL UNIQUE,
       label      TEXT,
       active     INTEGER NOT NULL DEFAULT 1

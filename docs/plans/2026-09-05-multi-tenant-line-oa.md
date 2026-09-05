@@ -3996,8 +3996,8 @@ It is the acceptance test for the whole feature.
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { createHmac } from "node:crypto";
 import postgres from "postgres";
-import { drizzle } from "drizzle-orm/postgres-js";
 import { initDb, resetDbForTests, getDb } from "../src/db/connection";
+import { createTestDb, closeTestDb, TEST_DATABASE_URL } from "./db-helpers";
 import { app } from "../src/app"; // see note below
 import { saveTenant, invalidateTenantCache, getTenantConfigForTests } from "../src/services/tenant-config.service";
 import { addWhitelistUid, getTenantRowById } from "../src/repositories/tenant.repository";
@@ -4015,6 +4015,8 @@ const UID_B = "Ubbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const BOT_A = "Ubotbotbotbotbotbotbotbotbotbot1";
 const BOT_B = "Ubotbotbotbotbotbotbotbotbotbot2";
 
+let db: ReturnType<typeof getDb>;
+let client: postgres.Sql;
 let idA = 0;
 let idB = 0;
 let webhookA = "";
@@ -4050,11 +4052,14 @@ async function postWebhook(webhookId: string, secret: string, body: object) {
 
 beforeAll(async () => {
   process.env.DATABASE_URL = TEST_DATABASE_URL;
-  const client = postgres(TEST_DATABASE_URL, { max: 1 });
-  await client.end; // placeholder, see note
+  // createTestDb drops and recreates every table in its new shape; the
+  // following initDb call is then an idempotent no-op that proves initDb
+  // itself runs clean against a fresh multi-tenant schema.
+  const t = await createTestDb();
+  db = t.db;
+  client = t.client;
   resetDbForTests();
-  const db = getDb(TEST_DATABASE_URL);
-  await initDb(db);
+  await initDb(getDb(TEST_DATABASE_URL));
 
   idA = await saveTenant({
     label: "OA Alpha", active: true,
@@ -4074,7 +4079,8 @@ beforeAll(async () => {
   webhookB = (await getTenantRowById(db, idB))!.webhookId;
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await closeTestDb(client);
   resetDbForTests();
   delete process.env.DATABASE_URL;
 });

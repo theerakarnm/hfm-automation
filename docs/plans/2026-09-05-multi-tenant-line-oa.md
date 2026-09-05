@@ -2059,7 +2059,7 @@ git commit -m "feat: scope all data tables by tenant_id"
 Every function that reads `process.env.HFM_API_KEY`, `HFM_API_BASE_URL` or `TARGET_WALLET` takes `ctx: TenantConfig` as its first parameter and reads `ctx.hfmApiKey`, `ctx.hfmApiBaseUrl`, `ctx.targetWallet`.
 Pure helpers (`extractWalletNumber`, `parsePerformanceLookup`, `normalizeClientRow`) keep their signatures: they never read env.
 
-- [ ] **Step 1: Update the tests first**
+- [x] **Step 1: Update the tests first**
 
 In `apps/api/tests/hfm.service.test.ts`, every call site gains a ctx.
 Add one shared factory:
@@ -2127,7 +2127,10 @@ describe("tenant isolation in hfm.service", () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+> Deviation: the reference tenant-isolation test's `as Parameters<typeof checkConditions>[1]` assertion fails typecheck with TS2352 (partial object vs HFMPerformanceData); changed to `as unknown as Parameters<typeof checkConditions>[1]` to keep the same runtime value and satisfy tsc.
+> Deviation: with `makeCtx()` defaulting `hfmApiBaseUrl` to `https://hfm.test`, the fetchAllClients URL assertion now expects `https://hfm.test/api/performance/client-performance` instead of the old env default host; the env-driven checkConditions tests were converted to `makeCtx({ targetWallet: ... })` overrides (test names updated from TARGET_WALLET to ctx target); an afterEach restoring `globalThis.fetch` and deleting `process.env.TARGET_WALLET` was added to the tenant-isolation describe so the stubbed fetch cannot leak into later describes.
+
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 bun test tests/hfm.service.test.ts
@@ -2135,7 +2138,7 @@ bun test tests/hfm.service.test.ts
 
 Expected: FAIL with wrong arity or `process.env` still being read.
 
-- [ ] **Step 3: Change the signatures**
+- [x] **Step 3: Change the signatures**
 
 In `apps/api/src/services/hfm.service.ts`:
 
@@ -2206,7 +2209,7 @@ grep -n "process.env" src/services/hfm.service.ts
 
 Expected: no output (zero matches).
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 bun test tests/hfm.service.test.ts
@@ -2214,7 +2217,7 @@ bun test tests/hfm.service.test.ts
 
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/services/hfm.service.ts tests/hfm.service.test.ts

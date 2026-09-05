@@ -3481,7 +3481,7 @@ Expected: all PASS, no type errors.
 
 > Deviation: `bun test` passes fully (254 pass, 0 fail across 22 files). `bun run typecheck` still reports 10 errors, all confined to scripts/fetch-client-performance-range.ts, scripts/seed-mock-client-snapshots.ts, scripts/trigger-daily-client-report.ts, scripts/trigger-hfm-healthcheck.ts, owned by Task 25. Zero errors anywhere else, matching the Task 16 interval.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/index.ts src/routes/internal.ts tests/health.test.ts tests/line-uids.test.ts

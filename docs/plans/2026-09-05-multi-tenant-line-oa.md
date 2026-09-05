@@ -2360,7 +2360,7 @@ git commit -m "refactor: thread tenant ctx through line service"
 - Modify: `apps/api/src/utils/whitelist.ts`
 - Test: `apps/api/tests/whitelist.test.ts`
 
-- [ ] **Step 1: Rewrite the test**
+- [x] **Step 1: Rewrite the test**
 
 ```ts
 // apps/api/tests/whitelist.test.ts
@@ -2398,7 +2398,7 @@ describe("whitelist", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 ```bash
 bun test tests/whitelist.test.ts
@@ -2406,7 +2406,7 @@ bun test tests/whitelist.test.ts
 
 Expected: FAIL with arity mismatch.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 // apps/api/src/utils/whitelist.ts
@@ -2420,7 +2420,7 @@ export function isWhitelisted(ctx: TenantConfig, userId: string): boolean {
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 ```bash
 bun test tests/whitelist.test.ts
@@ -2428,7 +2428,7 @@ bun test tests/whitelist.test.ts
 
 Expected: 5 PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/utils/whitelist.ts tests/whitelist.test.ts

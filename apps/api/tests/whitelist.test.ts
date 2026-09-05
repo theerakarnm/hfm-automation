@@ -1,114 +1,33 @@
-import { test, expect, describe } from "bun:test";
+// apps/api/tests/whitelist.test.ts
+import { describe, test, expect } from "bun:test";
 import { isWhitelisted } from "../src/utils/whitelist";
+import type { TenantConfig } from "../src/types/tenant.types";
 
-describe("isWhitelisted", () => {
-  test("returns true when LINE_WHITELIST_UIDS is empty (allow all)", () => {
-    const original = process.env.LINE_WHITELIST_UIDS;
-    delete process.env.LINE_WHITELIST_UIDS;
-    expect(isWhitelisted("Uanyone")).toBe(true);
-    process.env.LINE_WHITELIST_UIDS = original;
+function ctx(over: Partial<TenantConfig> = {}): TenantConfig {
+  return {
+    whitelistEnabled: true,
+    whitelistUids: ["U1", "U2"],
+    ...over,
+  } as TenantConfig;
+}
+
+describe("whitelist", () => {
+  test("uid in the tenant list passes", () => {
+    expect(isWhitelisted(ctx(), "U1")).toBe(true);
   });
-
-  test("returns true when LINE_WHITELIST_UIDS is blank string", () => {
-    const original = process.env.LINE_WHITELIST_UIDS;
-    process.env.LINE_WHITELIST_UIDS = "   ";
-    expect(isWhitelisted("Uanyone")).toBe(true);
-    process.env.LINE_WHITELIST_UIDS = original;
+  test("uid not in the list is rejected", () => {
+    expect(isWhitelisted(ctx(), "U9")).toBe(false);
   });
-
-  test("returns true for a UID in the whitelist", () => {
-    const original = process.env.LINE_WHITELIST_UIDS;
-    process.env.LINE_WHITELIST_UIDS = "Uabc123,Udef456";
-    expect(isWhitelisted("Uabc123")).toBe(true);
-    expect(isWhitelisted("Udef456")).toBe(true);
-    process.env.LINE_WHITELIST_UIDS = original;
+  test("disabled whitelist lets everyone through", () => {
+    expect(isWhitelisted(ctx({ whitelistEnabled: false }), "U9")).toBe(true);
   });
-
-  test("returns false for a UID not in the whitelist", () => {
-    const original = process.env.LINE_WHITELIST_UIDS;
-    process.env.LINE_WHITELIST_UIDS = "Uabc123,Udef456";
-    expect(isWhitelisted("Ustranger")).toBe(false);
-    process.env.LINE_WHITELIST_UIDS = original;
+  test("enabled with empty list lets everyone through (unchanged semantics)", () => {
+    expect(isWhitelisted(ctx({ whitelistUids: [] }), "U9")).toBe(true);
   });
-
-  test("handles whitespace around UIDs", () => {
-    const original = process.env.LINE_WHITELIST_UIDS;
-    process.env.LINE_WHITELIST_UIDS = " Uabc123 , Udef456 ";
-    expect(isWhitelisted("Uabc123")).toBe(true);
-    expect(isWhitelisted("Udef456")).toBe(true);
-    expect(isWhitelisted("Uxyz")).toBe(false);
-    process.env.LINE_WHITELIST_UIDS = original;
-  });
-
-  test("single UID works", () => {
-    const original = process.env.LINE_WHITELIST_UIDS;
-    process.env.LINE_WHITELIST_UIDS = "Uonly";
-    expect(isWhitelisted("Uonly")).toBe(true);
-    expect(isWhitelisted("Uother")).toBe(false);
-    process.env.LINE_WHITELIST_UIDS = original;
-  });
-});
-
-describe("LINE_WHITELIST_ENABLED feature flag", () => {
-  test("flag=false bypasses whitelist and allows any UID", () => {
-    const origFlag = process.env.LINE_WHITELIST_ENABLED;
-    const origUids = process.env.LINE_WHITELIST_UIDS;
-    process.env.LINE_WHITELIST_ENABLED = "false";
-    process.env.LINE_WHITELIST_UIDS = "Uallowed1,Uallowed2";
-    expect(isWhitelisted("Ustranger")).toBe(true);
-    process.env.LINE_WHITELIST_ENABLED = origFlag;
-    process.env.LINE_WHITELIST_UIDS = origUids;
-  });
-
-  test("flag=0 bypasses whitelist", () => {
-    const origFlag = process.env.LINE_WHITELIST_ENABLED;
-    const origUids = process.env.LINE_WHITELIST_UIDS;
-    process.env.LINE_WHITELIST_ENABLED = "0";
-    process.env.LINE_WHITELIST_UIDS = "Uallowed1";
-    expect(isWhitelisted("Ustranger")).toBe(true);
-    process.env.LINE_WHITELIST_ENABLED = origFlag;
-    process.env.LINE_WHITELIST_UIDS = origUids;
-  });
-
-  test("flag=off bypasses whitelist", () => {
-    const origFlag = process.env.LINE_WHITELIST_ENABLED;
-    const origUids = process.env.LINE_WHITELIST_UIDS;
-    process.env.LINE_WHITELIST_ENABLED = "off";
-    process.env.LINE_WHITELIST_UIDS = "Uallowed1";
-    expect(isWhitelisted("Ustranger")).toBe(true);
-    process.env.LINE_WHITELIST_ENABLED = origFlag;
-    process.env.LINE_WHITELIST_UIDS = origUids;
-  });
-
-  test("flag=no bypasses whitelist", () => {
-    const origFlag = process.env.LINE_WHITELIST_ENABLED;
-    const origUids = process.env.LINE_WHITELIST_UIDS;
-    process.env.LINE_WHITELIST_ENABLED = "no";
-    process.env.LINE_WHITELIST_UIDS = "Uallowed1";
-    expect(isWhitelisted("Ustranger")).toBe(true);
-    process.env.LINE_WHITELIST_ENABLED = origFlag;
-    process.env.LINE_WHITELIST_UIDS = origUids;
-  });
-
-  test("flag=true still enforces whitelist", () => {
-    const origFlag = process.env.LINE_WHITELIST_ENABLED;
-    const origUids = process.env.LINE_WHITELIST_UIDS;
-    process.env.LINE_WHITELIST_ENABLED = "true";
-    process.env.LINE_WHITELIST_UIDS = "Uallowed1,Uallowed2";
-    expect(isWhitelisted("Uallowed1")).toBe(true);
-    expect(isWhitelisted("Ustranger")).toBe(false);
-    process.env.LINE_WHITELIST_ENABLED = origFlag;
-    process.env.LINE_WHITELIST_UIDS = origUids;
-  });
-
-  test("flag unset still enforces whitelist", () => {
-    const origFlag = process.env.LINE_WHITELIST_ENABLED;
-    const origUids = process.env.LINE_WHITELIST_UIDS;
-    delete process.env.LINE_WHITELIST_ENABLED;
-    process.env.LINE_WHITELIST_UIDS = "Uallowed1";
-    expect(isWhitelisted("Uallowed1")).toBe(true);
-    expect(isWhitelisted("Ustranger")).toBe(false);
-    process.env.LINE_WHITELIST_ENABLED = origFlag;
-    process.env.LINE_WHITELIST_UIDS = origUids;
+  test("another tenant's uid list is not consulted", () => {
+    const a = ctx({ whitelistUids: ["U1"] });
+    const b = ctx({ whitelistUids: ["U2"] });
+    expect(isWhitelisted(a, "U2")).toBe(false);
+    expect(isWhitelisted(b, "U2")).toBe(true);
   });
 });

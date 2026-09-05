@@ -6,7 +6,8 @@ import { getDb } from "../db/connection";
 import { tenantHealthState } from "../db/schema";
 import { listTenantRows } from "../repositories/tenant.repository";
 import { listLineUsers } from "../repositories/line-user.repository";
-import { internalAuthRoutes, verifySession, COOKIE_NAME } from "./internal-auth";
+import { internalAuthRoutes, verifySession, COOKIE_NAME, requireAdmin } from "./internal-auth";
+import internalConfigRoutes from "./internal-config";
 import type { Context, Next } from "hono";
 
 const internal = new Hono();
@@ -115,9 +116,14 @@ internal.get("/line-uids", async (c) => {
   return c.json({ tenants: all });
 });
 
+// Admin UI pages edit real channel tokens, so they take the cookie session
+// plus a CSRF token (requireAdmin), never the ?key= machine credential.
+internal.use("/config", requireAdmin);
+internal.use("/config/*", requireAdmin);
+internal.route("/config", internalConfigRoutes);
+
 // Login and logout pages must stay reachable without any credential, so they
-// are mounted outside the requireMachineCredential scope above. The admin
-// pages added by later tasks mount here behind requireAdmin.
+// are mounted outside the requireMachineCredential scope above.
 internal.route("/", internalAuthRoutes);
 
 export default internal;

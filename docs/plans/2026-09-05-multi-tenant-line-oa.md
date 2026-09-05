@@ -3711,7 +3711,7 @@ Server-rendered with `hono/jsx`.
 No client framework, no build step.
 Inline CSS in the layout is enough for an internal tool.
 
-- [ ] **Step 1: Layout and list page**
+- [x] **Step 1: Layout and list page**
 
 ```tsx
 // apps/api/src/routes/internal-config.tsx
@@ -3805,7 +3805,9 @@ The implementer replaces `CSRF_FROM_CONTEXT` by passing the CSRF token down as a
 Secrets are never echoed back: the edit form shows only a placeholder.
 If you need to show what is stored, show `maskSecret(decryptSecret(row.lineChannelAccessTokenEnc))` as a separate read-only line, never as an input value.
 
-- [ ] **Step 2: Add tests for rendering**
+> Deviation: Added a `/** @jsxImportSource hono/jsx */` pragma as the first line of internal-config.tsx. The reference imports alone do not compile: tsconfig sets `jsx: react-jsx` with no `jsxImportSource`, so tsc resolves JSX to react (not installed). The per-file pragma is the smallest fix and keeps tsconfig outside this task's Files block.
+
+- [x] **Step 2: Add tests for rendering**
 
 ```ts
 test("list shows never-tested badge for a fresh tenant", async () => {
@@ -3821,7 +3823,7 @@ test("unauthenticated list redirects to login", async () => {
 });
 ```
 
-- [ ] **Step 3: Run, commit**
+- [x] **Step 3: Run, commit**
 
 ```bash
 bun test tests/internal-config.test.ts

@@ -3336,7 +3336,7 @@ Expected: no errors.
 
 > Deviation: Expected unsatisfiable at this task; remaining errors confined to src/routes/internal.ts, tests/line-uids.test.ts, src/index.ts, scripts/fetch-client-performance-range.ts, scripts/seed-mock-client-snapshots.ts, scripts/trigger-daily-client-report.ts, scripts/trigger-hfm-healthcheck.ts, owned by Tasks 17/25. Zero errors in src/jobs/index.ts.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/jobs/index.ts

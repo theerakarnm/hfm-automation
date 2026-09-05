@@ -3149,9 +3149,11 @@ git commit -m "refactor: daily report per tenant"
 - Modify: `apps/api/src/jobs/hfm-healthcheck.ts`
 - Test: `apps/api/tests/hfm-healthcheck.test.ts`
 
-- [ ] **Step 1: Update the tests**
+- [x] **Step 1: Update the tests**
 
 Replace the `lastHealthy` reset calls with database state, and add:
+
+> Deviation: the reference `checkHealthyFn: async () => ctxA.id === downTenantId ? false : true` closure is tenant-blind (the injectable gets no ctx, and `ctxA.id === downTenantId` is always true), so every tenant in `runHfmHealthCheckAll` would report down and B would receive a down alert too (push count 2 instead of 1, observed in a failing first run). Replaced with a probe-order script (`probes++ === 0 ? false : true`) since `runHfmHealthCheckAll` loops tenants in id order: A reports down, B reports up, and the assertions keep the intent that B never receives a down message.
 
 ```ts
 test("state change is persisted, restart does not re-alert", async () => {
@@ -3166,7 +3168,11 @@ test("tenant A down does not alert tenant B's recipients", async () => {
 });
 ```
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
+
+> Deviation: `RunHfmHealthCheckOptions.getUidsFn` changed from `(db: DrizzleDb) => Promise<string[]>` to `() => Promise<string[]>`; the new module body closes over `db` and calls `getUids()` with no arguments, and typecheck rejects calling the old signature without an argument.
+> Deviation: also swapped the import/call in `src/jobs/index.ts` from the deleted `runHfmHealthCheck` to `runHfmHealthCheckAll()` so `bun run typecheck` stays green; Task 16 rewrites that file anyway.
+> Deviation: the em dash in `DOWN_MESSAGE` became a plain dash per the repo rule that forbids em dash in files this plan writes; test assertions use Thai substrings and are unaffected.
 
 Delete `let lastHealthy` and `__resetHealthState`.
 New module body:
@@ -3241,13 +3247,16 @@ export async function runHfmHealthCheckAll(
 }
 ```
 
-- [ ] **Step 3: Run**
+- [x] **Step 3: Run**
 
 ```bash
 bun test tests/hfm-healthcheck.test.ts
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
+
+> Deviation: the docs watcher auto-committed the code files mid-task under its own messages, so the
+> watcher commits were squashed back into this step's single `refactor: per-tenant healthcheck with db state` commit.
 
 ```bash
 git add src/jobs/hfm-healthcheck.ts tests/hfm-healthcheck.test.ts

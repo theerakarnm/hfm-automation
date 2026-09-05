@@ -1,5 +1,5 @@
 import { Cron } from "croner";
-import { runHfmHealthCheck } from "./hfm-healthcheck";
+import { runHfmHealthCheckAll } from "./hfm-healthcheck";
 
 export function registerJobs(): void {
   new Cron(
@@ -7,7 +7,7 @@ export function registerJobs(): void {
     { timezone: "Asia/Bangkok", protect: true },
     async () => {
       try {
-        await runHfmHealthCheck();
+        await runHfmHealthCheckAll();
       } catch (e) {
         console.error("[cron] hfm-healthcheck failed:", e);
       }

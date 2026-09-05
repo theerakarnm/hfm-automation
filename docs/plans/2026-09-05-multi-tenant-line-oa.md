@@ -3274,7 +3274,7 @@ The 05:00 ICT daily report described in `INITIAL.md` was never scheduled: `regis
 This task makes the schedule real, which is new production behaviour.
 Announce it to the operator before deploy, and check Open Risk 2 (a host crontab may already trigger it) to avoid double sending.
 
-- [ ] **Step 1: Implement**
+- [x] **Step 1: Implement**
 
 ```ts
 // apps/api/src/jobs/index.ts
@@ -3333,6 +3333,8 @@ bun run typecheck
 ```
 
 Expected: no errors.
+
+> Deviation: Expected unsatisfiable at this task; remaining errors confined to src/routes/internal.ts, tests/line-uids.test.ts, src/index.ts, scripts/fetch-client-performance-range.ts, scripts/seed-mock-client-snapshots.ts, scripts/trigger-daily-client-report.ts, scripts/trigger-hfm-healthcheck.ts, owned by Tasks 17/25. Zero errors in src/jobs/index.ts.
 
 - [ ] **Step 3: Commit**
 

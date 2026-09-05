@@ -3326,7 +3326,7 @@ export function registerJobs(): void {
 }
 ```
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 ```bash
 bun run typecheck
@@ -3335,6 +3335,7 @@ bun run typecheck
 Expected: no errors.
 
 > Deviation: Expected unsatisfiable at this task; remaining errors confined to src/routes/internal.ts, tests/line-uids.test.ts, src/index.ts, scripts/fetch-client-performance-range.ts, scripts/seed-mock-client-snapshots.ts, scripts/trigger-daily-client-report.ts, scripts/trigger-hfm-healthcheck.ts, owned by Tasks 17/25. Zero errors in src/jobs/index.ts.
+> Re-checked by the orchestrator after Tasks 17 and 25: `bun run typecheck` exits 0 with zero errors anywhere. Gate closed.
 
 - [x] **Step 3: Commit**
 

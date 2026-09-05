@@ -4127,7 +4127,7 @@ git commit -m "feat: manage whitelist and recipients per tenant"
 This file exists to fail loudly if any future change reintroduces a shared cache, a shared env read, or a missing `tenant_id` filter.
 It is the acceptance test for the whole feature.
 
-- [ ] **Step 1: Write the suite**
+- [x] **Step 1: Write the suite**
 
 ```ts
 // apps/api/tests/multi-tenant-isolation.test.ts
@@ -4335,7 +4335,18 @@ Note for the implementer: `src/index.ts` currently builds the app inline and cal
 Extract a testable `createApp()` into a new `apps/api/src/app.ts` that `index.ts` re-exports and calls, so tests can import the Hono app without booting crons.
 Keep the top-level boot side effects (registerJobs, cache warm) in `index.ts` only.
 
-- [ ] **Step 2: Run the suite**
+
+> Deviation: added `type: "user"` to every webhook event's `source` - `isTextMessageEvent` requires it, so the snippet's events were silently ignored and no LINE/HFM traffic ever ran (tests timed out).
+> Deviation: `stubFetchRecording()` clears the module-level `outbound` tape on each call - otherwise the replay test's `outbound.length === 0` fails on traffic accumulated by the earlier webhook test.
+> Deviation: tests 1 and 3 poll (`waitFor`) for the flow's final LINE reply POST before asserting - the handler answers 200 before the background reply work runs, so asserting immediately was racy.
+> Deviation: the eight auto-loaded per-OA env vars are deleted at test start - Bun auto-loads `apps/api/.env`, and without the deletion the bootstrap seed inside `initDb` inserts a tenant built from real secrets instead of staying a no-op.
+> Deviation: test 4 builds the injected rows with a `makeRow` helper typed `HFMClientRow` - the snippet's `{ id, last_trade } as const` literals miss required fields and fail typecheck.
+> Deviation: test 6 asserts per-uid containment with fresh uids instead of `listLineUsers(db, idB).length === 0` - tests 1 and 3 legitimately record webhook rows for tenant B, so B's list is no longer empty; the isolation property itself is unchanged.
+> Deviation: the guard's forbidden list includes `HFM_API_BASE_URL` (eight vars, matching the env split above) - the snippet listed seven.
+> Deviation: `afterAll` restores `globalThis.fetch` - bun test runs every file in one process, and the recording stub must not leak into later test files.
+> Deviation: `beforeAll` calls `invalidateTenantCache()` after `saveTenant` (the snippet imports it but never calls it) to also evict config-cache entries left by earlier test files under other tenant ids.
+
+- [x] **Step 2: Run the suite**
 
 ```bash
 bun test tests/multi-tenant-isolation.test.ts

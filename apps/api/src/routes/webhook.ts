@@ -14,7 +14,8 @@ import { buildTradingCard, buildPaginationCard } from "../builders/flex-message.
 import { generateReportForUser, type ReportPeriod } from "../jobs/daily-client-report";
 import { isTextMessageEvent, isPostbackEvent } from "../types/line.types";
 import { isWhitelisted } from "../utils/whitelist";
-import { logError } from "../utils/logger";
+import { logError, logger } from "../utils/logger";
+import { getTenantByWebhookId } from "../services/tenant-config.service";
 import { getDb } from "../db/connection";
 import { recordLineUserRequest } from "../repositories/line-user.repository";
 import type { WebhookBody, TextMessageEvent, PostbackEvent } from "../types/line.types";
@@ -41,7 +42,7 @@ const RETRY_MESSAGE =
 const webhook = new Hono();
 
 webhook.post(
-  "/",
+  "/:webhookId?",
   bodyLimit({
     maxSize: 256 * 1024,
     onError: (c) => c.text("Payload Too Large", 413),
@@ -50,13 +51,25 @@ webhook.post(
     const rawBody = await c.req.text();
     const sig = c.req.header("x-line-signature") ?? "";
 
-    if (
-      !verifyLineSignature(
-        rawBody,
-        sig,
-        process.env.LINE_CHANNEL_SECRET ?? ""
-      )
-    ) {
+    // The `oa` id is a routing hint only. LINE signs the body, never the
+    // URL, so identity is proven by the tenant's own channel secret below.
+    const webhookId = c.req.query("oa") ?? c.req.param("webhookId") ?? "";
+    if (!webhookId) return c.text("Not Found", 404);
+
+    const ctx = await getTenantByWebhookId(webhookId);
+    if (!ctx) {
+      logger.warn({ webhookId }, "webhook called with unknown oa id");
+      return c.text("Not Found", 404);
+    }
+
+    // Deliberately disabled tenants answer 200 so LINE keeps the webhook
+    // enabled; re-enabling later needs no console visit.
+    if (!ctx.active) {
+      logger.info({ tenantId: ctx.id }, "webhook for inactive tenant ignored");
+      return c.text("OK", 200);
+    }
+
+    if (!verifyLineSignature(rawBody, sig, ctx.lineChannelSecret)) {
       return c.text("Unauthorized", 400);
     }
 
@@ -67,30 +80,39 @@ webhook.post(
       return c.text("Bad Request", 400);
     }
 
-    const events = body.events ?? [];
+    // Body is now trustworthy. Cross-check that this OA really owns this
+    // webhook URL: the common setup mistake is pasting tenant A's URL into
+    // tenant B's LINE console. destination is always present per LINE docs.
+    if (ctx.lineBotUserId && body.destination && body.destination !== ctx.lineBotUserId) {
+      logger.error(
+        { tenantId: ctx.id, expected: ctx.lineBotUserId, got: body.destination },
+        "webhook destination mismatch: this URL is registered in another OA's console",
+      );
+      return c.text("Wrong channel", 400);
+    }
+
+    const events = (body.events ?? []).slice(0, MAX_WEBHOOK_EVENTS);
     const db = getDb();
 
-    const eventsToProcess = events.slice(0, MAX_WEBHOOK_EVENTS);
-
-    for (const event of eventsToProcess) {
+    for (const event of events) {
       const uid = event.source?.userId;
       if (uid) {
         // Telemetry only - a database hiccup must never stop the customer's reply.
-        recordLineUserRequest(db, uid, event.type).catch((err) =>
+        recordLineUserRequest(db, ctx.id, uid, event.type).catch((err) =>
           logError("line-user", err),
         );
       }
       if (isTextMessageEvent(event)) {
         const { replyToken } = event;
-        processTextEvent(event).catch((err) => {
+        processTextEvent(ctx, event).catch((err) => {
           logError("webhook", err);
-          if (uid) void notifyRetry(replyToken, uid);
+          if (uid) void notifyRetry(ctx, replyToken, uid);
         });
       } else if (isPostbackEvent(event)) {
         const { replyToken } = event;
-        processPostbackEvent(event).catch((err) => {
+        processPostbackEvent(ctx, event).catch((err) => {
           logError("webhook", err);
-          if (uid) void notifyRetry(replyToken, uid);
+          if (uid) void notifyRetry(ctx, replyToken, uid);
         });
       }
     }

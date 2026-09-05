@@ -2707,7 +2707,13 @@ The resolution order is fixed by the contracts and must not be reordered: the `o
 5. only now trust the body: compare `destination` with the stored bot user id, 400 when mismatched
 6. process events with `ctx`, return 200
 
-- [ ] **Step 1: Update `webhook.test.ts` setup and add the routing tests**
+- [x] **Step 1: Update `webhook.test.ts` setup and add the routing tests**
+
+> Deviation: setupTestDb deletes `TARGET_WALLET` before `initDb` and calls `invalidateTenantCache()` after seeding.
+> Bun auto-loads `apps/api/.env`, so `TARGET_WALLET` otherwise makes the bootstrap seed run inside the first `initDb`, before `CONFIG_ENCRYPTION_KEY` is set, and throw.
+> The cache clear is needed because every setup recreates tenant id 1, so a cached config from the previous test would leak into the next one.
+> `INPUT` and `TENANT_ID` were hoisted to module constants and each routing test obtains `app` via `importWebhook()`, which the snippets reference but do not define.
+> `drizzle(client)` became `drizzle(client, { schema })`; the schema-less generic is not assignable to `DrizzleDb` once `db` is passed to the tenant repositories.
 
 The test file already signs bodies with `computeSig(body, SECRET)` and creates the schema itself.
 Extend `setupTestDb` to also seed one tenant and export its webhook id:
@@ -2832,13 +2838,13 @@ describe("webhook tenant routing", () => {
 
 Update the existing event-processing tests to send `?oa=${webhookId}` and `destination: BOT_USER_ID` too, and to sign with `SECRET`.
 
-- [ ] **Step 2: Run to verify the new tests fail**
+- [x] **Step 2: Run to verify the new tests fail**
 
 ```bash
 bun test tests/webhook.test.ts -t "webhook tenant routing"
 ```
 
-- [ ] **Step 3: Implement the resolver in `webhook.ts`**
+- [x] **Step 3: Implement the resolver in `webhook.ts`**
 
 ```ts
 webhook.post(
@@ -2932,7 +2938,12 @@ bun test tests/webhook.test.ts
 
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+> Deviation: not ticked.
+> The run gives 0 pass / 28 fail; every test fails at import time because `src/jobs/daily-client-report.ts` still imports the deleted `seedFromEnv` (removed from `recipient.repository.ts` in Task 11; its callers are Task 14's Files block) and `webhook.ts` imports `generateReportForUser` from that module.
+> With only that import patched in a scratch copy of src+tests, the 7 new routing tests pass 7/7, so the resolver itself is green.
+> Remaining errors are confined to `src/jobs/daily-client-report.ts` (owned by Task 14), `src/jobs/hfm-healthcheck.ts` (owned by Task 15), and the old handler bodies in `src/routes/webhook.ts` (owned by Task 13).
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/routes/webhook.ts src/types/line.types.ts tests/webhook.test.ts

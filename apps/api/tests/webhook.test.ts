@@ -4,11 +4,19 @@ import { createHmac } from "node:crypto";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
+import * as schema from "../src/db/schema";
 import { initDb, resetDbForTests } from "../src/db/connection";
 import {
   getLastTradeMap,
   resetLastTradeCache,
 } from "../src/services/last-trade.service";
+import {
+  insertTenantRow,
+  addWhitelistUid,
+  updateTenantLineIdentity,
+  getTenantRowById,
+} from "../src/repositories/tenant.repository";
+import { saveTenant, invalidateTenantCache } from "../src/services/tenant-config.service";
 import type { HFMClientRow } from "../src/types/hfm.types";
 
 const TEST_DATABASE_URL =
@@ -17,6 +25,25 @@ const TEST_DATABASE_URL =
 const ORIGINAL_FETCH = globalThis.fetch;
 
 const SECRET = "test_channel_secret";
+
+// The single seeded tenant. `destination` must equal BOT_USER_ID, which is
+// stored as the tenant's line_bot_user_id by setupTestDb below.
+const BOT_USER_ID = "U123";
+const UID = "U11111111111111111111111111111111";
+
+let webhookId = "";
+let TENANT_ID = 0;
+
+const INPUT = {
+  label: "test",
+  active: true,
+  lineChannelAccessToken: "test_token",
+  lineChannelSecret: SECRET,
+  hfmApiKey: "test_hfm_key",
+  hfmApiBaseUrl: "https://api.hfaffiliates.com",
+  targetWallet: 30506525,
+  whitelistEnabled: true,
+};
 
 function computeSig(body: string, secret: string): string {
   return createHmac("sha256", secret).update(body).digest("base64");
@@ -37,7 +64,7 @@ async function waitFor(
 
 async function setupTestDb() {
   const client = postgres(TEST_DATABASE_URL, { max: 1 });
-  const db = drizzle(client);
+  const db = drizzle(client, { schema });
   await db.execute(sql`
     DROP TABLE IF EXISTS client_request_snapshot_rows CASCADE;
     DROP TABLE IF EXISTS client_request_snapshots CASCADE;
@@ -46,9 +73,29 @@ async function setupTestDb() {
     DROP TABLE IF EXISTS daily_report_notifications CASCADE;
     DROP TABLE IF EXISTS notify_recipients CASCADE;
     DROP TABLE IF EXISTS client_snapshots CASCADE;
+    DROP TABLE IF EXISTS tenant_health_state CASCADE;
+    DROP TABLE IF EXISTS tenant_whitelist_uids CASCADE;
+    DROP TABLE IF EXISTS tenants CASCADE;
   `);
+  // Bun auto-loads apps/api/.env, whose TARGET_WALLET would make the
+  // bootstrap seed run inside initDb before CONFIG_ENCRYPTION_KEY exists.
+  // Tests always seed their own tenant below, so keep the boot seed off.
+  delete process.env.TARGET_WALLET;
   await initDb(db);
+  process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 21).toString("base64");
+  TENANT_ID = await insertTenantRow(db, INPUT);
+  await addWhitelistUid(db, TENANT_ID, UID, null);
+  await updateTenantLineIdentity(db, TENANT_ID, {
+    userId: BOT_USER_ID,
+    basicId: null,
+    displayName: null,
+  });
+  const row = await getTenantRowById(db, TENANT_ID);
+  webhookId = row!.webhookId;
   await client.end();
+  // The tenant cache is keyed by tenant id, and every fresh setup re-creates
+  // tenant id 1, so a cached config from the previous test would leak in.
+  invalidateTenantCache();
   resetDbForTests();
 }
 
@@ -78,7 +125,7 @@ describe("webhook", () => {
   test("invalid signature returns 400", async () => {
     const { app } = await importWebhook();
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -96,7 +143,7 @@ describe("webhook", () => {
     const body = '{"destination":"U123","events":[]}';
     const sig = computeSig(body, SECRET);
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -113,7 +160,7 @@ describe("webhook", () => {
   test("non-message event returns 200 with no push", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "follow",
@@ -132,7 +179,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -152,7 +199,7 @@ describe("webhook", () => {
     process.env.LINE_WHITELIST_UIDS = "Uallowed1,Uallowed2";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -180,7 +227,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -206,7 +253,7 @@ describe("webhook", () => {
   test("valid text message event shows loading before fetching HFM", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -275,7 +322,7 @@ describe("webhook", () => {
     });
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -307,7 +354,7 @@ describe("webhook", () => {
     process.env.LAST_TRADE_DEADLINE_MS = "200";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -371,7 +418,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const response = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -396,7 +443,7 @@ describe("webhook", () => {
   test("HFM server error replies with the HFM-down notice instead of silence", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -427,7 +474,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const response = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-line-signature": sig },
         body,
@@ -452,7 +499,7 @@ describe("webhook", () => {
     process.env.LINE_WHITELIST_UIDS = "Uabc123";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -508,7 +555,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const response = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -533,7 +580,7 @@ describe("webhook", () => {
   test("an expired reply token falls back to pushing the card", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -600,7 +647,7 @@ describe("webhook", () => {
     });
 
     const response = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-line-signature": sig },
         body,
@@ -622,7 +669,7 @@ describe("webhook", () => {
   test("a total send failure still pushes the try-again notice", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -696,7 +743,7 @@ describe("webhook", () => {
     });
 
     const response = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-line-signature": sig },
         body,
@@ -715,7 +762,7 @@ describe("webhook", () => {
     process.env.LINE_WHITELIST_UIDS = "Usomeone_else";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -746,7 +793,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const response = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-line-signature": sig },
         body,
@@ -765,7 +812,7 @@ describe("webhook", () => {
     resetDbForTests();
 
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -796,7 +843,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const response = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-line-signature": sig },
         body,
@@ -817,7 +864,7 @@ describe("webhook", () => {
   test("T-prefix account lookup resolves wallet via client_id and returns all linked accounts", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -921,7 +968,7 @@ describe("webhook", () => {
     });
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -996,7 +1043,7 @@ describe("webhook", () => {
     });
 
     const bodyText = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -1011,7 +1058,7 @@ describe("webhook", () => {
 
     const sigText = computeSig(bodyText, SECRET);
     const resText = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1033,7 +1080,7 @@ describe("webhook", () => {
     fetchCalls.length = 0;
 
     const bodyPostback = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "postback",
@@ -1048,7 +1095,7 @@ describe("webhook", () => {
 
     const sigPostback = computeSig(bodyPostback, SECRET);
     const resPostback = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1121,7 +1168,7 @@ describe("webhook", () => {
 
     const sendText = async (text: string, replyToken: string) => {
       const bodyText = JSON.stringify({
-        destination: "U123",
+        destination: BOT_USER_ID,
         events: [
           {
             type: "message",
@@ -1134,7 +1181,7 @@ describe("webhook", () => {
         ],
       });
       const res = await app.fetch(
-        new Request("http://localhost/webhook", {
+        new Request(`http://localhost/webhook?oa=${webhookId}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1168,7 +1215,7 @@ describe("webhook", () => {
   test("invalid input returns format error message", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -1196,7 +1243,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1218,7 +1265,7 @@ describe("webhook", () => {
     process.env.TARGET_WALLET = "30506525";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -1288,7 +1335,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1317,7 +1364,7 @@ describe("webhook", () => {
     process.env.TARGET_WALLET = "30506525";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -1354,7 +1401,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1375,7 +1422,7 @@ describe("webhook", () => {
     process.env.TARGET_WALLET = "30506525";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -1407,7 +1454,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1428,7 +1475,7 @@ describe("webhook", () => {
     process.env.TARGET_WALLET = "30506525";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -1460,7 +1507,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1481,7 +1528,7 @@ describe("webhook", () => {
     process.env.TARGET_WALLET = "30506525";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -1513,7 +1560,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1528,6 +1575,86 @@ describe("webhook", () => {
     expect(fetchCalls.at(-1)?.url).toBe("https://api.line.me/v2/bot/message/reply");
     const replyBody = JSON.parse(fetchCalls.at(-1)?.body ?? "{}");
     expect(replyBody.replyToken).toBe("tokenMonth");
+  });
+
+  describe("webhook tenant routing", () => {
+    const bodyFor = (events: unknown[]) =>
+      JSON.stringify({ destination: BOT_USER_ID, events });
+
+    test("missing oa id -> 404", async () => {
+      const { app } = await importWebhook();
+      const res = await app.request("/webhook", { method: "POST", body: "" });
+      expect(res.status).toBe(404);
+    });
+
+    test("unknown oa id -> 404", async () => {
+      const { app } = await importWebhook();
+      const res = await app.request("/webhook?oa=00000000-0000-4000-8000-0000000000ff", {
+        method: "POST",
+        body: "{}",
+      });
+      expect(res.status).toBe(404);
+    });
+
+    test("valid signature for the wrong tenant -> 400", async () => {
+      const { app } = await importWebhook();
+      // Signed with some other OA's secret but sent to this tenant's URL.
+      const body = bodyFor([]);
+      const res = await app.request(`/webhook?oa=${webhookId}`, {
+        method: "POST",
+        headers: { "x-line-signature": computeSig(body, "wrong_secret") },
+        body,
+      });
+      expect(res.status).toBe(400);
+    });
+
+    test("inactive tenant -> 200 without processing", async () => {
+      const { app } = await importWebhook();
+      await saveTenant({ ...INPUT, active: false }, TENANT_ID);
+      const body = bodyFor([]);
+      const res = await app.request(`/webhook?oa=${webhookId}`, {
+        method: "POST",
+        headers: { "x-line-signature": computeSig(body, SECRET) },
+        body,
+      });
+      expect(res.status).toBe(200);
+    });
+
+    test("destination mismatch -> 400 (webhook URL pasted into another OA)", async () => {
+      const { app } = await importWebhook();
+      const body = JSON.stringify({
+        destination: "U99999999999999999999999999999999",
+        events: [],
+      });
+      const res = await app.request(`/webhook?oa=${webhookId}`, {
+        method: "POST",
+        headers: { "x-line-signature": computeSig(body, SECRET) },
+        body,
+      });
+      expect(res.status).toBe(400);
+    });
+
+    test("path form /webhook/<id> works the same as ?oa=", async () => {
+      const { app } = await importWebhook();
+      const body = bodyFor([]);
+      const res = await app.request(`/webhook/${webhookId}`, {
+        method: "POST",
+        headers: { "x-line-signature": computeSig(body, SECRET) },
+        body,
+      });
+      expect(res.status).toBe(200);
+    });
+
+    test("happy path: known id, valid signature, matching destination -> 200", async () => {
+      const { app } = await importWebhook();
+      const body = bodyFor([]);
+      const res = await app.request(`/webhook?oa=${webhookId}`, {
+        method: "POST",
+        headers: { "x-line-signature": computeSig(body, SECRET) },
+        body,
+      });
+      expect(res.status).toBe(200);
+    });
   });
 });
 

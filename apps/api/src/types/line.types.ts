@@ -1,5 +1,5 @@
 export interface WebhookBody {
-  destination: string;
+  destination?: string;
   events: WebhookEvent[];
 }
 

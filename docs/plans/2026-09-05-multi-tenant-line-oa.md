@@ -3576,6 +3576,8 @@ describe("admin auth", () => {
 });
 ```
 
+> Deviation: typecheck (strict `noUncheckedIndexedAccess`) rejected two lines of the reference test: `cookie.split(";")[0]` inside the `headers` object and `good.replace(...)` where `good` came from `split(";")[0]`. Added non-null `!` on both `split(";")[0]` results (split always returns at least one element), the smallest change that satisfies the tool without weakening any assertion.
+
 - [x] **Step 2: Run to verify they fail**
 
 ```bash

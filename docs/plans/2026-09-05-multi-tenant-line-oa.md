@@ -2233,6 +2233,7 @@ git commit -m "refactor: thread tenant ctx through hfm service"
 - Test: `apps/api/tests/line.service.test.ts`
 
 - [x] **Step 1: Add the isolation test and `fetchBotInfo` test**
+> Deviation: the reference snippet's `as typeof fetch` casts were rejected by tsc (TS2352); used the file's established `as unknown as typeof globalThis.fetch` pattern instead.
 
 ```ts
 test("two tenants push with their own tokens", async () => {

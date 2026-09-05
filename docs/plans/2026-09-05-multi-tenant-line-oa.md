@@ -3584,7 +3584,7 @@ describe("admin auth", () => {
 bun test tests/internal-auth.test.ts
 ```
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 // apps/api/src/routes/internal-auth.ts
@@ -3679,7 +3679,11 @@ internalAuthRoutes.post("/logout", (c) => {
 
 In `internal.ts`, mount `internalAuthRoutes` and protect the config routes with `requireAdmin`, while keeping the `?key=` middleware only on the machine-readable routes listed in the contracts.
 
-- [ ] **Step 4: Run**
+> Deviation: the expiry check in `verifySession` uses `<=` instead of `<`. With the reference `<`, the "expired cookie is rejected" test fails because `issueSession(0)` is issued and verified within the same millisecond, so `expiresAt < now` is false and the expired session was accepted. `<=` keeps the intent (an expiry that has been reached is expired) and cannot reject a healthy 8h session.
+> Deviation: `requireCsrf` is `async` and returns `Promise<boolean>` instead of `boolean`, because reading the posted form field requires `await c.req.parseBody()`. Handlers answer 403 when it resolves false. `parseBody` caches, so handlers can parse the body again afterwards.
+> Deviation: `verifySession` and `COOKIE_NAME` are exported (the plan kept them module-private) so `internal.ts` can accept a valid admin cookie as an alternative credential on the machine-readable routes, as the shared contracts require. `internal.ts` now scopes the `?key=` middleware to `/health`, `/health/*`, `/logs`, `/logs/*`, and `/line-uids` (replacing the catch-all `use("*")`), mounts `internalAuthRoutes` at `/`, and leaves protecting `/internal/config*` to Task 19, where those routes are first created.
+
+- [x] **Step 4: Run**
 
 ```bash
 bun test tests/internal-auth.test.ts

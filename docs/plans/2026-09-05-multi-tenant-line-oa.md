@@ -3503,7 +3503,7 @@ The admin pages edit real channel tokens, so they do not accept `?key=`.
 They use a signed httpOnly cookie.
 The `?key=` middleware must keep working for `/internal/health`, `/internal/logs*`, and `/internal/line-uids`, because the docker healthcheck and existing tooling depend on it.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/api/tests/internal-auth.test.ts
@@ -3576,7 +3576,7 @@ describe("admin auth", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 ```bash
 bun test tests/internal-auth.test.ts

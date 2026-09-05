@@ -428,7 +428,7 @@ The cookie is accepted as an alternative on those routes and is the only accepte
 Secrets that move from `.env` into PostgreSQL must not sit in the database as plaintext.
 AES-256-GCM gives authenticated encryption: a tampered or wrongly keyed ciphertext fails loudly instead of returning garbage.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/api/tests/crypto.test.ts
@@ -503,7 +503,7 @@ describe("crypto", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run from `apps/api`:
 

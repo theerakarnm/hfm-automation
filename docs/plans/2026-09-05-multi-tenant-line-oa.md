@@ -757,7 +757,7 @@ git commit -m "feat: add tenants, whitelist, health-state tables"
 The repository stores and returns `*_enc` strings untouched.
 Encryption and decryption happen only in `tenant-config.service.ts` (Task 4), so a repository bug can never leak plaintext secrets into logs by accident.
 
-- [ ] **Step 1: Create the types file**
+- [x] **Step 1: Create the types file**
 
 ```ts
 // apps/api/src/types/tenant.types.ts
@@ -821,7 +821,7 @@ export interface TenantInput {
 }
 ```
 
-- [ ] **Step 2: Write the failing repository test**
+- [x] **Step 2: Write the failing repository test**
 
 ```ts
 // apps/api/tests/tenant.repository.test.ts
@@ -938,7 +938,10 @@ describe("tenant.repository", () => {
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+> Deviation: the reference test calls `createTestDb()` and `closeTestDb(client)` without importing them, which fails typecheck and runtime; added `import { createTestDb, closeTestDb } from "./db-helpers";` as the smallest fix that keeps the step's intent.
+> Deviation: the rotation assertion `expect(rotated).not.toBe((await getTenantRowById(db, id))!.webhookId === rotated ? rotated : "")` is inverted - it fails exactly when rotation persists correctly. Replaced it with capturing `before` the rotation, then `expect(rotated).not.toBe(before)` and `expect((await getTenantRowById(db, id))!.webhookId).toBe(rotated)`, which is a stronger check.
+
+- [x] **Step 3: Run the test to verify it fails**
 
 ```bash
 bun test tests/tenant.repository.test.ts
@@ -946,7 +949,7 @@ bun test tests/tenant.repository.test.ts
 
 Expected: FAIL with `Cannot find module '../src/repositories/tenant.repository'`.
 
-- [ ] **Step 4: Implement the repository**
+- [x] **Step 4: Implement the repository**
 
 ```ts
 // apps/api/src/repositories/tenant.repository.ts
@@ -1133,7 +1136,7 @@ Note: `removeWhitelistUid` must also filter by `tenantId` in the where clause.
 Use `and(eq(tenantWhitelistUids.tenantId, tenantId), eq(tenantWhitelistUids.lineUid, lineUid))` with `and` imported from `drizzle-orm`.
 The same applies to every other tenant-scoped delete or update in this plan: always filter by `tenant_id`, otherwise one tenant can delete another tenant's rows.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 ```bash
 bun test tests/tenant.repository.test.ts
@@ -1141,7 +1144,7 @@ bun test tests/tenant.repository.test.ts
 
 Expected: all PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/types/tenant.types.ts src/repositories/tenant.repository.ts tests/tenant.repository.test.ts

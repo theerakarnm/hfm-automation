@@ -104,3 +104,12 @@ export interface HFMClientsResponse {
 export type HFMClientsResult =
   | { ok: true; data: HFMClientRow[] }
   | { ok: false; reason: "server_error" | "timeout" };
+
+/**
+ * Current-calendar-month (Asia/Bangkok) trading activity for one account,
+ * derived from a date-ranged client-performance call. `lots` is HFM `volume`.
+ */
+export interface MonthlyActivity {
+  lots: number;
+  hasTrade: boolean;
+}

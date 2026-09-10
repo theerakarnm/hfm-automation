@@ -1,4 +1,4 @@
-import type { HFMPerformanceData, ConditionCheck } from "../types/hfm.types";
+import type { HFMPerformanceData, ConditionCheck, MonthlyActivity } from "../types/hfm.types";
 import { dayjs } from "../utils/dayjs";
 import { logger } from "../utils/logger";
 
@@ -229,10 +229,18 @@ const keyValueRow = (label: string, value: string): object => ({
   ],
 });
 
-export function buildTradingCard(
+export interface TradingCardOptions {
+  showVolume?: boolean;
+  /** Current-calendar-month activity for this account. v2 only. */
+  monthly?: MonthlyActivity;
+}
+
+// Frozen: the flex-v1 card. Do not change its output JSON - it is snapshot
+// locked in tests/flex-message.builder.test.ts.
+export function buildTradingCardV1(
   data: HFMPerformanceData,
   conditions: ConditionCheck,
-  options: { showVolume?: boolean } = {}
+  options: TradingCardOptions = {}
 ): object {
   const status = getStatusMeta(data.activity_status);
   const accountStatus = getAccountStatusMeta(data.status);
@@ -378,6 +386,210 @@ export function buildTradingCard(
       ],
     },
   };
+}
+
+const MONTHLY_LOT_TARGET = 2;
+
+const getMonthlyStatusMeta = (
+  monthly: MonthlyActivity | undefined
+): { label: string; color: string; backgroundColor: string } => {
+  if (!monthly) {
+    return { label: "N/A", color: colors.muted, backgroundColor: "#F3F4F6" };
+  }
+  if (monthly.hasTrade) {
+    return {
+      label: "\u2713 Active",
+      color: colors.green,
+      backgroundColor: colors.greenSoft,
+    };
+  }
+  return {
+    label: "\u2717 Inactive",
+    color: "#DC2626",
+    backgroundColor: "#FEF2F2",
+  };
+};
+
+const getMonthlyLotsMeta = (
+  monthly: MonthlyActivity | undefined
+): { label: string; color: string; backgroundColor: string } => {
+  if (!monthly) {
+    return { label: "N/A", color: colors.muted, backgroundColor: "#F3F4F6" };
+  }
+  const lots = Number.isFinite(monthly.lots) ? monthly.lots : 0;
+  const passed = lots >= MONTHLY_LOT_TARGET;
+  return {
+    label: `${passed ? "\u2713" : "\u2717"} ${lots.toFixed(2)} / ${MONTHLY_LOT_TARGET} lots`,
+    color: passed ? colors.green : "#DC2626",
+    backgroundColor: passed ? colors.greenSoft : "#FEF2F2",
+  };
+};
+
+// flex-v2: same fields and order as v1, except the cumulative Volume metric is
+// replaced by monthly status + monthly 2-lot progress, and a Rank row is added.
+// Cumulative lots are never printed - they only decide the rank label.
+export function buildTradingCardV2(
+  data: HFMPerformanceData,
+  conditions: ConditionCheck,
+  options: TradingCardOptions = {}
+): object {
+  const status = getStatusMeta(data.activity_status);
+  const accountStatus = getAccountStatusMeta(data.status);
+  const matchAllBadge = getMatchAllMeta(conditions.matchAll);
+  const walletIdValue = String(data.client_id);
+  const accountIdValue = String(data.account_id);
+  const lastTrade = fmtLastTrade(data.last_trade);
+  const monthlyStatus = getMonthlyStatusMeta(options.monthly);
+  const monthlyLots = getMonthlyLotsMeta(options.monthly);
+
+  return {
+    type: "bubble",
+    size: "mega",
+    styles: {
+      header: { backgroundColor: colors.green },
+      footer: { backgroundColor: colors.footer },
+    },
+    header: {
+      type: "box",
+      layout: "vertical",
+      paddingAll: "16px",
+      spacing: "xs",
+      contents: [
+        {
+          type: "text",
+          text: "Trading Account Summary",
+          color: colors.white,
+          weight: "bold",
+          size: "md",
+          wrap: true,
+          maxLines: 2,
+          adjustMode: "shrink-to-fit",
+        },
+        {
+          type: "text",
+          text: "Customer Support",
+          color: "#E8F5E9",
+          size: "xs",
+          wrap: true,
+          maxLines: 1,
+        },
+      ],
+    },
+    body: {
+      type: "box",
+      layout: "vertical",
+      spacing: "sm",
+      paddingAll: "14px",
+      contents: [
+        {
+          type: "box",
+          layout: "horizontal",
+          spacing: "sm",
+          contents: [
+            infoCard("Wallet ID", walletIdValue),
+            infoCard("Trading Account ID", accountIdValue),
+          ],
+        },
+        detailCard("Registration Date", fmtDate(data.account_regdate)),
+        detailCard("Account Status", accountStatus.label, {
+          color: accountStatus.color,
+          backgroundColor: accountStatus.backgroundColor,
+        }),
+        detailCard("Subaffiliate", String(data.subaffiliate)),
+        detailCard("Registration", status.label, {
+          color: status.color,
+          backgroundColor: status.backgroundColor,
+        }),
+        { type: "separator", color: colors.border },
+        detailCard("Condition", matchAllBadge.label, {
+          color: matchAllBadge.color,
+          backgroundColor: matchAllBadge.backgroundColor,
+        }),
+        ...(!conditions.matchAll
+          ? [
+            {
+              type: "box",
+              layout: "vertical" as const,
+              spacing: "xs" as const,
+              backgroundColor: "#FEF2F2",
+              cornerRadius: "8px",
+              paddingAll: "10px",
+              contents: getFailedConditionsText(conditions).map((msg) => ({
+                type: "text",
+                text: `\u2022 ${msg}`,
+                size: "xs",
+                color: "#DC2626",
+                wrap: true,
+              })),
+            } as object,
+          ]
+          : []),
+        { type: "separator", color: colors.border },
+        {
+          type: "box",
+          layout: "horizontal",
+          spacing: "sm",
+          contents: [metricCard("Trades", String(data.trades))],
+        },
+        detailCard("This Month", monthlyStatus.label, {
+          color: monthlyStatus.color,
+          backgroundColor: monthlyStatus.backgroundColor,
+        }),
+        detailCard("Monthly Lots", monthlyLots.label, {
+          color: monthlyLots.color,
+          backgroundColor: monthlyLots.backgroundColor,
+        }),
+        detailCard("Rank", getRankTier(data.volume)),
+        detailCard("Last Trade", lastTrade.text, { color: lastTrade.color }),
+        {
+          type: "box",
+          layout: "horizontal",
+          spacing: "sm",
+          contents: [
+            metricCard(
+              "Balance",
+              fmtCurrency(data.balance, data.account_currency)
+            ),
+            metricCard(
+              "Equity",
+              fmtCurrency(data.equity, data.account_currency)
+            ),
+          ],
+        },
+        detailCard("Account Type", data.account_type),
+        keyValueRow(
+          "Account Currency",
+          displayCurrencyLabel(data.account_currency)
+        ),
+      ],
+    },
+    footer: {
+      type: "box",
+      layout: "vertical",
+      paddingAll: "12px",
+      contents: [
+        {
+          type: "text",
+          text: "For assistance, please contact support.",
+          size: "xs",
+          color: colors.muted,
+          align: "center",
+          wrap: true,
+        },
+      ],
+    },
+  };
+}
+
+// Single switch point for the card version. Reads the env flag per call.
+export function buildTradingCard(
+  data: HFMPerformanceData,
+  conditions: ConditionCheck,
+  options: TradingCardOptions = {}
+): object {
+  return getFlexSummaryVersion() === "flex-v2"
+    ? buildTradingCardV2(data, conditions, options)
+    : buildTradingCardV1(data, conditions, options);
 }
 
 export function buildPaginationCard(

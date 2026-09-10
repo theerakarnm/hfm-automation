@@ -446,3 +446,101 @@ describe("getFlexSummaryVersion", () => {
     expect(warned[0]).toContain("flex-v9");
   });
 });
+
+describe("flex-v2 trading card", () => {
+  const originalVersion = process.env.FLEX_SUMMARY_VERSION;
+
+  afterEach(() => {
+    if (originalVersion === undefined) delete process.env.FLEX_SUMMARY_VERSION;
+    else process.env.FLEX_SUMMARY_VERSION = originalVersion;
+  });
+
+  const v2Card = (
+    data: HFMPerformanceData,
+    monthly?: { lots: number; hasTrade: boolean }
+  ): Record<string, unknown> => {
+    process.env.FLEX_SUMMARY_VERSION = "flex-v2";
+    return buildTradingCard(data, matchAllConditions, {
+      showVolume: true,
+      monthly,
+    }) as Record<string, unknown>;
+  };
+
+  test("keeps every v1 field except cumulative Volume", () => {
+    const texts = extractTexts(v2Card(mockData, { lots: 2.5, hasTrade: true }));
+    expect(texts).toContain("Wallet ID");
+    expect(texts).toContain("Trading Account ID");
+    expect(texts).toContain("Registration Date");
+    expect(texts).toContain("Account Status");
+    expect(texts).toContain("Subaffiliate");
+    expect(texts).toContain("Registration");
+    expect(texts).toContain("Condition");
+    expect(texts).toContain("Trades");
+    expect(texts).toContain("Last Trade");
+    expect(texts).toContain("Balance");
+    expect(texts).toContain("Equity");
+    expect(texts).toContain("Account Type");
+    expect(texts).toContain("Account Currency");
+    expect(texts).toContain("For assistance, please contact support.");
+    expect(texts).not.toContain("Volume");
+    expect(texts.some((t) => t === "3.42 lots")).toBe(false);
+  });
+
+  test("active month shows green check and passing lots", () => {
+    const card = v2Card(mockData, { lots: 2.5, hasTrade: true });
+    const texts = extractTexts(card);
+    expect(texts).toContain("This Month");
+    expect(texts).toContain("Monthly Lots");
+    expect(findBadgeByLabel(card, "\u2713 Active")!.color).toBe("#1DB954");
+    const lots = findBadgeByLabel(card, "\u2713 2.50 / 2 lots");
+    expect(lots).toBeDefined();
+    expect(lots!.color).toBe("#1DB954");
+  });
+
+  test("inactive month shows red cross and failing lots", () => {
+    const card = v2Card(mockData, { lots: 0, hasTrade: false });
+    expect(findBadgeByLabel(card, "\u2717 Inactive")!.color).toBe("#DC2626");
+    const lots = findBadgeByLabel(card, "\u2717 0.00 / 2 lots");
+    expect(lots).toBeDefined();
+    expect(lots!.color).toBe("#DC2626");
+  });
+
+  test("exactly 2 lots passes", () => {
+    const card = v2Card(mockData, { lots: 2, hasTrade: true });
+    expect(findBadgeByLabel(card, "\u2713 2.00 / 2 lots")).toBeDefined();
+  });
+
+  test("missing monthly data renders N/A rows", () => {
+    const card = v2Card(mockData, undefined);
+    const texts = extractTexts(card);
+    expect(texts).toContain("This Month");
+    expect(texts.filter((t) => t === "N/A").length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("rank row shows the label only, with no cumulative lot number", () => {
+    const card = v2Card({ ...mockData, volume: 1200 }, { lots: 1, hasTrade: true });
+    const texts = extractTexts(card);
+    expect(texts).toContain("Rank");
+    expect(texts).toContain("\u{1F48E} Platinum");
+    expect(texts.some((t) => t.includes("1200"))).toBe(false);
+  });
+
+  test("v2 JSON stays inside LINE Flex limits", () => {
+    const card = v2Card(mockData, { lots: 2.5, hasTrade: true });
+    const json = JSON.stringify(card);
+    expect(card.type).toBe("bubble");
+    expect(json.length).toBeLessThan(10_000);
+    for (const t of extractTexts(card)) {
+      expect(t.length).toBeLessThanOrEqual(2000);
+    }
+  });
+
+  test("flag set to flex-v1 still renders the v1 card", () => {
+    process.env.FLEX_SUMMARY_VERSION = "flex-v1";
+    const texts = extractTexts(
+      buildTradingCard(mockData, matchAllConditions, { showVolume: true })
+    );
+    expect(texts).toContain("Volume");
+    expect(texts).not.toContain("Rank");
+  });
+});

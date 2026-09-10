@@ -1,44 +1,44 @@
-import { Hono } from "hono";
-import webhook from "./routes/webhook";
-import internal from "./routes/internal";
 import { registerJobs } from "./jobs";
 import { logger, logError } from "./utils/logger";
 import { getLastTradeMap } from "./services/last-trade.service";
+import { listActiveTenants } from "./services/tenant-config.service";
+import { loadEncryptionKey } from "./utils/crypto";
 import { getDb, initDb, closeDb } from "./db/connection";
+import { createApp } from "./app";
 
-const app = new Hono();
+// Fail fast: a process that cannot decrypt its tenants is not servable.
+let encryptionKey: Buffer;
+try {
+  encryptionKey = loadEncryptionKey();
+} catch (err) {
+  console.error(String(err));
+  process.exit(1);
+}
 
 const db = getDb();
-await initDb(db);
-
-app.use("*", async (c, next) => {
-  const start = Date.now();
-  const method = c.req.method;
-  const path = c.req.path;
-
-  logger.info({ method, path }, `${method} ${path}`);
-
-  await next();
-
-  const duration = Date.now() - start;
-  logger.info(
-    { method, path, status: c.res.status, duration },
-    `${method} ${path} ${c.res.status} ${duration}ms`
-  );
-});
-
-app.route("/webhook", webhook);
-app.route("/internal", internal);
+await initDb(db); // creates tables, seeds the first tenant, migrates legacy rows
 
 registerJobs();
 
-// Warm the last-trade cache so the first customer lookup does not pay the
-// ~7s /api/clients/ round trip.
-getLastTradeMap()
-  .then((map) =>
-    logger.info({ size: map?.size ?? 0 }, "[startup] last-trade cache warmed"),
-  )
-  .catch((err) => logError("startup-warm", err));
+const app = createApp();
+
+// Warm every tenant sequentially. Each warm costs one ~7.4s HFM call with
+// that tenant's own key; firing them in parallel would burst the upstream
+// and blur whose cache failed. A small gap spreads the load.
+(async () => {
+  for (const ctx of await listActiveTenants()) {
+    try {
+      const map = await getLastTradeMap(ctx);
+      logger.info(
+        { tenantId: ctx.id, label: ctx.label, size: map?.size ?? 0 },
+        "[startup] last-trade cache warmed",
+      );
+    } catch (err) {
+      logError("startup-warm", err);
+    }
+    await Bun.sleep(500);
+  }
+})();
 
 function shutdown(signal: string): void {
   logger.info({ signal }, `Received ${signal}, shutting down gracefully`);

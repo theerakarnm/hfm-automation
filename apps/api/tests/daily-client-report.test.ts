@@ -1,32 +1,87 @@
-import { expect, test, describe, beforeEach, afterEach } from "bun:test";
-import postgres from "postgres";
-import { drizzle } from "drizzle-orm/postgres-js";
+import { expect, test, describe, beforeAll, beforeEach, afterAll } from "bun:test";
 import { sql } from "drizzle-orm";
-import { initDb } from "../src/db/connection";
 import { insertMany, countByDate } from "../src/repositories/snapshot.repository";
-import { seedFromEnv } from "../src/repositories/recipient.repository";
+import { addRecipient } from "../src/repositories/recipient.repository";
+import { markDailyReportSent, isDailyReportSent } from "../src/repositories/daily-notification.repository";
 import {
   insertRequestSnapshot,
   getLatestRequestSnapshotBefore,
   findMissingWalletIds,
   findNewWalletIds,
 } from "../src/repositories/request-snapshot.repository";
+import { insertTenantRow } from "../src/repositories/tenant.repository";
 import {
   buildDayReportMessage,
   buildComparisonReportMessage,
   generateReportForUser,
   runDailyClientReport,
-  type ReportPeriod,
 } from "../src/jobs/daily-client-report";
 import { getLastWeekRange, getLastMonthRange, getIctDateString } from "../src/utils/date";
-import type { HFMPerformanceData, HFMClientRow, HFMClientsResult } from "../src/types/hfm.types";
+import type { HFMClientRow, HFMClientsResult } from "../src/types/hfm.types";
+import type { TenantConfig } from "../src/types/tenant.types";
+import type { TenantInput } from "../src/types/tenant.types";
 import type { DrizzleDb } from "../src/db/connection";
+import { createTestDb, closeTestDb } from "./db-helpers";
+import type postgres from "postgres";
 
-const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ?? "postgresql://jametirakarn@localhost:5432/hfm_test";
+// Bun auto-loads apps/api/.env into process.env. With those per-OA values
+// present, the bootstrap seed inside initDb would try to run before this
+// file sets its own CONFIG_ENCRYPTION_KEY and throw. Clear them before any
+// schema or db work happens in this file.
+function clearPerOaEnv() {
+  for (const key of [
+    "LINE_CHANNEL_ACCESS_TOKEN",
+    "LINE_CHANNEL_SECRET",
+    "HFM_API_KEY",
+    "TARGET_WALLET",
+    "LINE_WHITELIST_UIDS",
+    "LINE_NOTIFY_UIDS",
+  ]) {
+    delete process.env[key];
+  }
+}
 
-let client: postgres.Sql;
+clearPerOaEnv();
+process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 17).toString("base64");
+
+const TENANT_INPUT = (label: string, targetWallet: number): TenantInput => ({
+  label,
+  active: true,
+  lineChannelAccessToken: `tok_${label}`,
+  lineChannelSecret: `sec_${label}`,
+  hfmApiKey: `hfm_${label}`,
+  hfmApiBaseUrl: "https://api.hfaffiliates.com",
+  targetWallet,
+  whitelistEnabled: true,
+});
+
+function makeCtx(id: number, label: string, targetWallet: number): TenantConfig {
+  return {
+    id,
+    webhookId: `webhook-${label.toLowerCase()}`,
+    label,
+    active: true,
+    lineChannelAccessToken: `tok_${label}`,
+    lineChannelSecret: `sec_${label}`,
+    lineBotUserId: null,
+    lineBasicId: null,
+    lineDisplayName: null,
+    hfmApiKey: `hfm_${label}`,
+    hfmApiBaseUrl: "https://api.hfaffiliates.com",
+    targetWallet,
+    whitelistEnabled: true,
+    whitelistUids: [],
+    lastTestedAt: null,
+    lastTestResult: null,
+  };
+}
+
 let db: DrizzleDb;
+let client: postgres.Sql;
+let idA: number;
+let idB: number;
+let ctxA: TenantConfig;
+let ctxB: TenantConfig;
 
 async function clearTables() {
   await db.execute(sql`DELETE FROM client_request_snapshot_rows`);
@@ -36,16 +91,23 @@ async function clearTables() {
   await db.execute(sql`DELETE FROM client_snapshots`);
 }
 
+beforeAll(async () => {
+  clearPerOaEnv();
+  const t = await createTestDb();
+  db = t.db;
+  client = t.client;
+  idA = await insertTenantRow(db, TENANT_INPUT("A", 111));
+  idB = await insertTenantRow(db, TENANT_INPUT("B", 222));
+  ctxA = makeCtx(idA, "A", 111);
+  ctxB = makeCtx(idB, "B", 222);
+});
+
 beforeEach(async () => {
-  client = postgres(TEST_DATABASE_URL, { max: 1 });
-  db = drizzle(client);
-  await initDb(db);
   await clearTables();
 });
 
-afterEach(async () => {
-  delete process.env.TARGET_WALLET;
-  await client.end();
+afterAll(async () => {
+  await closeTestDb(client);
 });
 
 describe("buildDayReportMessage", () => {
@@ -156,24 +218,22 @@ describe("buildComparisonReportMessage", () => {
 
 describe("snapshot storage", () => {
   test("insertMany stores wallets and dedupes by client_id", async () => {
-    const clientA: HFMPerformanceData = {
-      client_id: 10023, account_id: 78451293, activity_status: "active",
-      trades: 0, volume: 0, account_type: "Standard", balance: 0,
-      account_currency: "USD", equity: 0, archived: null, subaffiliate: 0,
-      account_regdate: "2024-01-15T00:00:00Z", status: "approved", full_name: "Alice",
-    };
-    const clientB: HFMPerformanceData = {
-      ...clientA, client_id: 10024, account_id: 99001234, full_name: "Bob",
-    };
-    const clientC: HFMPerformanceData = {
-      ...clientA, client_id: 10031, account_id: 88123456, full_name: "Charlie",
-    };
+    await insertMany(db, idA, [
+      { snapshotDate: "2026-04-25", clientId: 10023, name: "Alice", email: "alice@test.com" },
+      { snapshotDate: "2026-04-25", clientId: 10031, name: "Charlie", email: null },
+    ]);
+    await insertMany(db, idA, [
+      { snapshotDate: "2026-04-26", clientId: 10023, name: "Alice", email: "alice@test.com" },
+      { snapshotDate: "2026-04-26", clientId: 10024, name: "Bob", email: null },
+    ]);
+    // Same wallet under tenant B must not leak into A's counts.
+    await insertMany(db, idB, [
+      { snapshotDate: "2026-04-26", clientId: 10023, name: "Alice", email: null },
+    ]);
 
-    await insertMany(db, "2026-04-25", [clientA, clientC]);
-    await insertMany(db, "2026-04-26", [clientA, clientB]);
-
-    expect(await countByDate(db, "2026-04-25")).toBe(2);
-    expect(await countByDate(db, "2026-04-26")).toBe(2);
+    expect(await countByDate(db, idA, "2026-04-25")).toBe(2);
+    expect(await countByDate(db, idA, "2026-04-26")).toBe(2);
+    expect(await countByDate(db, idB, "2026-04-26")).toBe(1);
   });
 });
 
@@ -268,21 +328,28 @@ function makeClientRows(wallets: number[]): HFMClientRow[] {
   }));
 }
 
+function snapshotInput(date: string, clientId: number) {
+  return { snapshotDate: date, clientId, name: `Client ${clientId}`, email: null };
+}
+
 describe("request-snapshot repository", () => {
   test("insertRequestSnapshot and getLatestRequestSnapshotBefore work", async () => {
     const rows = makeClientRows([100, 200, 300]);
-    await insertRequestSnapshot(db, "2026-04-26", rows);
+    await insertRequestSnapshot(db, idA, "2026-04-26", rows);
 
-    const latest = await getLatestRequestSnapshotBefore(db, "2026-04-27");
+    const latest = await getLatestRequestSnapshotBefore(db, idA, "2026-04-27");
     expect(latest).not.toBeNull();
     expect(latest!.rows.length).toBe(3);
     expect(latest!.snapshotDate).toBe("2026-04-26");
 
+    // Tenant B sees none of tenant A's request snapshots.
+    expect(await getLatestRequestSnapshotBefore(db, idB, "2026-04-27")).toBeNull();
+
     const missing = findMissingWalletIds(latest!.rows, []);
     expect(missing).toEqual([100, 200, 300]);
 
-    await insertRequestSnapshot(db, "2026-04-27", makeClientRows([100, 200, 400]));
-    const latest2 = (await getLatestRequestSnapshotBefore(db, "2026-04-28"))!;
+    await insertRequestSnapshot(db, idA, "2026-04-27", makeClientRows([100, 200, 400]));
+    const latest2 = (await getLatestRequestSnapshotBefore(db, idA, "2026-04-28"))!;
 
     const missing2 = findMissingWalletIds(latest!.rows, latest2.rows);
     expect(missing2).toEqual([300]);
@@ -292,16 +359,14 @@ describe("request-snapshot repository", () => {
   });
 
   test("getLatestRequestSnapshotBefore returns null when none exists", async () => {
-    const result = await getLatestRequestSnapshotBefore(db, "2026-04-26");
+    const result = await getLatestRequestSnapshotBefore(db, idA, "2026-04-26");
     expect(result).toBeNull();
   });
 });
 
 describe("generateReportForUser", () => {
   test("day report returns not-found when no yesterday snapshot", async () => {
-    process.env.TARGET_WALLET = "30506525";
-
-    const messages = await generateReportForUser({
+    const messages = await generateReportForUser(ctxA, {
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchClients(mockClientRows),
@@ -313,13 +378,12 @@ describe("generateReportForUser", () => {
   });
 
   test("day report returns comparison when yesterday snapshot exists", async () => {
-    process.env.TARGET_WALLET = "30506525";
+    await insertMany(db, idA, [
+      snapshotInput("2026-04-25", 10023),
+      snapshotInput("2026-04-25", 10024),
+    ]);
 
-    const { normalizeClientRow } = await import("../src/services/hfm.service");
-    const normalized = mockClientRows.map(normalizeClientRow);
-    await insertMany(db, "2026-04-25", normalized);
-
-    const messages = await generateReportForUser({
+    const messages = await generateReportForUser(ctxA, {
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchClients(mockClientRows),
@@ -328,24 +392,24 @@ describe("generateReportForUser", () => {
 
     expect(messages).toHaveLength(1);
     expect(messages[0]!).toContain("Daily Wallet Report");
+    expect(messages[0]!).toContain("Wallet under 111");
     expect(messages[0]!).toContain("2 Wallets");
   });
 
   test("day report returns 2 messages when previous request snapshot exists", async () => {
-    process.env.TARGET_WALLET = "30506525";
+    await insertMany(db, idA, [
+      snapshotInput("2026-04-25", 10023),
+      snapshotInput("2026-04-25", 10024),
+    ]);
 
-    const { normalizeClientRow } = await import("../src/services/hfm.service");
-    const normalized = mockClientRows.map(normalizeClientRow);
-    await insertMany(db, "2026-04-25", normalized);
-
-    await generateReportForUser({
+    await generateReportForUser(ctxA, {
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchClients(mockClientRows),
       reportPeriod: "day",
     });
 
-    const messages = await generateReportForUser({
+    const messages = await generateReportForUser(ctxA, {
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchClients(mockClientRows),
@@ -358,9 +422,7 @@ describe("generateReportForUser", () => {
   });
 
   test("week report returns not-found when no baseline snapshot", async () => {
-    process.env.TARGET_WALLET = "30506525";
-
-    const messages = await generateReportForUser({
+    const messages = await generateReportForUser(ctxA, {
       now: new Date("2026-04-29T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchClients(mockClientRows),
@@ -372,15 +434,14 @@ describe("generateReportForUser", () => {
   });
 
   test("week report returns comparison when baseline exists", async () => {
-    process.env.TARGET_WALLET = "30506525";
-
-    const { normalizeClientRow } = await import("../src/services/hfm.service");
-    const normalized = mockClientRows.map(normalizeClientRow);
     const now = new Date("2026-04-29T22:00:00.000Z");
     const lastWeek = getLastWeekRange(now);
-    await insertMany(db, lastWeek.to, normalized);
+    await insertMany(db, idA, [
+      snapshotInput(lastWeek.to, 10023),
+      snapshotInput(lastWeek.to, 10024),
+    ]);
 
-    const messages = await generateReportForUser({
+    const messages = await generateReportForUser(ctxA, {
       now,
       db,
       fetchClientsFn: mockFetchClients(mockClientRows),
@@ -393,9 +454,7 @@ describe("generateReportForUser", () => {
   });
 
   test("month report returns not-found when no baseline snapshot", async () => {
-    process.env.TARGET_WALLET = "30506525";
-
-    const messages = await generateReportForUser({
+    const messages = await generateReportForUser(ctxA, {
       now: new Date("2026-04-29T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchClients(mockClientRows),
@@ -407,15 +466,14 @@ describe("generateReportForUser", () => {
   });
 
   test("month report returns comparison when baseline exists", async () => {
-    process.env.TARGET_WALLET = "30506525";
-
-    const { normalizeClientRow } = await import("../src/services/hfm.service");
-    const normalized = mockClientRows.map(normalizeClientRow);
     const now = new Date("2026-04-29T22:00:00.000Z");
     const lastMonth = getLastMonthRange(now);
-    await insertMany(db, lastMonth.to, normalized);
+    await insertMany(db, idA, [
+      snapshotInput(lastMonth.to, 10023),
+      snapshotInput(lastMonth.to, 10024),
+    ]);
 
-    const messages = await generateReportForUser({
+    const messages = await generateReportForUser(ctxA, {
       now,
       db,
       fetchClientsFn: mockFetchClients(mockClientRows),
@@ -427,15 +485,90 @@ describe("generateReportForUser", () => {
   });
 });
 
+describe("cross-tenant isolation", () => {
+  test("two tenants with different wallets produce different reports on the same date", async () => {
+    // ctxA.targetWallet = 111, ctxB.targetWallet = 222
+    // the stubbed fetch returns a different client set per tenant
+    await insertMany(db, idA, [
+      snapshotInput("2026-09-05", 111001),
+      snapshotInput("2026-09-05", 111002),
+    ]);
+    await insertMany(db, idB, [
+      snapshotInput("2026-09-05", 222001),
+      snapshotInput("2026-09-05", 222002),
+      snapshotInput("2026-09-05", 222003),
+    ]);
+
+    const now = new Date("2026-09-06T10:00:00.000Z");
+    const a = await generateReportForUser(ctxA, {
+      now,
+      db,
+      fetchClientsFn: mockFetchClients(makeClientRows([111001, 111002])),
+      reportPeriod: "day",
+    });
+    const b = await generateReportForUser(ctxB, {
+      now,
+      db,
+      fetchClientsFn: mockFetchClients(makeClientRows([222001, 222002, 222003])),
+      reportPeriod: "day",
+    });
+
+    expect(a.join(" ")).toContain("111");
+    expect(a.join(" ")).not.toContain("222");
+    expect(b.join(" ")).toContain("222");
+  });
+
+  test("daily_report_notifications for A does not suppress B", async () => {
+    await markDailyReportSent(db, idA, "2026-09-05");
+    expect(await isDailyReportSent(db, idB, "2026-09-05")).toBe(false);
+    expect(await isDailyReportSent(db, idA, "2026-09-05")).toBe(true);
+  });
+
+  test("runDailyClientReport pushes each tenant only its own report to its own recipients", async () => {
+    await addRecipient(db, idA, "UrecA", null);
+    await addRecipient(db, idB, "UrecB", null);
+
+    await insertMany(db, idA, [snapshotInput("2026-09-05", 111001)]);
+    await insertMany(db, idB, [snapshotInput("2026-09-05", 222001)]);
+
+    const now = new Date("2026-09-06T10:00:00.000Z");
+    const pushes: { tenant: string; uids: string[]; text: string }[] = [];
+    const pushFor = (tenant: string) => async (uids: string[], text: string) => {
+      pushes.push({ tenant, uids, text });
+    };
+
+    await runDailyClientReport(ctxA, {
+      now,
+      db,
+      fetchClientsFn: mockFetchClients(makeClientRows([111001, 111009])),
+      pushToAllFn: pushFor("A"),
+    });
+    await runDailyClientReport(ctxB, {
+      now,
+      db,
+      fetchClientsFn: mockFetchClients(makeClientRows([222001])),
+      pushToAllFn: pushFor("B"),
+    });
+
+    expect(pushes).toHaveLength(2);
+    expect(pushes[0]!.tenant).toBe("A");
+    expect(pushes[0]!.uids).toEqual(["UrecA"]);
+    expect(pushes[0]!.text).toContain("111");
+    expect(pushes[0]!.text).not.toContain("222");
+    expect(pushes[1]!.tenant).toBe("B");
+    expect(pushes[1]!.uids).toEqual(["UrecB"]);
+    expect(pushes[1]!.text).toContain("222");
+  });
+});
+
 describe("runDailyClientReport", () => {
   test("first run stores snapshot and skips notification when no yesterday", async () => {
-    process.env.TARGET_WALLET = "30506525";
-    await seedFromEnv(db, "Utest001");
+    await addRecipient(db, idA, "Utest001", null);
 
     let pushedMessage = "";
     const mockPushAll = async (_uids: string[], text: string) => { pushedMessage = text; };
 
-    await runDailyClientReport({
+    await runDailyClientReport(ctxA, {
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchClients(mockClientRows),
@@ -443,24 +576,23 @@ describe("runDailyClientReport", () => {
     });
 
     expect(pushedMessage).toBe("");
-    expect(await countByDate(db, "2026-04-26")).toBe(2);
+    expect(await countByDate(db, idA, "2026-04-26")).toBe(2);
   });
 
   test("second day sends comparison report", async () => {
-    process.env.TARGET_WALLET = "30506525";
-    await seedFromEnv(db, "Utest001");
+    await addRecipient(db, idA, "Utest001", null);
 
     let pushedMessage = "";
     const mockPushAll = async (_uids: string[], text: string) => { pushedMessage = text; };
 
-    await runDailyClientReport({
+    await runDailyClientReport(ctxA, {
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchClients(mockClientRows),
       pushToAllFn: mockPushAll,
     });
 
-    expect(await countByDate(db, "2026-04-26")).toBe(2);
+    expect(await countByDate(db, idA, "2026-04-26")).toBe(2);
 
     const day2Clients: HFMClientRow[] = [
       mockClientRows[0]!,
@@ -471,7 +603,7 @@ describe("runDailyClientReport", () => {
       },
     ];
 
-    await runDailyClientReport({
+    await runDailyClientReport(ctxA, {
       now: new Date("2026-04-26T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchClients(day2Clients),
@@ -483,10 +615,9 @@ describe("runDailyClientReport", () => {
   });
 
   test("idempotent - second run for same date skips", async () => {
-    process.env.TARGET_WALLET = "30506525";
-    await seedFromEnv(db, "Utest001");
+    await addRecipient(db, idA, "Utest001", null);
 
-    await runDailyClientReport({
+    await runDailyClientReport(ctxA, {
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchClients(mockClientRows),
@@ -496,7 +627,7 @@ describe("runDailyClientReport", () => {
     let pushCount = 0;
     const mockPushAll = async () => { pushCount++; };
 
-    await runDailyClientReport({
+    await runDailyClientReport(ctxA, {
       now: new Date("2026-04-26T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchClients(mockClientRows),
@@ -505,7 +636,7 @@ describe("runDailyClientReport", () => {
 
     expect(pushCount).toBe(1);
 
-    await runDailyClientReport({
+    await runDailyClientReport(ctxA, {
       now: new Date("2026-04-26T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchClients(mockClientRows),
@@ -516,8 +647,7 @@ describe("runDailyClientReport", () => {
   });
 
   test("does not throw when HFM fetch fails after retries", async () => {
-    process.env.TARGET_WALLET = "30506525";
-    await seedFromEnv(db, "Utest001");
+    await addRecipient(db, idA, "Utest001", null);
 
     let calls = 0;
     const mockFetchFail = async () => {
@@ -526,7 +656,7 @@ describe("runDailyClientReport", () => {
     };
     const mockPushAll = async () => {};
 
-    await runDailyClientReport({
+    await runDailyClientReport(ctxA, {
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchFail,
@@ -535,28 +665,21 @@ describe("runDailyClientReport", () => {
 
     expect(calls).toBe(3);
     const today = getIctDateString(new Date("2026-04-25T22:00:00.000Z"));
-    expect(await countByDate(db, today)).toBe(0);
+    expect(await countByDate(db, idA, today)).toBe(0);
   }, 30_000);
 
   test("warns but does not throw when no active recipients", async () => {
-    process.env.TARGET_WALLET = "30506525";
-
     let pushCalled = false;
     const mockPushAll = async () => { pushCalled = true; };
 
-    const originalNotifyUids = process.env.LINE_NOTIFY_UIDS;
-    process.env.LINE_NOTIFY_UIDS = "";
-
-    await runDailyClientReport({
+    await runDailyClientReport(ctxA, {
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchClients(mockClientRows),
       pushToAllFn: mockPushAll,
     });
 
-    process.env.LINE_NOTIFY_UIDS = originalNotifyUids;
-
     expect(pushCalled).toBe(false);
-    expect(await countByDate(db, "2026-04-26")).toBe(2);
+    expect(await countByDate(db, idA, "2026-04-26")).toBe(2);
   });
 });

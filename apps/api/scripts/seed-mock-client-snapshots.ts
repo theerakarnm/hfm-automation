@@ -1,8 +1,10 @@
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { normalizeClientRow } from "../src/services/hfm.service";
 import { getDb, initDb, closeDb } from "../src/db/connection";
 import { countByDate, insertMany } from "../src/repositories/snapshot.repository";
 import { dailyReportNotifications, clientSnapshots } from "../src/db/schema";
+import { resolveTenants, parseArgs } from "./lib/resolve-tenant";
+import { loadEncryptionKey } from "../src/utils/crypto";
 import type { HFMClientRow } from "../src/types/hfm.types";
 
 const SOURCE_FILE = process.env.SOURCE_FILE ?? "output/client_2026-04-30.json";
@@ -81,6 +83,8 @@ function createMockClientRows(
   return rows;
 }
 
+loadEncryptionKey(); // fail fast
+
 async function main() {
   console.log(`[seed] source: ${SOURCE_FILE}`);
   console.log(`[seed] range : ${FROM_DATE} → ${TO_DATE}`);
@@ -105,22 +109,40 @@ async function main() {
   const db = getDb();
   await initDb(db);
 
+  const tenants = await resolveTenants(parseArgs(process.argv));
+  if (tenants.length !== 1) {
+    // Mock seeding is a repair/test operation; running it against every
+    // tenant at once would fabricate snapshots for real customers.
+    console.error(
+      "seed-mock-client-snapshots expects exactly one tenant. Use --tenant=<id|webhookId|label> or TENANT=, not --all.",
+    );
+    process.exit(2);
+  }
+  const tenant = tenants[0]!;
+  console.log(`[seed] tenant : ${tenant.id} ("${tenant.label}")`);
+
   if (MOCK_REPLACE) {
     console.log("[seed] MOCK_REPLACE=1 — deleting existing snapshots in range...");
     await db
       .delete(clientSnapshots)
       .where(
-        sql`${clientSnapshots.snapshotDate} >= ${FROM_DATE} AND ${clientSnapshots.snapshotDate} <= ${TO_DATE}`
+        and(
+          eq(clientSnapshots.tenantId, tenant.id),
+          sql`${clientSnapshots.snapshotDate} >= ${FROM_DATE} AND ${clientSnapshots.snapshotDate} <= ${TO_DATE}`
+        )
       );
     await db
       .delete(dailyReportNotifications)
       .where(
-        sql`${dailyReportNotifications.snapshotDate} >= ${FROM_DATE} AND ${dailyReportNotifications.snapshotDate} <= ${TO_DATE}`
+        and(
+          eq(dailyReportNotifications.tenantId, tenant.id),
+          sql`${dailyReportNotifications.snapshotDate} >= ${FROM_DATE} AND ${dailyReportNotifications.snapshotDate} <= ${TO_DATE}`
+        )
       );
   }
 
   for (const date of dates) {
-    const existing = await countByDate(db, date);
+    const existing = await countByDate(db, tenant.id, date);
     if (existing > 0) {
       console.log(`[seed] ${date}: already has ${existing} rows — skipping`);
       continue;
@@ -132,7 +154,7 @@ async function main() {
 
   for (let di = 0; di < dates.length; di++) {
     const date = dates[di]!;
-    const existing = await countByDate(db, date);
+    const existing = await countByDate(db, tenant.id, date);
     if (existing > 0) continue;
 
     let dayRows = [...sourceRows];
@@ -148,20 +170,25 @@ async function main() {
     allMockRows.push(...newMockRows);
     dayRows.push(...newMockRows);
 
-    const normalized = dayRows.map(normalizeClientRow);
+    const snapshotRows = dayRows.map(normalizeClientRow).map((row) => ({
+      snapshotDate: date,
+      clientId: row.client_id,
+      name: row.full_name ?? null,
+      email: row.email ?? null,
+    }));
 
     if (DRY_RUN) {
-      const wallets = new Set(normalized.map((r) => r.client_id));
+      const wallets = new Set(snapshotRows.map((r) => r.clientId));
       console.log(
-        `[dry-run] ${date}: ${normalized.length} rows, ${wallets.size} distinct wallets (removed ${walletsToRemove.length}, added ${newMockRows.length})`
+        `[dry-run] ${date}: ${snapshotRows.length} rows, ${wallets.size} distinct wallets (removed ${walletsToRemove.length}, added ${newMockRows.length})`
       );
       continue;
     }
 
-    await insertMany(db, date, normalized);
+    await insertMany(db, tenant.id, snapshotRows);
 
-    const inserted = await countByDate(db, date);
-    const wallets = new Set(normalized.map((r) => r.client_id));
+    const inserted = await countByDate(db, tenant.id, date);
+    const wallets = new Set(snapshotRows.map((r) => r.clientId));
     console.log(
       `[seed] ${date}: ${inserted} rows, ${wallets.size} distinct wallets (removed ${walletsToRemove.length}, added ${newMockRows.length})`
     );
@@ -169,7 +196,7 @@ async function main() {
 
   console.log("\n[seed] summary");
   for (const date of dates) {
-    const count = await countByDate(db, date);
+    const count = await countByDate(db, tenant.id, date);
     console.log(`  ${date}: ${count} rows`);
   }
 

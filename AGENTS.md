@@ -57,11 +57,22 @@ Tests drop and recreate tables (see `tests/db-helpers.ts`), so never point them 
 - The LINE reply path must stay under the 60s reply-token expiry, so never let a reply await an unbounded HFM call (see `LAST_TRADE_DEADLINE_MS`).
 - Keep the "why" comments. Comments here explain timing budgets and upstream API quirks that the code alone does not show.
 
+## Multi-tenant
+
+- Each LINE OA is one row in the `tenants` table; per-tenant settings are edited through the `/internal/config` UI and cached in memory for 60 seconds (invalidated on save).
+- The public webhook URL shape is `https://host/webhook?oa=<webhook_id>`; the path form `POST /webhook/<webhook_id>` resolves the same way.
+- Tenant resolution order: a missing or unknown `oa` id returns 404, a known but inactive tenant returns 200 without processing, the LINE signature is then verified with that tenant's own channel secret, and finally `destination` is cross-checked against the stored bot user id.
+- On boot `initDb` seeds the first tenant from the eight legacy per-OA env vars exactly once, only when the `tenants` table is empty; no other code reads those vars.
+
 ## Environment & Security
 
 - Copy `apps/api/.env.example` to `.env`; never commit `.env` or any real secret value.
-- Secrets come from env only: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`, `HFM_API_KEY`, `INTERNAL_API_KEY`, `DATABASE_URL`, `TEST_DATABASE_URL`.
-- `/internal/*` routes are protected by `INTERNAL_API_KEY`; the public webhook is protected by LINE signature validation and UID whitelist.
+- System secrets come from env only: `INTERNAL_API_KEY`, `CONFIG_ENCRYPTION_KEY`, `DATABASE_URL`, `TEST_DATABASE_URL`.
+- Per-OA credentials (`LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`, `HFM_API_KEY`, plus the wallet, whitelist, and notify settings) now live in the database, encrypted at rest with `CONFIG_ENCRYPTION_KEY`.
+- `CONFIG_ENCRYPTION_KEY` is base64 that decodes to exactly 32 bytes; a missing or invalid key kills the process at boot.
+- `/internal/config` pages are protected by an httpOnly cookie session issued at `/internal/login` with `INTERNAL_API_KEY`, and mutating forms carry a CSRF token.
+- `/internal/health`, `/internal/logs`, and `/internal/line-uids` keep the `?key=INTERNAL_API_KEY` mechanism (a valid cookie session also works) because the docker healthcheck uses it.
+- The public webhook is protected by LINE signature validation and UID whitelist.
 
 ## Git Workflow
 

@@ -1,19 +1,9 @@
-function isWhitelistEnabled(): boolean {
-  const raw = process.env.LINE_WHITELIST_ENABLED?.trim().toLowerCase();
-  if (!raw) return true;
-  return !["false", "0", "off", "no"].includes(raw);
-}
+// apps/api/src/utils/whitelist.ts
+import type { TenantConfig } from "../types/tenant.types";
 
-export function isWhitelisted(userId: string): boolean {
-  if (!isWhitelistEnabled()) return true;
-
-  const raw = process.env.LINE_WHITELIST_UIDS?.trim() ?? "";
-  if (raw === "") return true;
-
-  const allowed = raw
-    .split(",")
-    .map((uid) => uid.trim())
-    .filter((uid) => uid.length > 0);
-
-  return allowed.includes(userId);
+export function isWhitelisted(ctx: TenantConfig, userId: string): boolean {
+  if (!ctx.whitelistEnabled) return true;
+  // Empty list means "no restriction", same as the old env behaviour.
+  if (ctx.whitelistUids.length === 0) return true;
+  return ctx.whitelistUids.includes(userId);
 }

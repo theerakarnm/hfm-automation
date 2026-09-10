@@ -1,4 +1,5 @@
 import { logError } from "../utils/logger";
+import type { TenantConfig } from "../types/tenant.types";
 import type {
   ConditionCheck,
   HFMApiResult,
@@ -15,13 +16,11 @@ const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 // Liveness probe for the HFM upstream API. Pings the wallet/balance endpoint
 // and reports only up/down — used by the /internal/health route and the
 // hfm-healthcheck cron. Any non-2xx response, timeout, or thrown error => down.
-export async function checkHfmApiHealthy(): Promise<boolean> {
+export async function checkHfmApiHealthy(ctx: TenantConfig): Promise<boolean> {
   try {
-    const baseUrl =
-      process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
-    const res = await fetch(`${baseUrl}/api/wallet/balance`, {
+    const res = await fetch(`${ctx.hfmApiBaseUrl}/api/wallet/balance`, {
       method: "GET",
-      headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
+      headers: { Authorization: `Bearer ${ctx.hfmApiKey}` },
       signal: AbortSignal.timeout(5_000),
     });
     return res.ok;
@@ -72,18 +71,17 @@ export function parsePerformanceLookup(input: string): PerformanceLookup | null 
 }
 
 export function checkConditions(
+  ctx: TenantConfig,
   data: HFMPerformanceData,
 ): ConditionCheck {
-  const targetWallet = Number(process.env.TARGET_WALLET);
-
   if (!data.subaffiliate) {
     logError("hfm-service", `No subaffiliate found for client ${data.client_id}`);
     return { underTargetWallet: false, depositThresholdMet: false, matchAll: false };
   }
 
+  // The wallet comes from the tenant that owns this request, never from env.
   const walletNum = extractWalletNumber(data.subaffiliate.toString());
-  const underTargetWallet =
-    !Number.isNaN(targetWallet) && walletNum === targetWallet;
+  const underTargetWallet = walletNum === ctx.targetWallet;
 
   const depositThreshold = data.account_currency === "USC" ? 200_00 : 200;
   const depositThresholdMet = data.balance >= depositThreshold;
@@ -102,7 +100,8 @@ async function readJsonResponse<T>(res: Response): Promise<T> {
 }
 
 export async function fetchPerformance(
-  lookup: PerformanceLookup
+  ctx: TenantConfig,
+  lookup: PerformanceLookup,
 ): Promise<HFMApiResult> {
   const paramKey = lookup.kind === "wallet" ? "wallets" : "accounts";
   const paramValue = lookup.id;
@@ -110,11 +109,11 @@ export async function fetchPerformance(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
   try {
-    const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
+    const baseUrl = ctx.hfmApiBaseUrl;
     const url = `${baseUrl}/api/performance/client-performance?${paramKey}=${paramValue}`;
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
+      headers: { Authorization: `Bearer ${ctx.hfmApiKey}` },
     });
 
     if (res.status === 404) {
@@ -165,9 +164,10 @@ export async function fetchPerformance(
 }
 
 export async function resolveLinkedAccounts(
-  accountId: number
+  ctx: TenantConfig,
+  accountId: number,
 ): Promise<HFMApiResult> {
-  const accountResult = await fetchPerformance({
+  const accountResult = await fetchPerformance(ctx, {
     kind: "account",
     id: accountId,
     label: String(accountId),
@@ -182,7 +182,7 @@ export async function resolveLinkedAccounts(
     return { ok: false, reason: "no_wallet" };
   }
 
-  return fetchPerformance({
+  return fetchPerformance(ctx, {
     kind: "wallet",
     id: walletId,
     label: String(walletId),
@@ -222,15 +222,18 @@ export function normalizeClientRow(row: HFMClientRow): HFMPerformanceData {
   };
 }
 
-export async function fetchClients(timeoutMs = 120_000): Promise<HFMClientsResult> {
+export async function fetchClients(
+  ctx: TenantConfig,
+  timeoutMs = 120_000,
+): Promise<HFMClientsResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
+    const baseUrl = ctx.hfmApiBaseUrl;
     const url = `${baseUrl}/api/clients/`;
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
+      headers: { Authorization: `Bearer ${ctx.hfmApiKey}` },
     });
 
     if (res.status !== 200) {
@@ -259,15 +262,18 @@ export async function fetchClients(timeoutMs = 120_000): Promise<HFMClientsResul
   }
 }
 
-export async function fetchAllClients(timeoutMs = 10_000): Promise<HFMAllClientsResult> {
+export async function fetchAllClients(
+  ctx: TenantConfig,
+  timeoutMs = 10_000,
+): Promise<HFMAllClientsResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
+    const baseUrl = ctx.hfmApiBaseUrl;
     const url = `${baseUrl}/api/performance/client-performance`;
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
+      headers: { Authorization: `Bearer ${ctx.hfmApiKey}` },
     });
 
     if (res.status !== 200) {
@@ -294,6 +300,7 @@ export async function fetchAllClients(timeoutMs = 10_000): Promise<HFMAllClients
 }
 
 export async function fetchClientsByRange(
+  ctx: TenantConfig,
   fromDate: string,
   toDate: string,
   timeoutMs = 30_000,
@@ -301,13 +308,13 @@ export async function fetchClientsByRange(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
+    const baseUrl = ctx.hfmApiBaseUrl;
     const params = new URLSearchParams({ from_date: fromDate, to_date: toDate });
     const url = `${baseUrl}/api/performance/client-performance?${params}`;
 
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
+      headers: { Authorization: `Bearer ${ctx.hfmApiKey}` },
     });
 
     if (res.status !== 200) {

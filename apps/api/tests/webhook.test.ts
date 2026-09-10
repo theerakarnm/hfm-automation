@@ -4,12 +4,25 @@ import { createHmac } from "node:crypto";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
-import { initDb, resetDbForTests } from "../src/db/connection";
+import * as schema from "../src/db/schema";
+import { getDb, initDb, resetDbForTests } from "../src/db/connection";
 import {
   getLastTradeMap,
   resetLastTradeCache,
 } from "../src/services/last-trade.service";
-import type { HFMClientRow } from "../src/types/hfm.types";
+import {
+  insertTenantRow,
+  addWhitelistUid,
+  updateTenantLineIdentity,
+  getTenantRowById,
+} from "../src/repositories/tenant.repository";
+import {
+  saveTenant,
+  invalidateTenantCache,
+  getTenantConfigForTests,
+} from "../src/services/tenant-config.service";
+import { listLineUsers } from "../src/repositories/line-user.repository";
+import type { HFMClientRow, HFMClientsResult } from "../src/types/hfm.types";
 
 const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? "postgresql://jametirakarn@localhost:5432/hfm_test";
@@ -18,13 +31,35 @@ const ORIGINAL_FETCH = globalThis.fetch;
 
 const SECRET = "test_channel_secret";
 
+// The single seeded tenant. `destination` must equal BOT_USER_ID, which is
+// stored as the tenant's line_bot_user_id by setupTestDb below.
+const BOT_USER_ID = "U123";
+const UID = "U11111111111111111111111111111111";
+
+let webhookId = "";
+let TENANT_ID = 0;
+
+const INPUT = {
+  label: "test",
+  active: true,
+  lineChannelAccessToken: "test_token",
+  lineChannelSecret: SECRET,
+  hfmApiKey: "test_hfm_key",
+  hfmApiBaseUrl: "https://api.hfaffiliates.com",
+  targetWallet: 30506525,
+  whitelistEnabled: true,
+};
+
 function computeSig(body: string, secret: string): string {
   return createHmac("sha256", secret).update(body).digest("base64");
 }
 
 async function waitFor(
   predicate: () => boolean,
-  timeoutMs = 500
+  // 2s matches the explicit budgets below: the handlers chain multiple
+  // background awaits (HFM + last-trade + LINE reply) and the default 500ms
+  // flaked under full-suite DB load.
+  timeoutMs = 2_000
 ): Promise<void> {
   const startedAt = Date.now();
   while (!predicate()) {
@@ -35,9 +70,19 @@ async function waitFor(
   }
 }
 
+// Primes the per-tenant last-trade cache for the seeded tenant, the same
+// way the webhook request path will read it (keyed by ctx.id).
+async function warmLastTradeCache(
+  fetchClientsFn: () => Promise<HFMClientsResult>,
+): Promise<void> {
+  const ctx = await getTenantConfigForTests(getDb(), TENANT_ID);
+  if (!ctx) throw new Error(`test tenant ${TENANT_ID} not found`);
+  await getLastTradeMap(ctx, { fetchClientsFn });
+}
+
 async function setupTestDb() {
   const client = postgres(TEST_DATABASE_URL, { max: 1 });
-  const db = drizzle(client);
+  const db = drizzle(client, { schema });
   await db.execute(sql`
     DROP TABLE IF EXISTS client_request_snapshot_rows CASCADE;
     DROP TABLE IF EXISTS client_request_snapshots CASCADE;
@@ -46,9 +91,32 @@ async function setupTestDb() {
     DROP TABLE IF EXISTS daily_report_notifications CASCADE;
     DROP TABLE IF EXISTS notify_recipients CASCADE;
     DROP TABLE IF EXISTS client_snapshots CASCADE;
+    DROP TABLE IF EXISTS tenant_health_state CASCADE;
+    DROP TABLE IF EXISTS tenant_whitelist_uids CASCADE;
+    DROP TABLE IF EXISTS tenants CASCADE;
   `);
+  // Bun auto-loads apps/api/.env, whose TARGET_WALLET would make the
+  // bootstrap seed run inside initDb before CONFIG_ENCRYPTION_KEY exists.
+  // Tests always seed their own tenant below, so keep the boot seed off.
+  delete process.env.TARGET_WALLET;
   await initDb(db);
+  process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 21).toString("base64");
+  TENANT_ID = await insertTenantRow(db, INPUT);
+  await addWhitelistUid(db, TENANT_ID, UID, null);
+  // Uabc123 is the standard user in the event-processing tests: the
+  // whitelist is tenant-scoped now, so every allowed uid must be seeded.
+  await addWhitelistUid(db, TENANT_ID, "Uabc123", null);
+  await updateTenantLineIdentity(db, TENANT_ID, {
+    userId: BOT_USER_ID,
+    basicId: null,
+    displayName: null,
+  });
+  const row = await getTenantRowById(db, TENANT_ID);
+  webhookId = row!.webhookId;
   await client.end();
+  // The tenant cache is keyed by tenant id, and every fresh setup re-creates
+  // tenant id 1, so a cached config from the previous test would leak in.
+  invalidateTenantCache();
   resetDbForTests();
 }
 
@@ -78,7 +146,7 @@ describe("webhook", () => {
   test("invalid signature returns 400", async () => {
     const { app } = await importWebhook();
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -96,7 +164,7 @@ describe("webhook", () => {
     const body = '{"destination":"U123","events":[]}';
     const sig = computeSig(body, SECRET);
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -113,7 +181,7 @@ describe("webhook", () => {
   test("non-message event returns 200 with no push", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "follow",
@@ -132,7 +200,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -149,10 +217,9 @@ describe("webhook", () => {
   });
 
   test("non-whitelisted user receives rejection message", async () => {
-    process.env.LINE_WHITELIST_UIDS = "Uallowed1,Uallowed2";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -180,7 +247,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -199,14 +266,12 @@ describe("webhook", () => {
     expect(pushBody.replyToken).toBe("token123");
     expect(pushBody.messages[0].type).toBe("text");
     expect(pushBody.messages[0].text).toContain("\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C");
-
-    delete process.env.LINE_WHITELIST_UIDS;
   });
 
   test("valid text message event shows loading before fetching HFM", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -267,15 +332,13 @@ describe("webhook", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await getLastTradeMap({
-      fetchClientsFn: async () => ({
-        ok: true,
-        data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
-      }),
-    });
+    await warmLastTradeCache(async () => ({
+      ok: true,
+      data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
+    }));
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -307,7 +370,7 @@ describe("webhook", () => {
     process.env.LAST_TRADE_DEADLINE_MS = "200";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -371,7 +434,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const response = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -396,7 +459,7 @@ describe("webhook", () => {
   test("HFM server error replies with the HFM-down notice instead of silence", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -427,7 +490,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const response = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-line-signature": sig },
         body,
@@ -447,12 +510,9 @@ describe("webhook", () => {
   });
 
   test("wallet whose accounts are all archived replies with the partner notice", async () => {
-    // Self-contained whitelist: .env leaks real LINE_WHITELIST_UIDS into
-    // isolated runs (-t), which would reject Uabc123 before the lookup.
-    process.env.LINE_WHITELIST_UIDS = "Uabc123";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -508,7 +568,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const response = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -533,7 +593,7 @@ describe("webhook", () => {
   test("an expired reply token falls back to pushing the card", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -592,15 +652,13 @@ describe("webhook", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await getLastTradeMap({
-      fetchClientsFn: async () => ({
-        ok: true,
-        data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
-      }),
-    });
+    await warmLastTradeCache(async () => ({
+      ok: true,
+      data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
+    }));
 
     const response = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-line-signature": sig },
         body,
@@ -622,7 +680,7 @@ describe("webhook", () => {
   test("a total send failure still pushes the try-again notice", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -688,15 +746,13 @@ describe("webhook", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await getLastTradeMap({
-      fetchClientsFn: async () => ({
-        ok: true,
-        data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
-      }),
-    });
+    await warmLastTradeCache(async () => ({
+      ok: true,
+      data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
+    }));
 
     const response = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-line-signature": sig },
         body,
@@ -712,15 +768,16 @@ describe("webhook", () => {
   });
 
   test("a non-whitelisted user gets no retry notice when their rejection fails", async () => {
-    process.env.LINE_WHITELIST_UIDS = "Usomeone_else";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
           message: { type: "text", id: "123", text: "98241376" },
-          source: { type: "user", userId: "Uabc123" },
+          // Uabc123 is whitelisted now, so use an unknown uid: its rejection
+          // notice must fail and the catch-all must still stay silent.
+          source: { type: "user", userId: "Ustranger" },
           replyToken: "expired",
           timestamp: 1716000000000,
           mode: "active",
@@ -746,7 +803,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const response = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-line-signature": sig },
         body,
@@ -761,11 +818,15 @@ describe("webhook", () => {
 
   test("a database failure does not stop the lookup reply", async () => {
     const { app } = await importWebhook();
-    process.env.DATABASE_URL = "postgresql://nobody@127.0.0.1:1/none";
-    resetDbForTests();
+
+    // Tenant resolution now reads the tenants table (Task 12), so a fully
+    // unreachable database is a loud 500 by design. The failure the reply
+    // must survive is the one during event processing: break the telemetry
+    // write itself and the customer must still get the lookup reply.
+    await getDb().execute(sql`DROP TABLE line_users`);
 
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -796,7 +857,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const response = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-line-signature": sig },
         body,
@@ -817,7 +878,7 @@ describe("webhook", () => {
   test("T-prefix account lookup resolves wallet via client_id and returns all linked accounts", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -916,12 +977,10 @@ describe("webhook", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await getLastTradeMap({
-      fetchClientsFn: async () => ({ ok: true, data: [] as HFMClientRow[] }),
-    });
+    await warmLastTradeCache(async () => ({ ok: true, data: [] as HFMClientRow[] }));
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -991,12 +1050,10 @@ describe("webhook", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await getLastTradeMap({
-      fetchClientsFn: async () => ({ ok: true, data: [] as HFMClientRow[] }),
-    });
+    await warmLastTradeCache(async () => ({ ok: true, data: [] as HFMClientRow[] }));
 
     const bodyText = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -1011,7 +1068,7 @@ describe("webhook", () => {
 
     const sigText = computeSig(bodyText, SECRET);
     const resText = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1033,7 +1090,7 @@ describe("webhook", () => {
     fetchCalls.length = 0;
 
     const bodyPostback = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "postback",
@@ -1048,7 +1105,7 @@ describe("webhook", () => {
 
     const sigPostback = computeSig(bodyPostback, SECRET);
     const resPostback = await app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1115,13 +1172,11 @@ describe("webhook", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    await getLastTradeMap({
-      fetchClientsFn: async () => ({ ok: true, data: [] as HFMClientRow[] }),
-    });
+    await warmLastTradeCache(async () => ({ ok: true, data: [] as HFMClientRow[] }));
 
     const sendText = async (text: string, replyToken: string) => {
       const bodyText = JSON.stringify({
-        destination: "U123",
+        destination: BOT_USER_ID,
         events: [
           {
             type: "message",
@@ -1134,7 +1189,7 @@ describe("webhook", () => {
         ],
       });
       const res = await app.fetch(
-        new Request("http://localhost/webhook", {
+        new Request(`http://localhost/webhook?oa=${webhookId}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1168,7 +1223,7 @@ describe("webhook", () => {
   test("invalid input returns format error message", async () => {
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -1196,7 +1251,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1218,7 +1273,7 @@ describe("webhook", () => {
     process.env.TARGET_WALLET = "30506525";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -1288,7 +1343,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1317,7 +1372,7 @@ describe("webhook", () => {
     process.env.TARGET_WALLET = "30506525";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -1354,7 +1409,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1375,7 +1430,7 @@ describe("webhook", () => {
     process.env.TARGET_WALLET = "30506525";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -1407,7 +1462,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1428,7 +1483,7 @@ describe("webhook", () => {
     process.env.TARGET_WALLET = "30506525";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -1460,7 +1515,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1481,7 +1536,7 @@ describe("webhook", () => {
     process.env.TARGET_WALLET = "30506525";
     const { app } = await importWebhook();
     const body = JSON.stringify({
-      destination: "U123",
+      destination: BOT_USER_ID,
       events: [
         {
           type: "message",
@@ -1513,7 +1568,7 @@ describe("webhook", () => {
     }) as unknown as typeof globalThis.fetch;
 
     const res = app.fetch(
-      new Request("http://localhost/webhook", {
+      new Request(`http://localhost/webhook?oa=${webhookId}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1528,6 +1583,143 @@ describe("webhook", () => {
     expect(fetchCalls.at(-1)?.url).toBe("https://api.line.me/v2/bot/message/reply");
     const replyBody = JSON.parse(fetchCalls.at(-1)?.body ?? "{}");
     expect(replyBody.replyToken).toBe("tokenMonth");
+  });
+
+  describe("webhook tenant routing", () => {
+    const bodyFor = (events: unknown[]) =>
+      JSON.stringify({ destination: BOT_USER_ID, events });
+
+    test("missing oa id -> 404", async () => {
+      const { app } = await importWebhook();
+      const res = await app.request("/webhook", { method: "POST", body: "" });
+      expect(res.status).toBe(404);
+    });
+
+    test("unknown oa id -> 404", async () => {
+      const { app } = await importWebhook();
+      const res = await app.request("/webhook?oa=00000000-0000-4000-8000-0000000000ff", {
+        method: "POST",
+        body: "{}",
+      });
+      expect(res.status).toBe(404);
+    });
+
+    test("valid signature for the wrong tenant -> 400", async () => {
+      const { app } = await importWebhook();
+      // Signed with some other OA's secret but sent to this tenant's URL.
+      const body = bodyFor([]);
+      const res = await app.request(`/webhook?oa=${webhookId}`, {
+        method: "POST",
+        headers: { "x-line-signature": computeSig(body, "wrong_secret") },
+        body,
+      });
+      expect(res.status).toBe(400);
+    });
+
+    test("inactive tenant -> 200 without processing", async () => {
+      const { app } = await importWebhook();
+      await saveTenant({ ...INPUT, active: false }, TENANT_ID);
+      const body = bodyFor([]);
+      const res = await app.request(`/webhook?oa=${webhookId}`, {
+        method: "POST",
+        headers: { "x-line-signature": computeSig(body, SECRET) },
+        body,
+      });
+      expect(res.status).toBe(200);
+    });
+
+    test("destination mismatch -> 400 (webhook URL pasted into another OA)", async () => {
+      const { app } = await importWebhook();
+      const body = JSON.stringify({
+        destination: "U99999999999999999999999999999999",
+        events: [],
+      });
+      const res = await app.request(`/webhook?oa=${webhookId}`, {
+        method: "POST",
+        headers: { "x-line-signature": computeSig(body, SECRET) },
+        body,
+      });
+      expect(res.status).toBe(400);
+    });
+
+    test("path form /webhook/<id> works the same as ?oa=", async () => {
+      const { app } = await importWebhook();
+      const body = bodyFor([]);
+      const res = await app.request(`/webhook/${webhookId}`, {
+        method: "POST",
+        headers: { "x-line-signature": computeSig(body, SECRET) },
+        body,
+      });
+      expect(res.status).toBe(200);
+    });
+
+    test("happy path: known id, valid signature, matching destination -> 200", async () => {
+      const { app } = await importWebhook();
+      const body = bodyFor([]);
+      const res = await app.request(`/webhook?oa=${webhookId}`, {
+        method: "POST",
+        headers: { "x-line-signature": computeSig(body, SECRET) },
+        body,
+      });
+      expect(res.status).toBe(200);
+    });
+
+    test("a request to tenant A records line_users under tenant A only", async () => {
+      // Seed a second tenant B with its own webhook id (same helper as setup).
+      const seedDb = getDb();
+      const idB = await insertTenantRow(seedDb, { ...INPUT, label: "tenant B" });
+      await updateTenantLineIdentity(seedDb, idB, {
+        userId: "U456",
+        basicId: null,
+        displayName: null,
+      });
+      invalidateTenantCache();
+
+      const { app } = await importWebhook();
+
+      // "hello" is invalid input, so the handler only sends the format-error
+      // reply; every outbound call is stubbed, none reaches a real API.
+      globalThis.fetch = (async (
+        input: Parameters<typeof globalThis.fetch>[0]
+      ) => {
+        void input;
+        return new Response("{}", { status: 200 });
+      }) as unknown as typeof globalThis.fetch;
+
+      const body = bodyFor([
+        {
+          type: "message",
+          message: { type: "text", id: "scope1", text: "hello" },
+          source: { type: "user", userId: UID },
+          replyToken: "reply_scope",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ]);
+      const res = await app.request(`/webhook?oa=${webhookId}`, {
+        method: "POST",
+        headers: { "x-line-signature": computeSig(body, SECRET) },
+        body,
+      });
+      expect(res.status).toBe(200);
+
+      // recordLineUserRequest runs detached from the response; waitFor's
+      // predicate is synchronous, so poll the table directly until the row
+      // lands under tenant A, then assert B stayed empty.
+      const db = getDb();
+      const startedAt = Date.now();
+      let rowsA = await listLineUsers(db, TENANT_ID);
+      while (rowsA.length === 0) {
+        if (Date.now() - startedAt > 2000) {
+          throw new Error("Timed out waiting for the line_users row under tenant A");
+        }
+        await new Promise((r) => setTimeout(r, 10));
+        rowsA = await listLineUsers(db, TENANT_ID);
+      }
+      const rowsB = await listLineUsers(db, idB);
+      expect(rowsA.length).toBe(1);
+      expect(rowsB.length).toBe(0);
+    });
   });
 });
 

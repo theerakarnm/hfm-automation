@@ -1,8 +1,31 @@
 import { test, expect, describe, afterEach } from "bun:test";
 import { fetchPerformance, extractWalletNumber, checkConditions, fetchClients, fetchAllClients, fetchClientsByRange, parsePerformanceLookup, resolveLinkedAccounts } from "../src/services/hfm.service";
 import type { HFMClientsPerformanceResponse } from "../src/types/hfm.types";
+import type { TenantConfig } from "../src/types/tenant.types";
 
 const ORIGINAL_FETCH = globalThis.fetch;
+
+function makeCtx(overrides: Partial<TenantConfig> = {}): TenantConfig {
+  return {
+    id: 1,
+    webhookId: "00000000-0000-4000-8000-000000000001",
+    label: "Test OA",
+    active: true,
+    lineChannelAccessToken: "line_tok",
+    lineChannelSecret: "line_sec",
+    lineBotUserId: null,
+    lineBasicId: null,
+    lineDisplayName: null,
+    hfmApiKey: "hfm_key_for_test",
+    hfmApiBaseUrl: "https://hfm.test",
+    targetWallet: 30506525,
+    whitelistEnabled: true,
+    whitelistUids: [],
+    lastTestedAt: null,
+    lastTestResult: null,
+    ...overrides,
+  };
+}
 
 const mockHfmResponse: HFMClientsPerformanceResponse = {
   clients: [
@@ -68,7 +91,7 @@ describe("fetchPerformance", () => {
 
   test("successful response returns ok true with data array", async () => {
     globalThis.fetch = mockFetch(200, mockHfmResponse);
-    const result = await fetchPerformance({ kind: "wallet", id: 98241376, label: "WL-98241376" });
+    const result = await fetchPerformance(makeCtx(), { kind: "wallet", id: 98241376, label: "WL-98241376" });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(Array.isArray(result.data)).toBe(true);
@@ -81,7 +104,7 @@ describe("fetchPerformance", () => {
 
   test("404 response returns not_found", async () => {
     globalThis.fetch = mockFetch(404, { detail: "Not found" });
-    const result = await fetchPerformance({ kind: "wallet", id: 0, label: "WL-00000000" });
+    const result = await fetchPerformance(makeCtx(), { kind: "wallet", id: 0, label: "WL-00000000" });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("not_found");
@@ -90,7 +113,7 @@ describe("fetchPerformance", () => {
 
   test("500 response returns server_error", async () => {
     globalThis.fetch = mockFetch(500, { detail: "Internal error" });
-    const result = await fetchPerformance({ kind: "wallet", id: 98241376, label: "WL-98241376" });
+    const result = await fetchPerformance(makeCtx(), { kind: "wallet", id: 98241376, label: "WL-98241376" });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("server_error");
@@ -99,7 +122,7 @@ describe("fetchPerformance", () => {
 
   test("empty clients array returns not_found", async () => {
     globalThis.fetch = mockFetch(200, { clients: [], totals: {} });
-    const result = await fetchPerformance({ kind: "wallet", id: 0, label: "WL-00000000" });
+    const result = await fetchPerformance(makeCtx(), { kind: "wallet", id: 0, label: "WL-00000000" });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("not_found");
@@ -108,7 +131,7 @@ describe("fetchPerformance", () => {
 
   test("401 response returns server_error", async () => {
     globalThis.fetch = mockFetch(401, { detail: "Unauthorized" });
-    const result = await fetchPerformance({ kind: "wallet", id: 98241376, label: "WL-98241376" });
+    const result = await fetchPerformance(makeCtx(), { kind: "wallet", id: 98241376, label: "WL-98241376" });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("server_error");
@@ -125,7 +148,7 @@ describe("fetchPerformance", () => {
       totals: mockHfmResponse.totals,
     };
     globalThis.fetch = mockFetch(200, multiResponse);
-    const result = await fetchPerformance({ kind: "wallet", id: 98241376, label: "WL-98241376" });
+    const result = await fetchPerformance(makeCtx(), { kind: "wallet", id: 98241376, label: "WL-98241376" });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.length).toBe(2);
@@ -142,7 +165,7 @@ describe("fetchPerformance", () => {
       totals: mockHfmResponse.totals,
     };
     globalThis.fetch = mockFetch(200, archivedResponse);
-    const result = await fetchPerformance({ kind: "wallet", id: 65238209, label: "65238209" });
+    const result = await fetchPerformance(makeCtx(), { kind: "wallet", id: 65238209, label: "65238209" });
     expect(result.ok).toBe(false);
     if (!result.ok && result.reason === "all_archived") {
       expect(result.subaffiliate).toBe(30506525);
@@ -160,7 +183,7 @@ describe("fetchPerformance", () => {
         headers: { "Content-Type": "application/json" },
       });
     }) as unknown as typeof globalThis.fetch;
-    const result = await fetchPerformance({ kind: "account", id: 123456789, label: "123456789" });
+    const result = await fetchPerformance(makeCtx(), { kind: "account", id: 123456789, label: "123456789" });
     expect(result.ok).toBe(true);
     expect(calledUrl).toContain("accounts=123456789");
     expect(calledUrl).not.toContain("wallets=");
@@ -170,51 +193,83 @@ describe("fetchPerformance", () => {
 describe("checkConditions", () => {
   const baseData = mockHfmResponse.clients[0]!;
 
-  afterEach(() => {
-    delete process.env.TARGET_WALLET;
-  });
-
-  test("match all when wallet matches target and balance >= 200 USD", () => {
-    process.env.TARGET_WALLET = "98241376";
-    const result = checkConditions(baseData);
+  test("match all when wallet matches ctx target and balance >= 200 USD", () => {
+    const ctx = makeCtx({ targetWallet: 98241376 });
+    const result = checkConditions(ctx, baseData);
     expect(result.underTargetWallet).toBe(true);
     expect(result.depositThresholdMet).toBe(true);
     expect(result.matchAll).toBe(true);
   });
 
-  test("not match when wallet does not match target", () => {
-    process.env.TARGET_WALLET = "30506525";
-    const result = checkConditions(baseData);
+  test("not match when wallet does not match ctx target", () => {
+    const ctx = makeCtx({ targetWallet: 30506525 });
+    const result = checkConditions(ctx, baseData);
     expect(result.underTargetWallet).toBe(false);
     expect(result.matchAll).toBe(false);
   });
 
   test("not match when balance below 200 USD", () => {
-    process.env.TARGET_WALLET = "98241376";
+    const ctx = makeCtx({ targetWallet: 98241376 });
     const lowDeposit = { ...baseData, balance: 150 };
-    const result = checkConditions(lowDeposit);
+    const result = checkConditions(ctx, lowDeposit);
     expect(result.depositThresholdMet).toBe(false);
     expect(result.matchAll).toBe(false);
   });
 
   test("USC balance normalized by dividing by 100", () => {
-    process.env.TARGET_WALLET = "98241376";
+    const ctx = makeCtx({ targetWallet: 98241376 });
     const uscData = { ...baseData, balance: 200_00, account_currency: "USC" };
-    const result = checkConditions(uscData);
+    const result = checkConditions(ctx, uscData);
     expect(result.depositThresholdMet).toBe(true);
   });
 
   test("USC balance below threshold after normalization", () => {
-    process.env.TARGET_WALLET = "98241376";
+    const ctx = makeCtx({ targetWallet: 98241376 });
     const uscData = { ...baseData, balance: 199_99, account_currency: "USC" };
-    const result = checkConditions(uscData);
+    const result = checkConditions(ctx, uscData);
     expect(result.depositThresholdMet).toBe(false);
   });
 
-  test("not match when TARGET_WALLET is not set", () => {
-    const result = checkConditions(baseData);
+  test("not match when ctx target wallet differs from subaffiliate", () => {
+    const result = checkConditions(makeCtx(), baseData);
     expect(result.underTargetWallet).toBe(false);
     expect(result.matchAll).toBe(false);
+  });
+});
+
+describe("tenant isolation in hfm.service", () => {
+  afterEach(() => {
+    globalThis.fetch = ORIGINAL_FETCH;
+    delete process.env.TARGET_WALLET;
+  });
+
+  test("fetchPerformance sends the ctx tenant's bearer token", async () => {
+    const seen: string[] = [];
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+      seen.push(String((init!.headers as Record<string, string>).Authorization));
+      return new Response(JSON.stringify({
+        clients: [{ client_id: 1, account_id: 2, archived: null, subaffiliate: "WL-30506525" }],
+      }), { status: 200 });
+    }) as typeof fetch;
+
+    const a = makeCtx({ hfmApiKey: "key_A", hfmApiBaseUrl: "https://a.test" });
+    const b = makeCtx({ hfmApiKey: "key_B", hfmApiBaseUrl: "https://b.test" });
+    await fetchPerformance(a, { kind: "wallet", id: 1, label: "1" });
+    await fetchPerformance(b, { kind: "wallet", id: 1, label: "1" });
+
+    expect(seen).toEqual(["Bearer key_A", "Bearer key_B"]);
+  });
+
+  test("checkConditions uses ctx.targetWallet, never env", () => {
+    process.env.TARGET_WALLET = "99999999";
+    const ctx = makeCtx({ targetWallet: 30506525 });
+    const data = {
+      subaffiliate: "WL-30506525",
+      balance: 500,
+      account_currency: "USD",
+    } as unknown as Parameters<typeof checkConditions>[1];
+    expect(checkConditions(ctx, data).underTargetWallet).toBe(true);
+    delete process.env.TARGET_WALLET;
   });
 });
 
@@ -233,15 +288,15 @@ describe("fetchAllClients", () => {
       });
     }) as unknown as typeof globalThis.fetch;
 
-    const result = await fetchAllClients();
+    const result = await fetchAllClients(makeCtx());
     expect(result.ok).toBe(true);
-    expect(calledUrl).toBe("https://api.hfaffiliates.com/api/performance/client-performance");
+    expect(calledUrl).toBe("https://hfm.test/api/performance/client-performance");
     expect(calledUrl.includes("?")).toBe(false);
   });
 
   test("fetchAllClients returns data with clients and totals", async () => {
     globalThis.fetch = mockFetch(200, mockHfmResponse);
-    const result = await fetchAllClients();
+    const result = await fetchAllClients(makeCtx());
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.clients).toHaveLength(1);
@@ -261,21 +316,21 @@ describe("fetchAllClients", () => {
       throw new Error("unreachable");
     }) as unknown as typeof globalThis.fetch;
 
-    const result = await fetchAllClients(5);
+    const result = await fetchAllClients(makeCtx(), 5);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("timeout");
   });
 
   test("fetchAllClients server error returns server_error", async () => {
     globalThis.fetch = mockFetch(500, { detail: "Internal error" });
-    const result = await fetchAllClients();
+    const result = await fetchAllClients(makeCtx());
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("server_error");
   });
 
   test("fetchAllClients invalid body returns server_error", async () => {
     globalThis.fetch = mockFetch(200, { not_clients: true });
-    const result = await fetchAllClients();
+    const result = await fetchAllClients(makeCtx());
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("server_error");
   });
@@ -296,7 +351,7 @@ describe("fetchClientsByRange", () => {
       });
     }) as unknown as typeof globalThis.fetch;
 
-    const result = await fetchClientsByRange("2026-03-01", "2026-03-31");
+    const result = await fetchClientsByRange(makeCtx(), "2026-03-01", "2026-03-31");
     expect(result.ok).toBe(true);
     expect(calledUrl).toContain("from_date=2026-03-01");
     expect(calledUrl).toContain("to_date=2026-03-31");
@@ -305,7 +360,7 @@ describe("fetchClientsByRange", () => {
 
   test("server error returns server_error", async () => {
     globalThis.fetch = mockFetch(500, { detail: "Internal error" });
-    const result = await fetchClientsByRange("2026-03-01", "2026-03-31");
+    const result = await fetchClientsByRange(makeCtx(), "2026-03-01", "2026-03-31");
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("server_error");
   });
@@ -447,7 +502,7 @@ describe("resolveLinkedAccounts", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    const result = await resolveLinkedAccounts(111);
+    const result = await resolveLinkedAccounts(makeCtx(), 111);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.length).toBe(3);
@@ -473,7 +528,7 @@ describe("resolveLinkedAccounts", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    const result = await resolveLinkedAccounts(111);
+    const result = await resolveLinkedAccounts(makeCtx(), 111);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("no_wallet");
@@ -485,7 +540,7 @@ describe("resolveLinkedAccounts", () => {
       return new Response("{}", { status: 404 });
     }) as unknown as typeof globalThis.fetch;
 
-    const result = await resolveLinkedAccounts(999);
+    const result = await resolveLinkedAccounts(makeCtx(), 999);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("not_found");
@@ -516,7 +571,7 @@ describe("resolveLinkedAccounts", () => {
       return new Response("{}", { status: 200 });
     }) as unknown as typeof globalThis.fetch;
 
-    const result = await resolveLinkedAccounts(111);
+    const result = await resolveLinkedAccounts(makeCtx(), 111);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data).toHaveLength(1);
@@ -532,25 +587,25 @@ describe("fetchClients", () => {
 
   test("empty data array returns failure (prevents empty snapshot)", async () => {
     globalThis.fetch = mockFetch(200, { data: [] });
-    const result = await fetchClients(5_000);
+    const result = await fetchClients(makeCtx(), 5_000);
     expect(result.ok).toBe(false);
   });
 
   test("malformed body returns failure", async () => {
     globalThis.fetch = mockFetch(200, { not_data: true });
-    const result = await fetchClients(5_000);
+    const result = await fetchClients(makeCtx(), 5_000);
     expect(result.ok).toBe(false);
   });
 
   test("non-200 status returns failure", async () => {
     globalThis.fetch = mockFetch(500, { data: [{ id: 1, wallet: 111 }] });
-    const result = await fetchClients(5_000);
+    const result = await fetchClients(makeCtx(), 5_000);
     expect(result.ok).toBe(false);
   });
 
   test("non-empty data returns ok with rows", async () => {
     globalThis.fetch = mockFetch(200, { data: [{ id: 1, wallet: 111 }] });
-    const result = await fetchClients(5_000);
+    const result = await fetchClients(makeCtx(), 5_000);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.data).toHaveLength(1);
   });

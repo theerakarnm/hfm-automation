@@ -14,11 +14,13 @@ import { buildTradingCard, buildPaginationCard } from "../builders/flex-message.
 import { generateReportForUser, type ReportPeriod } from "../jobs/daily-client-report";
 import { isTextMessageEvent, isPostbackEvent } from "../types/line.types";
 import { isWhitelisted } from "../utils/whitelist";
-import { logError } from "../utils/logger";
+import { logError, logger } from "../utils/logger";
+import { getTenantByWebhookId } from "../services/tenant-config.service";
 import { getDb } from "../db/connection";
 import { recordLineUserRequest } from "../repositories/line-user.repository";
 import type { WebhookBody, TextMessageEvent, PostbackEvent } from "../types/line.types";
 import type { PerformanceLookup } from "../types/hfm.types";
+import type { TenantConfig } from "../types/tenant.types";
 
 
 const MAX_WEBHOOK_EVENTS = 20;
@@ -41,7 +43,7 @@ const RETRY_MESSAGE =
 const webhook = new Hono();
 
 webhook.post(
-  "/",
+  "/:webhookId?",
   bodyLimit({
     maxSize: 256 * 1024,
     onError: (c) => c.text("Payload Too Large", 413),
@@ -50,13 +52,25 @@ webhook.post(
     const rawBody = await c.req.text();
     const sig = c.req.header("x-line-signature") ?? "";
 
-    if (
-      !verifyLineSignature(
-        rawBody,
-        sig,
-        process.env.LINE_CHANNEL_SECRET ?? ""
-      )
-    ) {
+    // The `oa` id is a routing hint only. LINE signs the body, never the
+    // URL, so identity is proven by the tenant's own channel secret below.
+    const webhookId = c.req.query("oa") ?? c.req.param("webhookId") ?? "";
+    if (!webhookId) return c.text("Not Found", 404);
+
+    const ctx = await getTenantByWebhookId(webhookId);
+    if (!ctx) {
+      logger.warn({ webhookId }, "webhook called with unknown oa id");
+      return c.text("Not Found", 404);
+    }
+
+    // Deliberately disabled tenants answer 200 so LINE keeps the webhook
+    // enabled; re-enabling later needs no console visit.
+    if (!ctx.active) {
+      logger.info({ tenantId: ctx.id }, "webhook for inactive tenant ignored");
+      return c.text("OK", 200);
+    }
+
+    if (!verifyLineSignature(rawBody, sig, ctx.lineChannelSecret)) {
       return c.text("Unauthorized", 400);
     }
 
@@ -67,30 +81,39 @@ webhook.post(
       return c.text("Bad Request", 400);
     }
 
-    const events = body.events ?? [];
+    // Body is now trustworthy. Cross-check that this OA really owns this
+    // webhook URL: the common setup mistake is pasting tenant A's URL into
+    // tenant B's LINE console. destination is always present per LINE docs.
+    if (ctx.lineBotUserId && body.destination && body.destination !== ctx.lineBotUserId) {
+      logger.error(
+        { tenantId: ctx.id, expected: ctx.lineBotUserId, got: body.destination },
+        "webhook destination mismatch: this URL is registered in another OA's console",
+      );
+      return c.text("Wrong channel", 400);
+    }
+
+    const events = (body.events ?? []).slice(0, MAX_WEBHOOK_EVENTS);
     const db = getDb();
 
-    const eventsToProcess = events.slice(0, MAX_WEBHOOK_EVENTS);
-
-    for (const event of eventsToProcess) {
+    for (const event of events) {
       const uid = event.source?.userId;
       if (uid) {
         // Telemetry only - a database hiccup must never stop the customer's reply.
-        recordLineUserRequest(db, uid, event.type).catch((err) =>
+        recordLineUserRequest(db, ctx.id, uid, event.type).catch((err) =>
           logError("line-user", err),
         );
       }
       if (isTextMessageEvent(event)) {
         const { replyToken } = event;
-        processTextEvent(event).catch((err) => {
+        processTextEvent(ctx, event).catch((err) => {
           logError("webhook", err);
-          if (uid) void notifyRetry(replyToken, uid);
+          if (uid) void notifyRetry(ctx, replyToken, uid);
         });
       } else if (isPostbackEvent(event)) {
         const { replyToken } = event;
-        processPostbackEvent(event).catch((err) => {
+        processPostbackEvent(ctx, event).catch((err) => {
           logError("webhook", err);
-          if (uid) void notifyRetry(replyToken, uid);
+          if (uid) void notifyRetry(ctx, replyToken, uid);
         });
       }
     }
@@ -99,24 +122,29 @@ webhook.post(
   }
 );
 
-async function notifyRetry(replyToken: string, userId: string): Promise<void> {
+async function notifyRetry(
+  ctx: TenantConfig,
+  replyToken: string,
+  userId: string,
+): Promise<void> {
   // The catch-all also fires for non-whitelisted users whose rejection
   // notice failed to send; they must not get a retry prompt.
-  if (!isWhitelisted(userId)) return;
+  if (!isWhitelisted(ctx, userId)) return;
   try {
-    await replyOrPushText(replyToken, userId, RETRY_MESSAGE);
+    await replyOrPushText(ctx, replyToken, userId, RETRY_MESSAGE);
   } catch (err) {
     logError("webhook-notify", err);
   }
 }
 
-async function processTextEvent(event: TextMessageEvent): Promise<void> {
+async function processTextEvent(ctx: TenantConfig, event: TextMessageEvent): Promise<void> {
   const userId = event.source.userId;
   const replyToken = event.replyToken;
   if (!userId) return;
 
-  if (!isWhitelisted(userId)) {
+  if (!isWhitelisted(ctx, userId)) {
     await replyText(
+      ctx,
       replyToken,
       "\u274C \u0E02\u0E2D\u0E2D\u0E20\u0E31\u0E22 \u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E1A\u0E2D\u0E17\u0E19\u0E35\u0E49 \u0E2B\u0E32\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D Support"
     );
@@ -137,19 +165,20 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
   }
 
   if (reportPeriod) {
-    showLoading(userId).catch((err) => {
+    showLoading(ctx, userId).catch((err) => {
       logError("line-loading", err);
     });
     try {
-      const reportMessages = await generateReportForUser({ reportPeriod });
+      const reportMessages = await generateReportForUser(ctx, { reportPeriod });
       if (reportMessages.length === 1) {
-        await replyText(replyToken, reportMessages[0]!);
+        await replyText(ctx, replyToken, reportMessages[0]!);
       } else {
-        await replyTexts(replyToken, reportMessages);
+        await replyTexts(ctx, replyToken, reportMessages);
       }
     } catch (err) {
       logError("webhook-report", err);
       await replyText(
+        ctx,
         replyToken,
         "\u26A0\uFE0F \u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E23\u0E32\u0E22\u0E07\u0E32\u0E19\u0E44\u0E14\u0E49 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07"
       );
@@ -161,13 +190,14 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
 
   if (!lookup) {
     await replyText(
+      ctx,
       replyToken,
       "\u274C \u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E2A\u0E48\u0E07 Wallet ID \u0E2B\u0E23\u0E37\u0E2D Trading Account \u0E02\u0E36\u0E49\u0E19\u0E15\u0E49\u0E19\u0E14\u0E49\u0E27\u0E22 T\n\u0E40\u0E0A\u0E48\u0E19 98241376, WL-98241376, T1928491038\n\u0E1E\u0E34\u0E21\u0E1E\u0E4C lot \u0E19\u0E33\u0E2B\u0E19\u0E49\u0E32 \u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E41\u0E2A\u0E14\u0E07 Volume \u0E40\u0E0A\u0E48\u0E19 lot 98241376"
     );
     return;
   }
 
-  await handleLookupAndReply(replyToken, userId, lookup, 1);
+  await handleLookupAndReply(ctx, replyToken, userId, lookup, 1);
 }
 
 function parseQueryString(query: string): Record<string, string> {
@@ -182,13 +212,14 @@ function parseQueryString(query: string): Record<string, string> {
   return params;
 }
 
-async function processPostbackEvent(event: PostbackEvent): Promise<void> {
+async function processPostbackEvent(ctx: TenantConfig, event: PostbackEvent): Promise<void> {
   const userId = event.source.userId;
   const replyToken = event.replyToken;
   if (!userId) return;
 
-  if (!isWhitelisted(userId)) {
+  if (!isWhitelisted(ctx, userId)) {
     await replyText(
+      ctx,
       replyToken,
       "\u274C \u0E02\u0E2D\u0E2D\u0E20\u0E31\u0E22 \u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E1A\u0E2D\u0E17\u0E19\u0E35\u0E49 \u0E2B\u0E32\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D Support"
     );
@@ -209,24 +240,25 @@ async function processPostbackEvent(event: PostbackEvent): Promise<void> {
         // Preserve the "lot" opt-in across page navigation.
         showVolume: queryParams.vol === "1",
       };
-      await handleLookupAndReply(replyToken, userId, lookup, page);
+      await handleLookupAndReply(ctx, replyToken, userId, lookup, page);
     }
   }
 }
 
 async function handleLookupAndReply(
+  ctx: TenantConfig,
   replyToken: string,
   userId: string,
   lookup: PerformanceLookup,
   page: number = 1
 ): Promise<void> {
-  showLoading(userId).catch((err) => {
+  showLoading(ctx, userId).catch((err) => {
     logError("line-loading", err);
   });
 
   const result = lookup.kind === "wallet"
-    ? await fetchPerformance(lookup)
-    : await resolveLinkedAccounts(lookup.id);
+    ? await fetchPerformance(ctx, lookup)
+    : await resolveLinkedAccounts(ctx, lookup.id);
 
   if (result.ok) {
     const totalItems = result.data.length;
@@ -242,11 +274,11 @@ async function handleLookupAndReply(
     const clientsToShow = result.data.slice(startIdx, endIdx);
 
     const lastTradeByAccountId =
-      (await getLastTradeMapWithin(lastTradeDeadlineMs())) ??
+      (await getLastTradeMapWithin(ctx, lastTradeDeadlineMs())) ??
       new Map<number, string | null>();
 
     const bubbles = clientsToShow.map((clientData) => {
-      const conditions = checkConditions(clientData);
+      const conditions = checkConditions(ctx, clientData);
       const enrichedClientData = {
         ...clientData,
         last_trade: lastTradeByAccountId.get(clientData.account_id) ?? null,
@@ -265,6 +297,7 @@ async function handleLookupAndReply(
     const altLabel = `Wallet ${walletId}`;
     if (bubbles.length === 1) {
       await replyOrPushFlex(
+        ctx,
         replyToken,
         userId,
         `Trading Summary \u2014 ${altLabel}`,
@@ -272,6 +305,7 @@ async function handleLookupAndReply(
       );
     } else {
       await replyOrPushFlex(
+        ctx,
         replyToken,
         userId,
         `Trading Summary \u2014 ${altLabel}`,
@@ -295,7 +329,7 @@ async function handleLookupAndReply(
         : result.reason === "timeout"
           ? "\u26A0\uFE0F \u0E01\u0E32\u0E23\u0E40\u0E0A\u0E37\u0E48\u0E2D\u0E21\u0E15\u0E48\u0E2D\u0E2B\u0E21\u0E14\u0E40\u0E27\u0E25\u0E32\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07"
           : "\u26A0\uFE0F \u0E23\u0E30\u0E1A\u0E1A HFM API \u0E02\u0E31\u0E14\u0E02\u0E49\u0E2D\u0E07\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E43\u0E19\u0E2D\u0E35\u0E01\u0E2A\u0E31\u0E01\u0E04\u0E23\u0E39\u0E48 \u0E2B\u0E23\u0E37\u0E2D\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D Support";
-  await replyOrPushText(replyToken, userId, errMsg);
+  await replyOrPushText(ctx, replyToken, userId, errMsg);
 }
 
 export default webhook;

@@ -1,4 +1,4 @@
-import { desc, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import type { DrizzleDb } from "../db/connection";
 import { lineUsers } from "../db/schema";
 
@@ -12,12 +12,14 @@ export interface LineUserRow {
 
 export async function recordLineUserRequest(
   db: DrizzleDb,
+  tenantId: number,
   lineUid: string,
   eventType: string,
 ): Promise<void> {
   await db
     .insert(lineUsers)
     .values({
+      tenantId,
       lineUid,
       firstSeenAt: new Date().toISOString(),
       lastSeenAt: new Date().toISOString(),
@@ -25,7 +27,7 @@ export async function recordLineUserRequest(
       lastEventType: eventType,
     })
     .onConflictDoUpdate({
-      target: lineUsers.lineUid,
+      target: [lineUsers.tenantId, lineUsers.lineUid],
       set: {
         lastSeenAt: new Date().toISOString(),
         requestCount: sql`${lineUsers.requestCount} + 1`,
@@ -34,10 +36,14 @@ export async function recordLineUserRequest(
     });
 }
 
-export async function listLineUsers(db: DrizzleDb): Promise<LineUserRow[]> {
+export async function listLineUsers(
+  db: DrizzleDb,
+  tenantId: number,
+): Promise<LineUserRow[]> {
   const rows = await db
     .select()
     .from(lineUsers)
+    .where(eq(lineUsers.tenantId, tenantId))
     .orderBy(desc(lineUsers.lastSeenAt));
   return rows.map((r) => ({
     line_uid: r.lineUid,

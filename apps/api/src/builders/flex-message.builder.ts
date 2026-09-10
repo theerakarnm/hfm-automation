@@ -1,5 +1,6 @@
 import type { HFMPerformanceData, ConditionCheck } from "../types/hfm.types";
 import { dayjs } from "../utils/dayjs";
+import { logger } from "../utils/logger";
 
 const fmtCurrency = (n: number, currency: string): string => {
   if (currency === "USC") {
@@ -23,6 +24,30 @@ export function getRankTier(cumulativeLots: number): string {
   if (lots >= 500) return "\u{1F947} Gold";
   if (lots >= 100) return "\u{1F948} Silver";
   return "\u{1F949} Bronze";
+}
+
+export type FlexSummaryVersion = "flex-v1" | "flex-v2";
+
+// Read per call, not at module load: Bun caches the module, so a load-time
+// read could not be flipped by tests that re-import this builder.
+let warnedFlexVersion: string | null = null;
+
+export function resetFlexVersionWarning(): void {
+  warnedFlexVersion = null;
+}
+
+export function getFlexSummaryVersion(): FlexSummaryVersion {
+  const raw = (process.env.FLEX_SUMMARY_VERSION ?? "").trim();
+  if (raw === "") return "flex-v1";
+  if (raw === "flex-v1" || raw === "flex-v2") return raw;
+  if (warnedFlexVersion !== raw) {
+    warnedFlexVersion = raw;
+    logger.warn(
+      { context: "flex-version" },
+      `Unrecognized FLEX_SUMMARY_VERSION "${raw}", falling back to flex-v1`
+    );
+  }
+  return "flex-v1";
 }
 
 const fmtDate = (iso: string): string => {

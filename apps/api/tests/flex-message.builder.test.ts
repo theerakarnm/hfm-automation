@@ -1,6 +1,12 @@
-import { test, expect, describe } from "bun:test";
-import { buildTradingCard, buildPaginationCard } from "../src/builders/flex-message.builder";
+import { test, expect, describe, afterEach } from "bun:test";
+import {
+  buildTradingCard,
+  buildPaginationCard,
+  getFlexSummaryVersion,
+  resetFlexVersionWarning,
+} from "../src/builders/flex-message.builder";
 import type { HFMPerformanceData } from "../src/types/hfm.types";
+import { logger } from "../src/utils/logger";
 
 const mockData: HFMPerformanceData = {
   client_id: 45219,
@@ -391,5 +397,52 @@ describe("flex-v1 output is frozen", () => {
     delete process.env.FLEX_SUMMARY_VERSION;
     const card = buildTradingCard(snapshotData, notMatchConditions);
     expect(JSON.stringify(card, null, 2)).toMatchSnapshot();
+  });
+});
+
+
+describe("getFlexSummaryVersion", () => {
+  const original = process.env.FLEX_SUMMARY_VERSION;
+
+  afterEach(() => {
+    if (original === undefined) delete process.env.FLEX_SUMMARY_VERSION;
+    else process.env.FLEX_SUMMARY_VERSION = original;
+    resetFlexVersionWarning();
+  });
+
+  test("unset defaults to flex-v1", () => {
+    delete process.env.FLEX_SUMMARY_VERSION;
+    expect(getFlexSummaryVersion()).toBe("flex-v1");
+  });
+
+  test("empty string defaults to flex-v1", () => {
+    process.env.FLEX_SUMMARY_VERSION = "";
+    expect(getFlexSummaryVersion()).toBe("flex-v1");
+  });
+
+  test("flex-v1 is honoured", () => {
+    process.env.FLEX_SUMMARY_VERSION = "flex-v1";
+    expect(getFlexSummaryVersion()).toBe("flex-v1");
+  });
+
+  test("flex-v2 is honoured", () => {
+    process.env.FLEX_SUMMARY_VERSION = "flex-v2";
+    expect(getFlexSummaryVersion()).toBe("flex-v2");
+  });
+
+  test("unrecognized value falls back to flex-v1 and warns once", () => {
+    process.env.FLEX_SUMMARY_VERSION = "flex-v9";
+    const warned: string[] = [];
+    const originalWarn = logger.warn.bind(logger);
+    // @ts-expect-error - test double for the pino warn signature
+    logger.warn = (_obj: unknown, msg: string) => warned.push(msg);
+    try {
+      expect(getFlexSummaryVersion()).toBe("flex-v1");
+      expect(getFlexSummaryVersion()).toBe("flex-v1");
+    } finally {
+      logger.warn = originalWarn;
+    }
+    expect(warned.length).toBe(1);
+    expect(warned[0]).toContain("flex-v9");
   });
 });

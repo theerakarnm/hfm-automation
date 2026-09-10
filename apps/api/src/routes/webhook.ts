@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { verifyLineSignature } from "../utils/signature";
-import { fetchPerformance, resolveLinkedAccounts, checkConditions, parsePerformanceLookup } from "../services/hfm.service";
+import { fetchPerformance, resolveLinkedAccounts, checkConditions, parsePerformanceLookup, fetchMonthlyVolumeMap } from "../services/hfm.service";
 import {
   replyText,
   replyTexts,
@@ -10,7 +10,7 @@ import {
   replyOrPushFlex,
 } from "../services/line.service";
 import { getLastTradeMapWithin } from "../services/last-trade.service";
-import { buildTradingCard, buildPaginationCard } from "../builders/flex-message.builder";
+import { buildTradingCard, buildPaginationCard, getFlexSummaryVersion } from "../builders/flex-message.builder";
 import { generateReportForUser, type ReportPeriod } from "../jobs/daily-client-report";
 import { isTextMessageEvent, isPostbackEvent } from "../types/line.types";
 import { isWhitelisted } from "../utils/whitelist";
@@ -18,7 +18,7 @@ import { logError } from "../utils/logger";
 import { getDb } from "../db/connection";
 import { recordLineUserRequest } from "../repositories/line-user.repository";
 import type { WebhookBody, TextMessageEvent, PostbackEvent } from "../types/line.types";
-import type { PerformanceLookup } from "../types/hfm.types";
+import type { PerformanceLookup, MonthlyActivity } from "../types/hfm.types";
 
 
 const MAX_WEBHOOK_EVENTS = 20;
@@ -245,6 +245,14 @@ async function handleLookupAndReply(
       (await getLastTradeMapWithin(lastTradeDeadlineMs())) ??
       new Map<number, string | null>();
 
+    // flex-v2 needs current-month lots, which the unranged lookup does not
+    // carry. One extra ranged call per reply, only when v2 is on; a null
+    // result renders "N/A" instead of holding up the reply token.
+    const monthlyByAccountId: Map<number, MonthlyActivity> | null =
+      getFlexSummaryVersion() === "flex-v2"
+        ? await fetchMonthlyVolumeMap(result.data[0]!.client_id)
+        : null;
+
     const bubbles = clientsToShow.map((clientData) => {
       const conditions = checkConditions(clientData);
       const enrichedClientData = {
@@ -253,6 +261,7 @@ async function handleLookupAndReply(
       };
       return buildTradingCard(enrichedClientData, conditions, {
         showVolume: lookup.showVolume,
+        monthly: monthlyByAccountId?.get(clientData.account_id),
       });
     });
 

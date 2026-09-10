@@ -1529,6 +1529,105 @@ describe("webhook", () => {
     const replyBody = JSON.parse(fetchCalls.at(-1)?.body ?? "{}");
     expect(replyBody.replyToken).toBe("tokenMonth");
   });
+
+  async function runLookupCapturingHfmUrls(text: string): Promise<string[]> {
+    const { app } = await importWebhook();
+    const body = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "message",
+          message: { type: "text", id: "123", text },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "token123",
+          timestamp: 1716000000000,
+          mode: "active",
+        },
+      ],
+    });
+    const sig = computeSig(body, SECRET);
+
+    const urls: string[] = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof globalThis.fetch>[0]
+    ) => {
+      const url = String(input);
+      urls.push(url);
+
+      if (url.includes("/api/performance/client-performance")) {
+        return new Response(
+          JSON.stringify({
+            clients: [
+              {
+                client_id: 45219,
+                account_id: 78451293,
+                activity_status: "active",
+                trades: 24,
+                volume: 3.42,
+                account_type: "Standard",
+                balance: 12450.8,
+                account_currency: "USD",
+                equity: 12998.35,
+                archived: false,
+                subaffiliate: 0,
+                account_regdate: "2024-01-15T00:00:00Z",
+                status: "approved",
+              },
+            ],
+            totals: {},
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    await getLastTradeMap({
+      fetchClientsFn: async () => ({
+        ok: true,
+        data: [{ id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow],
+      }),
+    });
+
+    const response = await app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-line-signature": sig,
+        },
+        body,
+      })
+    );
+    expect(response.status).toBe(200);
+
+    await waitFor(() =>
+      urls.some((u) => u === "https://api.line.me/v2/bot/message/reply")
+    );
+    return urls;
+  }
+
+  describe("flex-v2 lookup path", () => {
+    const originalVersion = process.env.FLEX_SUMMARY_VERSION;
+
+    afterEach(() => {
+      if (originalVersion === undefined) delete process.env.FLEX_SUMMARY_VERSION;
+      else process.env.FLEX_SUMMARY_VERSION = originalVersion;
+    });
+
+    test("v1 does not request the month range", async () => {
+      process.env.FLEX_SUMMARY_VERSION = "flex-v1";
+      const urls = await runLookupCapturingHfmUrls("98241376");
+      expect(urls.some((u) => u.includes("from_date="))).toBe(false);
+    });
+
+    test("v2 requests the month range once", async () => {
+      process.env.FLEX_SUMMARY_VERSION = "flex-v2";
+      const urls = await runLookupCapturingHfmUrls("98241376");
+      expect(urls.filter((u) => u.includes("from_date=")).length).toBe(1);
+    });
+  });
 });
 
 async function importWebhook() {

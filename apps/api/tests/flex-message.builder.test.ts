@@ -372,3 +372,24 @@ describe("buildPaginationCard", () => {
   });
 });
 
+
+describe("flex-v1 output is frozen", () => {
+  const snapshotData: HFMPerformanceData = {
+    ...mockData,
+    last_trade: "2024-03-02T09:15:00Z",
+  };
+
+  test("default (flag unset) matches the locked v1 JSON", () => {
+    delete process.env.FLEX_SUMMARY_VERSION;
+    const card = buildTradingCard(snapshotData, matchAllConditions, {
+      showVolume: true,
+    });
+    expect(JSON.stringify(card, null, 2)).toMatchSnapshot();
+  });
+
+  test("default (flag unset), volume hidden, not-match conditions", () => {
+    delete process.env.FLEX_SUMMARY_VERSION;
+    const card = buildTradingCard(snapshotData, notMatchConditions);
+    expect(JSON.stringify(card, null, 2)).toMatchSnapshot();
+  });
+});

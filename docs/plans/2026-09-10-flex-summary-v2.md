@@ -909,7 +909,7 @@ git commit -m "feat: fetch current-month lots per account"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `apps/api/tests/webhook.test.ts`, matching the fetch-mock style already used in that file:
+Add this **inside** the existing top-level `describe("webhook", ...)` block in `apps/api/tests/webhook.test.ts`, so the `beforeEach` test-database and env setup still applies:
 
 ```ts
 describe("flex-v2 lookup path", () => {

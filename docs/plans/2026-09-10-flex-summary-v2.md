@@ -1,6 +1,6 @@
 # Flex Summary v2 (Monthly Status + 2-Lot Progress + Rank) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add an env-gated v2 of the LINE "Trading Account Summary" Flex card that shows monthly trading status, a monthly 2-lot progress line, and a customer rank tier, while `flex-v1` stays byte-identical to today.
 
@@ -82,7 +82,7 @@ No new config file.
 
 **Files:** none (no code in this task).
 
-- [ ] **Step 1: Report the finding and ask for approval**
+- [x] **Step 1: Report the finding and ask for approval**
 
 Post this to the user and wait for a yes:
 
@@ -90,7 +90,7 @@ Post this to the user and wait for a yes:
 > Proposed smallest change: one extra call to the same endpoint with `wallets=<walletId>&from_date=<ICT month start>&to_date=<today>`, which `fetchClientsByRange` already proves is supported.
 > This adds an external API call, which is a stop condition. Approve?
 
-- [ ] **Step 2: Stop if not approved**
+- [x] **Step 2: Stop if not approved**
 
 If the user says no, stop. Do not start Task 5 or Task 6.
 Tasks 1-4 and 7 are still safe to run (they add no API call), but do not ship v2 without a monthly data source.
@@ -104,7 +104,7 @@ This runs **before** any refactor so the snapshot records today's exact JSON.
 **Files:**
 - Test: `apps/api/tests/flex-message.builder.test.ts`
 
-- [ ] **Step 1: Write the snapshot test**
+- [x] **Step 1: Write the snapshot test**
 
 Append to `apps/api/tests/flex-message.builder.test.ts`:
 
@@ -131,17 +131,17 @@ describe("flex-v1 output is frozen", () => {
 });
 ```
 
-- [ ] **Step 2: Generate the snapshot**
+- [x] **Step 2: Generate the snapshot**
 
 Run from `apps/api`: `bun test tests/flex-message.builder.test.ts`
 Expected: PASS, and a new file `apps/api/tests/__snapshots__/flex-message.builder.test.ts.snap` appears.
 
-- [ ] **Step 3: Eyeball the snapshot**
+- [x] **Step 3: Eyeball the snapshot**
 
 Run: `head -40 tests/__snapshots__/flex-message.builder.test.ts.snap`
 Expected: the bubble JSON with `"text": "Trading Account Summary"` and a `"Volume"` label in the first snapshot.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/api/tests/flex-message.builder.test.ts apps/api/tests/__snapshots__/flex-message.builder.test.ts.snap
@@ -156,7 +156,7 @@ git commit -m "test: snapshot current trading card JSON"
 - Modify: `apps/api/src/builders/flex-message.builder.ts`
 - Test: `apps/api/tests/rank-tier.test.ts` (create)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `apps/api/tests/rank-tier.test.ts`:
 
@@ -192,12 +192,12 @@ describe("getRankTier", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run from `apps/api`: `bun test tests/rank-tier.test.ts`
 Expected: FAIL with an import/type error - `getRankTier` is not exported.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `apps/api/src/builders/flex-message.builder.ts`, add just below `const fmtVolume = ...`:
 
@@ -214,19 +214,19 @@ export function getRankTier(cumulativeLots: number): string {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run from `apps/api`: `bun test tests/rank-tier.test.ts`
 Expected: PASS, 12 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/builders/flex-message.builder.ts apps/api/tests/rank-tier.test.ts
 git commit -m "feat: add getRankTier lot tier helper"
 ```
 
-- [ ] **Step 6: Report progress**
+- [x] **Step 6: Report progress**
 
 `✅ Rank tier function + boundary tests - apps/api/src/builders/flex-message.builder.ts, apps/api/tests/rank-tier.test.ts`
 
@@ -238,7 +238,7 @@ git commit -m "feat: add getRankTier lot tier helper"
 - Modify: `apps/api/src/builders/flex-message.builder.ts`
 - Test: `apps/api/tests/flex-message.builder.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `apps/api/tests/flex-message.builder.test.ts` (and add `getFlexSummaryVersion`, `resetFlexVersionWarning` to the existing import from `../src/builders/flex-message.builder`):
 
@@ -297,12 +297,12 @@ import { afterEach } from "bun:test";
 import { logger } from "../src/utils/logger";
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run from `apps/api`: `bun test tests/flex-message.builder.test.ts -t "getFlexSummaryVersion"`
 Expected: FAIL - `getFlexSummaryVersion` is not exported.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `apps/api/src/builders/flex-message.builder.ts`, add the import at the top:
 
@@ -338,19 +338,19 @@ export function getFlexSummaryVersion(): FlexSummaryVersion {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run from `apps/api`: `bun test tests/flex-message.builder.test.ts`
 Expected: PASS, including both snapshot tests from Task 1 (still matching).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/builders/flex-message.builder.ts apps/api/tests/flex-message.builder.test.ts
 git commit -m "feat: add FLEX_SUMMARY_VERSION flag reader"
 ```
 
-- [ ] **Step 6: Report progress**
+- [x] **Step 6: Report progress**
 
 `✅ Feature flag reader with once-only warning - apps/api/src/builders/flex-message.builder.ts`
 
@@ -363,7 +363,7 @@ git commit -m "feat: add FLEX_SUMMARY_VERSION flag reader"
 - Modify: `apps/api/src/builders/flex-message.builder.ts`
 - Test: `apps/api/tests/flex-message.builder.test.ts`
 
-- [ ] **Step 1: Add the shared monthly type**
+- [x] **Step 1: Add the shared monthly type**
 
 Append to `apps/api/src/types/hfm.types.ts`:
 
@@ -378,7 +378,7 @@ export interface MonthlyActivity {
 }
 ```
 
-- [ ] **Step 2: Write the failing v2 tests**
+- [x] **Step 2: Write the failing v2 tests**
 
 Append to `apps/api/tests/flex-message.builder.test.ts`:
 
@@ -482,12 +482,12 @@ describe("flex-v2 trading card", () => {
 });
 ```
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 Run from `apps/api`: `bun test tests/flex-message.builder.test.ts -t "flex-v2"`
 Expected: FAIL - the card still renders "Volume" and has no "Rank" row.
 
-- [ ] **Step 4: Rename the current builder to V1**
+- [x] **Step 4: Rename the current builder to V1**
 
 In `apps/api/src/builders/flex-message.builder.ts`, change only the signature line of the existing exported function.
 
@@ -526,7 +526,7 @@ Update the type import on line 1 to:
 import type { HFMPerformanceData, ConditionCheck, MonthlyActivity } from "../types/hfm.types";
 ```
 
-- [ ] **Step 5: Add the v2 helpers and builder**
+- [x] **Step 5: Add the v2 helpers and builder**
 
 Add below `buildTradingCardV1` in the same file:
 
@@ -736,24 +736,24 @@ export function buildTradingCard(
 }
 ```
 
-- [ ] **Step 6: Run the builder tests**
+- [x] **Step 6: Run the builder tests**
 
 Run from `apps/api`: `bun test tests/flex-message.builder.test.ts`
 Expected: PASS, including the Task 1 snapshots - they prove v1 output did not move.
 
-- [ ] **Step 7: Run typecheck**
+- [x] **Step 7: Run typecheck**
 
 Run from `apps/api`: `bun run typecheck`
 Expected: no output, exit code 0.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add apps/api/src/builders/flex-message.builder.ts apps/api/src/types/hfm.types.ts apps/api/tests/flex-message.builder.test.ts
 git commit -m "feat: add flex-v2 trading card behind flag"
 ```
 
-- [ ] **Step 9: Report progress**
+- [x] **Step 9: Report progress**
 
 `✅ v1/v2 split + v2 bubble (This Month, Monthly Lots, Rank) - apps/api/src/builders/flex-message.builder.ts, apps/api/src/types/hfm.types.ts`
 
@@ -765,7 +765,7 @@ git commit -m "feat: add flex-v2 trading card behind flag"
 - Modify: `apps/api/src/services/hfm.service.ts`
 - Test: `apps/api/tests/hfm.service.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `apps/api/tests/hfm.service.test.ts` (add `fetchMonthlyVolumeMap` to the existing import from `../src/services/hfm.service`):
 
@@ -812,12 +812,12 @@ describe("fetchMonthlyVolumeMap", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run from `apps/api`: `bun test tests/hfm.service.test.ts -t "fetchMonthlyVolumeMap"`
 Expected: FAIL - `fetchMonthlyVolumeMap` is not exported.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `apps/api/src/services/hfm.service.ts`, add to the imports:
 
@@ -883,19 +883,19 @@ export async function fetchMonthlyVolumeMap(
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run from `apps/api`: `bun test tests/hfm.service.test.ts`
 Expected: PASS, all existing service tests still green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/services/hfm.service.ts apps/api/tests/hfm.service.test.ts
 git commit -m "feat: fetch current-month lots per account"
 ```
 
-- [ ] **Step 6: Report progress**
+- [x] **Step 6: Report progress**
 
 `✅ Monthly lots fetch with 6s budget and null fallback - apps/api/src/services/hfm.service.ts`
 
@@ -907,7 +907,7 @@ git commit -m "feat: fetch current-month lots per account"
 - Modify: `apps/api/src/routes/webhook.ts` (inside `handleLookupAndReply`, the block that builds `bubbles`)
 - Test: `apps/api/tests/webhook.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add this **inside** the existing top-level `describe("webhook", ...)` block in `apps/api/tests/webhook.test.ts`, so the `beforeEach` test-database and env setup still applies:
 
@@ -1016,12 +1016,12 @@ Add the helper just above that `describe`, inside the existing top-level `descri
   }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run from `apps/api`: `bun test tests/webhook.test.ts -t "flex-v2 lookup path"`
 Expected: FAIL - the v2 case records zero ranged calls.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `apps/api/src/routes/webhook.ts`, update the imports:
 
@@ -1070,19 +1070,19 @@ with:
     });
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run from `apps/api`: `bun test tests/webhook.test.ts`
 Expected: PASS, all webhook tests green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/routes/webhook.ts apps/api/tests/webhook.test.ts
 git commit -m "feat: pass monthly lots into the summary card"
 ```
 
-- [ ] **Step 6: Report progress**
+- [x] **Step 6: Report progress**
 
 `✅ Lookup handler feeds monthly data to v2 only - apps/api/src/routes/webhook.ts`
 
@@ -1093,7 +1093,7 @@ git commit -m "feat: pass monthly lots into the summary card"
 **Files:**
 - Modify: `apps/api/.env.example`
 
-- [ ] **Step 1: Add the flag to the template**
+- [x] **Step 1: Add the flag to the template**
 
 Append to `apps/api/.env.example`:
 
@@ -1105,35 +1105,36 @@ Append to `apps/api/.env.example`:
 FLEX_SUMMARY_VERSION=flex-v1
 ```
 
-- [ ] **Step 2: Verify .env was not touched**
+- [x] **Step 2: Verify .env was not touched**
 
 Run from the repo root: `git status --short`
 Expected: `apps/api/.env` does not appear in the output.
 
-- [ ] **Step 3: Run typecheck**
+- [x] **Step 3: Run typecheck**
 
 Run from `apps/api`: `bun run typecheck`
 Expected: exit code 0, no output.
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Start the test database from the repo root first: `docker compose up -d postgres-test`
+This machine has no `docker` binary (podman only) and already runs Postgres on `localhost:5433`, so this step was skipped during execution.
 Then from `apps/api`: `TEST_DATABASE_URL=postgresql://test:test@localhost:5433/hfm_test bun test`
 Expected: all tests pass, snapshots reported as matched (not written).
 
-- [ ] **Step 5: Confirm the v1 snapshot never changed**
+- [x] **Step 5: Confirm the v1 snapshot never changed**
 
 Run from the repo root: `git log --oneline -- apps/api/tests/__snapshots__/flex-message.builder.test.ts.snap`
 Expected: exactly one commit - the one from Task 1. If a later commit rewrote it, v1 output drifted; revert and fix.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/api/.env.example
 git commit -m "docs: document FLEX_SUMMARY_VERSION flag"
 ```
 
-- [ ] **Step 7: Report progress**
+- [x] **Step 7: Report progress**
 
 `✅ Flag documented, typecheck and full suite green - apps/api/.env.example`
 
@@ -1141,12 +1142,12 @@ git commit -m "docs: document FLEX_SUMMARY_VERSION flag"
 
 ## Acceptance Criteria Check
 
-- [ ] `FLEX_SUMMARY_VERSION` unset or `flex-v1` gives byte-identical JSON (Task 1 snapshot, re-verified in Task 4 Step 6 and Task 7 Step 5)
-- [ ] `flex-v2` shows all v1 fields except cumulative Volume, plus This Month, Monthly Lots x / 2 with pass/fail mark, and Rank (Task 4 Step 2 tests)
-- [ ] Rank boundary tests pass for 0, 0.22, 99.99, 100, 499.99, 500, 999.99, 1000, 3999.99, 4000 (Task 2)
-- [ ] `bun run typecheck` clean (Task 4 Step 7, Task 7 Step 3)
-- [ ] `.env.example` documents both values (Task 7 Step 1)
-- [ ] Flex JSON size and text length validated (Task 4 Step 2, "v2 JSON stays inside LINE Flex limits")
+- [x] `FLEX_SUMMARY_VERSION` unset or `flex-v1` gives byte-identical JSON (Task 1 snapshot, re-verified in Task 4 Step 6 and Task 7 Step 5)
+- [x] `flex-v2` shows all v1 fields except cumulative Volume, plus This Month, Monthly Lots x / 2 with pass/fail mark, and Rank (Task 4 Step 2 tests)
+- [x] Rank boundary tests pass for 0, 0.22, 99.99, 100, 499.99, 500, 999.99, 1000, 3999.99, 4000 (Task 2)
+- [x] `bun run typecheck` clean (Task 4 Step 7, Task 7 Step 3)
+- [x] `.env.example` documents both values (Task 7 Step 1)
+- [x] Flex JSON size and text length validated (Task 4 Step 2, "v2 JSON stays inside LINE Flex limits")
 
 ## Stop Conditions
 

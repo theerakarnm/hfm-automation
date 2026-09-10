@@ -14,6 +14,17 @@ const fmtCurrency = (n: number, currency: string): string => {
 
 const fmtVolume = (n: number): string => `${n.toFixed(2)} lots`;
 
+// Rank tiers are cut on cumulative all-time lots (HFM `volume`).
+// Boundaries are inclusive on the lower bound: 100 lots is Silver, 99.99 is Bronze.
+export function getRankTier(cumulativeLots: number): string {
+  const lots = Number.isFinite(cumulativeLots) ? cumulativeLots : 0;
+  if (lots >= 4000) return "\u{1F451} Diamond";
+  if (lots >= 1000) return "\u{1F48E} Platinum";
+  if (lots >= 500) return "\u{1F947} Gold";
+  if (lots >= 100) return "\u{1F948} Silver";
+  return "\u{1F949} Bronze";
+}
+
 const fmtDate = (iso: string): string => {
   return dayjs.utc(iso).format("DD MMM YYYY");
 };

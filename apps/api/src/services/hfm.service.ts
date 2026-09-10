@@ -1,4 +1,5 @@
 import { logError } from "../utils/logger";
+import { getThisMonthRange } from "../utils/date";
 import type {
   ConditionCheck,
   HFMApiResult,
@@ -7,6 +8,7 @@ import type {
   HFMClientsPerformanceResponse,
   HFMClientsResult,
   HFMPerformanceData,
+  MonthlyActivity,
   PerformanceLookup,
 } from "../types/hfm.types";
 
@@ -328,6 +330,57 @@ export async function fetchClientsByRange(
     }
     logError("hfm-service", e);
     return { ok: false, reason: "server_error" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Month-scoped copy of the client-performance lookup. Same endpoint as
+// fetchPerformance, plus the from_date/to_date pair that fetchClientsByRange
+// already relies on, so `volume` comes back as the current month's lots.
+// Timeout is short on purpose: this call sits inside the LINE reply path,
+// and a null result degrades the card to "N/A" rather than losing the reply.
+export async function fetchMonthlyVolumeMap(
+  walletId: number,
+  timeoutMs = 6_000,
+): Promise<Map<number, MonthlyActivity> | null> {
+  const { from, to } = getThisMonthRange();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
+    const params = new URLSearchParams({
+      wallets: String(walletId),
+      from_date: from,
+      to_date: to,
+    });
+    const url = `${baseUrl}/api/performance/client-performance?${params}`;
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
+    });
+
+    if (res.status !== 200) {
+      logError("hfm-service", `fetchMonthlyVolumeMap unexpected status ${res.status}`);
+      return null;
+    }
+
+    const body = await readJsonResponse<HFMClientsPerformanceResponse>(res);
+    if (!Array.isArray(body?.clients)) {
+      logError("hfm-service", "fetchMonthlyVolumeMap malformed body");
+      return null;
+    }
+
+    const map = new Map<number, MonthlyActivity>();
+    for (const client of body.clients) {
+      const lots = toNum(client.volume);
+      const trades = toNum(client.trades);
+      map.set(client.account_id, { lots, hasTrade: trades > 0 || lots > 0 });
+    }
+    return map;
+  } catch (e: unknown) {
+    logError("hfm-service", e);
+    return null;
   } finally {
     clearTimeout(timer);
   }

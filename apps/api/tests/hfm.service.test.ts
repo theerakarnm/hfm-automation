@@ -1,5 +1,5 @@
 import { test, expect, describe, afterEach } from "bun:test";
-import { fetchPerformance, extractWalletNumber, checkConditions, fetchClients, fetchAllClients, fetchClientsByRange, parsePerformanceLookup, resolveLinkedAccounts } from "../src/services/hfm.service";
+import { fetchPerformance, extractWalletNumber, checkConditions, fetchClients, fetchAllClients, fetchClientsByRange, parsePerformanceLookup, resolveLinkedAccounts, fetchMonthlyVolumeMap } from "../src/services/hfm.service";
 import type { HFMClientsPerformanceResponse } from "../src/types/hfm.types";
 
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -553,5 +553,46 @@ describe("fetchClients", () => {
     const result = await fetchClients(5_000);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.data).toHaveLength(1);
+  });
+});
+
+describe("fetchMonthlyVolumeMap", () => {
+  afterEach(() => {
+    globalThis.fetch = ORIGINAL_FETCH;
+  });
+
+  test("maps account_id to monthly lots and trade flag", async () => {
+    let calledUrl = "";
+    globalThis.fetch = (async (url: string) => {
+      calledUrl = String(url);
+      return new Response(
+        JSON.stringify({
+          clients: [
+            { ...mockHfmResponse.clients[0]!, account_id: 78451293, volume: 2.5, trades: 4 },
+            { ...mockHfmResponse.clients[0]!, account_id: 78451294, volume: 0, trades: 0 },
+          ],
+          totals: mockHfmResponse.totals,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }) as unknown as typeof globalThis.fetch;
+
+    const map = await fetchMonthlyVolumeMap(45219);
+    expect(map).not.toBeNull();
+    expect(map!.get(78451293)).toEqual({ lots: 2.5, hasTrade: true });
+    expect(map!.get(78451294)).toEqual({ lots: 0, hasTrade: false });
+    expect(calledUrl).toContain("wallets=45219");
+    expect(calledUrl).toContain("from_date=");
+    expect(calledUrl).toContain("to_date=");
+  });
+
+  test("non-200 returns null instead of throwing", async () => {
+    globalThis.fetch = mockFetch(500, { detail: "boom" });
+    expect(await fetchMonthlyVolumeMap(45219)).toBeNull();
+  });
+
+  test("malformed body returns null", async () => {
+    globalThis.fetch = mockFetch(200, { nope: true });
+    expect(await fetchMonthlyVolumeMap(45219)).toBeNull();
   });
 });

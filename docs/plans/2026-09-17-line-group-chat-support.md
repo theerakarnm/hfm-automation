@@ -2553,7 +2553,7 @@ Without this there is no supported way to read a group ID, which is what `LINE_G
 - Modify: `apps/api/src/routes/internal.ts:9-10, 68-81`
 - Test: `apps/api/tests/line-groups-endpoint.test.ts` (create)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `apps/api/tests/line-groups-endpoint.test.ts`:
 
@@ -2641,7 +2641,7 @@ describe("GET /internal/line-groups", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+- [x] **Step 2: Run the test and confirm it fails**
 
 Run from `apps/api`:
 
@@ -2651,7 +2651,7 @@ bun test tests/line-groups-endpoint.test.ts
 
 Expected: FAIL. The route does not exist, so the request returns 404 instead of 200.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `apps/api/src/routes/internal.ts`, add the import next to the existing repository import:
 
@@ -2682,7 +2682,7 @@ internal.get("/line-groups", async (c) => {
 });
 ```
 
-- [ ] **Step 4: Run the test and confirm it passes**
+- [x] **Step 4: Run the test and confirm it passes**
 
 Run from `apps/api`:
 
@@ -2692,7 +2692,7 @@ bun test tests/line-groups-endpoint.test.ts
 
 Expected: PASS, 3 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/routes/internal.ts apps/api/tests/line-groups-endpoint.test.ts

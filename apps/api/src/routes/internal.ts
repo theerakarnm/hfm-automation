@@ -3,11 +3,13 @@ import { sql } from "drizzle-orm";
 import { readLog, parseLog, listLogDates } from "../utils/logger";
 import { getDb } from "../db/connection";
 import { listLineUsers } from "../repositories/line-user.repository";
+import { listLineGroups } from "../repositories/line-group.repository";
 
 const internal = new Hono();
 
 const MAX_LOG_ENTRIES = 200;
 const MAX_LINE_UIDS = 500;
+const MAX_LINE_GROUPS = 200;
 
 internal.use("*", async (c, next) => {
   const key = c.req.query("key");
@@ -74,6 +76,19 @@ internal.get("/line-uids", async (c) => {
     truncated,
     uids: users.slice(0, MAX_LINE_UIDS).map((u) => u.line_uid),
     users: users.slice(0, MAX_LINE_UIDS),
+  });
+});
+
+// Operator lookup: a group ID is not visible anywhere in the LINE app, and
+// LINE_GROUP_WHITELIST_IDS needs it.
+internal.get("/line-groups", async (c) => {
+  const db = getDb();
+  const groups = await listLineGroups(db);
+  const truncated = groups.length > MAX_LINE_GROUPS;
+  return c.json({
+    count: Math.min(groups.length, MAX_LINE_GROUPS),
+    truncated,
+    groups: groups.slice(0, MAX_LINE_GROUPS),
   });
 });
 

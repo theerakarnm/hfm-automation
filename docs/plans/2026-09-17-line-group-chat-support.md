@@ -2245,7 +2245,7 @@ git commit -m "feat: answer lookups in group chats"
 - Modify: `apps/api/src/routes/webhook.ts` (imports, dispatcher, two new handlers)
 - Test: `apps/api/tests/webhook.test.ts` (new `describe` block)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Insert this block inside `describe("webhook", ...)`, right after the `describe("group chat", ...)` block from Task 7:
 
@@ -2398,7 +2398,7 @@ Insert this block inside `describe("webhook", ...)`, right after the `describe("
   });
 ```
 
-- [ ] **Step 2: Run the tests and confirm they fail**
+- [x] **Step 2: Run the tests and confirm they fail**
 
 Run from `apps/api`:
 
@@ -2408,7 +2408,7 @@ bun test tests/webhook.test.ts -t "group join and leave"
 
 Expected: FAIL. `join` and `leave` events currently fall through the dispatcher, so no reply is sent and no row is written.
 
-- [ ] **Step 3: Extend the imports**
+- [x] **Step 3: Extend the imports**
 
 In `apps/api/src/routes/webhook.ts`, change four import lines:
 
@@ -2426,7 +2426,7 @@ import { recordLineGroupEvent, updateLineGroupLabel } from "../repositories/line
 import type { WebhookBody, TextMessageEvent, PostbackEvent, JoinEvent } from "../types/line.types";
 ```
 
-- [ ] **Step 4: Extend the dispatcher**
+- [x] **Step 4: Extend the dispatcher**
 
 In the event loop, replace the closing of the postback branch:
 
@@ -2460,7 +2460,7 @@ with:
       }
 ```
 
-- [ ] **Step 5: Add the handlers**
+- [x] **Step 5: Add the handlers**
 
 Append to `apps/api/src/routes/webhook.ts`, directly above `export default webhook;`:
 
@@ -2525,7 +2525,7 @@ async function processLeaveEvent(ctx: ChatContext): Promise<void> {
 }
 ```
 
-- [ ] **Step 6: Run the tests and confirm they pass**
+- [x] **Step 6: Run the tests and confirm they pass**
 
 Run from `apps/api`:
 
@@ -2536,7 +2536,7 @@ bun run typecheck
 
 Expected: PASS, 5 tests, and a silent typecheck.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/api/src/routes/webhook.ts apps/api/tests/webhook.test.ts

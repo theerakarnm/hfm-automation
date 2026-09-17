@@ -8,19 +8,20 @@ import {
   showLoadingForChat,
   replyOrPushText,
   replyOrPushFlex,
+  fetchGroupSummary,
 } from "../services/line.service";
 import { getLastTradeMapWithin } from "../services/last-trade.service";
 import { buildTradingCard, buildPaginationCard, getFlexSummaryVersion } from "../builders/flex-message.builder";
 import { generateReportForUser, type ReportPeriod } from "../jobs/daily-client-report";
-import { isTextMessageEvent, isPostbackEvent } from "../types/line.types";
+import { isTextMessageEvent, isPostbackEvent, isJoinEvent, isLeaveEvent } from "../types/line.types";
 import { getChatContext, type ChatContext } from "../utils/chat-context";
 import { isBotMentioned, stripBotMention } from "../utils/mention";
 import { isChatAllowed } from "../utils/whitelist";
 import { logError } from "../utils/logger";
 import { getDb, type DrizzleDb } from "../db/connection";
 import { recordLineUserRequest } from "../repositories/line-user.repository";
-import { recordLineGroupEvent } from "../repositories/line-group.repository";
-import type { WebhookBody, TextMessageEvent, PostbackEvent } from "../types/line.types";
+import { recordLineGroupEvent, updateLineGroupLabel } from "../repositories/line-group.repository";
+import type { WebhookBody, TextMessageEvent, PostbackEvent, JoinEvent } from "../types/line.types";
 import type { PerformanceLookup, MonthlyActivity } from "../types/hfm.types";
 
 const MAX_WEBHOOK_EVENTS = 20;
@@ -110,6 +111,12 @@ webhook.post(
           logError("webhook", err);
           void notifyRetry(replyToken, ctx);
         });
+      } else if (isJoinEvent(event)) {
+        // No notifyRetry here: the retry notice is about a failed lookup and
+        // would make no sense as an answer to an invite.
+        processJoinEvent(event, ctx).catch((err) => logError("webhook", err));
+      } else if (isLeaveEvent(event)) {
+        processLeaveEvent(ctx).catch((err) => logError("webhook", err));
       }
     }
 
@@ -347,6 +354,65 @@ async function handleLookupAndReply(
           ? "\u26A0\uFE0F \u0E01\u0E32\u0E23\u0E40\u0E0A\u0E37\u0E48\u0E2D\u0E21\u0E15\u0E48\u0E2D\u0E2B\u0E21\u0E14\u0E40\u0E27\u0E25\u0E32\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07"
           : "\u26A0\uFE0F \u0E23\u0E30\u0E1A\u0E1A HFM API \u0E02\u0E31\u0E14\u0E02\u0E49\u0E2D\u0E07\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E43\u0E19\u0E2D\u0E35\u0E01\u0E2A\u0E31\u0E01\u0E04\u0E23\u0E39\u0E48 \u0E2B\u0E23\u0E37\u0E2D\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D Support";
   await replyOrPushText(replyToken, ctx.chatId, errMsg);
+}
+
+// Greeting for a group the bot may serve. Sent once, on the join event.
+const GROUP_WELCOME_MESSAGE =
+  "สวัสดีครับ 🙌\nพิมพ์ Wallet ID หรือ Trading Account ในกลุ่มนี้ได้เลย\nเช่น 98241376, WL-98241376, T1928491038\nพิมพ์ lot นำหน้า เพื่อดู Volume เช่น lot 98241376";
+
+// The chat ID is the only easy way for an operator to read it, so the
+// rejection notice carries it.
+function groupNotRegisteredMessage(chatId: string): string {
+  return `❌ กลุ่มนี้ยังไม่ได้ลงทะเบียนใช้งานบอท\nกรุณาแจ้ง Group ID นี้กับ Support: ${chatId}`;
+}
+
+async function processJoinEvent(
+  event: JoinEvent,
+  ctx: ChatContext,
+): Promise<void> {
+  // join never arrives from a one-on-one chat.
+  if (ctx.chatType === "user") return;
+
+  const db = getDb();
+  await recordLineGroupEvent(db, {
+    chatId: ctx.chatId,
+    chatType: ctx.chatType,
+    eventType: "join",
+    active: 1,
+  });
+
+  // The group name is for the operator list only, and there is no room
+  // equivalent of the endpoint, so it must not hold up the welcome reply.
+  if (ctx.chatType === "group") void labelGroup(db, ctx.chatId);
+
+  if (!isChatAllowed(ctx)) {
+    await replyText(event.replyToken, groupNotRegisteredMessage(ctx.chatId));
+    return;
+  }
+
+  await replyText(event.replyToken, GROUP_WELCOME_MESSAGE);
+}
+
+async function labelGroup(db: DrizzleDb, chatId: string): Promise<void> {
+  try {
+    const label = await fetchGroupSummary(chatId);
+    if (label) await updateLineGroupLabel(db, chatId, label);
+  } catch (err) {
+    logError("line-group", err);
+  }
+}
+
+// leave carries no reply token, so nothing can be sent back. The row stays
+// for the operator list and is only marked inactive.
+async function processLeaveEvent(ctx: ChatContext): Promise<void> {
+  if (ctx.chatType === "user") return;
+
+  await recordLineGroupEvent(getDb(), {
+    chatId: ctx.chatId,
+    chatType: ctx.chatType,
+    eventType: "leave",
+    active: 0,
+  });
 }
 
 export default webhook;

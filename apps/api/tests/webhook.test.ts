@@ -1962,6 +1962,154 @@ describe("webhook", () => {
     });
   });
 
+
+  describe("group join and leave", () => {
+    type Call = { url: string; body?: string };
+
+    function mockFetch(calls: Call[], groupName?: string): void {
+      globalThis.fetch = (async (
+        input: Parameters<typeof globalThis.fetch>[0],
+        init?: Parameters<typeof globalThis.fetch>[1]
+      ) => {
+        const url = String(input);
+        calls.push({
+          url,
+          body: typeof init?.body === "string" ? init.body : undefined,
+        });
+
+        if (url === "https://api.line.me/v2/bot/group/Cgroup1/summary") {
+          return new Response(
+            JSON.stringify({ groupId: "Cgroup1", groupName: groupName ?? "HFM VIP" }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+
+        return new Response("{}", { status: 200 });
+      }) as unknown as typeof globalThis.fetch;
+    }
+
+    async function postEvent(
+      app: Hono,
+      event: Record<string, unknown>
+    ): Promise<void> {
+      const body = JSON.stringify({ destination: "U123", events: [event] });
+      const sig = computeSig(body, SECRET);
+      const res = await app.fetch(
+        new Request("http://localhost/webhook", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-line-signature": sig,
+          },
+          body,
+        })
+      );
+      expect(res.status).toBe(200);
+    }
+
+    async function waitForGroups(count: number) {
+      const db = getDb();
+      const startedAt = Date.now();
+      let groups = await listLineGroups(db);
+      while (groups.length < count && Date.now() - startedAt < 1000) {
+        await new Promise((r) => setTimeout(r, 10));
+        groups = await listLineGroups(db);
+      }
+      return groups;
+    }
+
+    const joinEvent = {
+      type: "join",
+      source: { type: "group", groupId: "Cgroup1" },
+      replyToken: "tokenJoin",
+      timestamp: 1716000000000,
+      mode: "active",
+    };
+
+    test("join in an allowed group replies with the usage greeting", async () => {
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls);
+
+      await postEvent(app, joinEvent);
+
+      await waitFor(() =>
+        calls.some((c) => c.url === "https://api.line.me/v2/bot/message/reply")
+      );
+      const reply = calls.find(
+        (c) => c.url === "https://api.line.me/v2/bot/message/reply"
+      );
+      const replyBody = JSON.parse(reply?.body ?? "{}");
+      expect(replyBody.replyToken).toBe("tokenJoin");
+      expect(replyBody.messages[0].text).toContain("Wallet ID");
+    });
+
+    test("join records the group as active", async () => {
+      const { app } = await importWebhook();
+      mockFetch([]);
+
+      await postEvent(app, joinEvent);
+
+      const groups = await waitForGroups(1);
+      expect(groups[0]?.chat_id).toBe("Cgroup1");
+      expect(groups[0]?.active).toBe(1);
+      expect(groups[0]?.last_event_type).toBe("join");
+    });
+
+    test("join stores the group name for the operator list", async () => {
+      const { app } = await importWebhook();
+      mockFetch([], "HFM VIP");
+
+      await postEvent(app, joinEvent);
+
+      const startedAt = Date.now();
+      let groups = await waitForGroups(1);
+      while (groups[0]?.label == null && Date.now() - startedAt < 1000) {
+        await new Promise((r) => setTimeout(r, 10));
+        groups = await listLineGroups(getDb());
+      }
+      expect(groups[0]?.label).toBe("HFM VIP");
+    });
+
+    test("join in a group outside the allowlist returns the group id", async () => {
+      process.env.LINE_GROUP_WHITELIST_IDS = "Callowed";
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls);
+
+      await postEvent(app, joinEvent);
+
+      await waitFor(() =>
+        calls.some((c) => c.url === "https://api.line.me/v2/bot/message/reply")
+      );
+      const reply = calls.find(
+        (c) => c.url === "https://api.line.me/v2/bot/message/reply"
+      );
+      const replyBody = JSON.parse(reply?.body ?? "{}");
+      expect(replyBody.messages[0].text).toContain("Cgroup1");
+    });
+
+    test("leave marks the group inactive and sends nothing", async () => {
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls);
+
+      await postEvent(app, {
+        type: "leave",
+        source: { type: "group", groupId: "Cgroup1" },
+        timestamp: 1716000000000,
+        mode: "active",
+      });
+
+      const groups = await waitForGroups(1);
+      expect(groups[0]?.active).toBe(0);
+      expect(groups[0]?.last_event_type).toBe("leave");
+      expect(
+        calls.some((c) => c.url.startsWith("https://api.line.me/v2/bot/message"))
+      ).toBe(false);
+    });
+  });
+
 });
 
 async function importWebhook() {

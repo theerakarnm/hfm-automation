@@ -1484,7 +1484,7 @@ Every handler stops reading `event.source.userId` and takes a `ChatContext` inst
 - Modify: `apps/api/src/routes/webhook.ts` (whole file)
 - Test: `apps/api/tests/webhook.test.ts` (new `describe` block plus three small edits)
 
-- [ ] **Step 1: Prepare the test file**
+- [x] **Step 1: Prepare the test file**
 
 In `apps/api/tests/webhook.test.ts`:
 
@@ -1502,7 +1502,7 @@ import { listLineGroups } from "../src/repositories/line-group.repository";
     delete process.env.LINE_GROUP_WHITELIST_ENABLED;
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Insert this block inside `describe("webhook", ...)`, directly after the `describe("flex-v2 lookup path", ...)` block and before the closing `});` of the outer describe.
 It must stay inside the outer describe so it inherits the `beforeEach` that sets up the database and env.
@@ -1838,7 +1838,7 @@ It must stay inside the outer describe so it inherits the `beforeEach` that sets
   });
 ```
 
-- [ ] **Step 3: Run the tests and confirm they fail**
+- [x] **Step 3: Run the tests and confirm they fail**
 
 Run from `apps/api`:
 
@@ -1849,7 +1849,7 @@ bun test tests/webhook.test.ts -t "group chat"
 Expected: FAIL.
 Today `isTextMessageEvent` still rejects group sources (Task 2 fixed the guard, but the route still reads `event.source.userId`), so the typecheck error from Task 2 Step 5 shows up here as a runtime or compile failure.
 
-- [ ] **Step 4: Rewrite the route**
+- [x] **Step 4: Rewrite the route**
 
 Replace the whole content of `apps/api/src/routes/webhook.ts` with:
 
@@ -2208,7 +2208,7 @@ async function handleLookupAndReply(
 export default webhook;
 ```
 
-- [ ] **Step 5: Run the group tests and confirm they pass**
+- [x] **Step 5: Run the group tests and confirm they pass**
 
 Run from `apps/api`:
 
@@ -2218,7 +2218,7 @@ bun test tests/webhook.test.ts -t "group chat"
 
 Expected: PASS, 12 tests.
 
-- [ ] **Step 6: Run the whole webhook suite to prove one-on-one chat did not change**
+- [x] **Step 6: Run the whole webhook suite to prove one-on-one chat did not change**
 
 Run from `apps/api`:
 
@@ -2230,7 +2230,7 @@ bun run typecheck
 Expected: every existing test still passes and `tsc --noEmit` is silent.
 The typecheck error introduced in Task 2 is now gone, because nothing reads `event.source.userId` any more.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/api/src/routes/webhook.ts apps/api/tests/webhook.test.ts

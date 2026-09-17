@@ -5,6 +5,8 @@ import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
 import { initDb, resetDbForTests } from "../src/db/connection";
+import { getDb } from "../src/db/connection";
+import { listLineGroups } from "../src/repositories/line-group.repository";
 import {
   getLastTradeMap,
   resetLastTradeCache,
@@ -69,7 +71,8 @@ describe("webhook", () => {
     resetLastTradeCache();
     globalThis.fetch = ORIGINAL_FETCH;
     delete process.env.LINE_WHITELIST_UIDS;
-    delete process.env.LINE_WHITELIST_ENABLED;
+    delete process.env.LINE_GROUP_WHITELIST_IDS;
+    delete process.env.LINE_GROUP_WHITELIST_ENABLED;
     delete process.env.DATABASE_URL;
     delete process.env.TARGET_WALLET;
     delete process.env.LAST_TRADE_DEADLINE_MS;
@@ -1629,6 +1632,336 @@ describe("webhook", () => {
       expect(urls.filter((u) => u.includes("from_date=")).length).toBe(1);
     });
   });
+
+  describe("group chat", () => {
+    const HFM_CLIENT = {
+      client_id: 45219,
+      account_id: 78451293,
+      activity_status: "active",
+      trades: 24,
+      volume: 3.42,
+      account_type: "Standard",
+      balance: 12450.8,
+      account_currency: "USD",
+      equity: 12998.35,
+      archived: false,
+      subaffiliate: 0,
+      account_regdate: "2024-01-15T00:00:00Z",
+      status: "approved",
+    };
+
+    type Call = { url: string; body?: string };
+
+    // Answers the HFM lookup with one client and every LINE endpoint with a
+    // 200, recording each call so a test can assert what the bot did or did
+    // not send. `replyStatus` forces the reply to fail for the push fallback.
+    function mockFetch(calls: Call[], replyStatus = 200): void {
+      globalThis.fetch = (async (
+        input: Parameters<typeof globalThis.fetch>[0],
+        init?: Parameters<typeof globalThis.fetch>[1]
+      ) => {
+        const url = String(input);
+        calls.push({
+          url,
+          body: typeof init?.body === "string" ? init.body : undefined,
+        });
+
+        if (url.includes("/api/performance/client-performance")) {
+          return new Response(
+            JSON.stringify({ clients: [HFM_CLIENT], totals: {} }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+
+        if (url === "https://api.line.me/v2/bot/message/reply") {
+          return new Response("{}", { status: replyStatus });
+        }
+
+        return new Response("{}", { status: 200 });
+      }) as unknown as typeof globalThis.fetch;
+    }
+
+    async function seedLastTradeCache(): Promise<void> {
+      await getLastTradeMap({
+        fetchClientsFn: async () => ({
+          ok: true,
+          data: [
+            { id: 78451293, last_trade: "2026-07-18T09:30:00Z" } as HFMClientRow,
+          ],
+        }),
+      });
+    }
+
+    async function postEvent(
+      app: Hono,
+      event: Record<string, unknown>
+    ): Promise<void> {
+      const body = JSON.stringify({ destination: "U123", events: [event] });
+      const sig = computeSig(body, SECRET);
+      const res = await app.fetch(
+        new Request("http://localhost/webhook", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-line-signature": sig,
+          },
+          body,
+        })
+      );
+      expect(res.status).toBe(200);
+    }
+
+    function groupTextEvent(
+      text: string,
+      options: { replyToken?: string; mentionLength?: number } = {}
+    ): Record<string, unknown> {
+      return {
+        type: "message",
+        message: {
+          type: "text",
+          id: "1",
+          text,
+          ...(options.mentionLength
+            ? {
+                mention: {
+                  mentionees: [
+                    {
+                      index: 0,
+                      length: options.mentionLength,
+                      type: "user",
+                      userId: "Ubot",
+                      isSelf: true,
+                    },
+                  ],
+                },
+              }
+            : {}),
+        },
+        source: { type: "group", groupId: "Cgroup1", userId: "Umember1" },
+        replyToken: options.replyToken ?? "tokenGroup",
+        timestamp: 1716000000000,
+        mode: "active",
+      };
+    }
+
+    test("a wallet id from any member gets a flex reply", async () => {
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls);
+      await seedLastTradeCache();
+
+      await postEvent(app, groupTextEvent("98241376"));
+
+      await waitFor(() =>
+        calls.some((c) => c.url === "https://api.line.me/v2/bot/message/reply")
+      );
+      const reply = calls.find(
+        (c) => c.url === "https://api.line.me/v2/bot/message/reply"
+      );
+      const replyBody = JSON.parse(reply?.body ?? "{}");
+      expect(replyBody.replyToken).toBe("tokenGroup");
+      expect(replyBody.messages[0].type).toBe("flex");
+    });
+
+    test("no loading animation is requested in a group", async () => {
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls);
+      await seedLastTradeCache();
+
+      await postEvent(app, groupTextEvent("98241376"));
+
+      await waitFor(() =>
+        calls.some((c) => c.url === "https://api.line.me/v2/bot/message/reply")
+      );
+      expect(
+        calls.some((c) => c.url.endsWith("/v2/bot/chat/loading/start"))
+      ).toBe(false);
+    });
+
+    test("ordinary group chatter is ignored", async () => {
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls);
+
+      await postEvent(app, groupTextEvent("ไปกินข้าวกันไหมครับ"));
+
+      await new Promise((r) => setTimeout(r, 100));
+      expect(calls).toEqual([]);
+    });
+
+    test("a mention with unusable text gets the usage help", async () => {
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls);
+
+      await postEvent(
+        app,
+        groupTextEvent("@hfm_bot สวัสดี", { mentionLength: 8 })
+      );
+
+      await waitFor(() => calls.length >= 1);
+      expect(calls[0]?.url).toBe("https://api.line.me/v2/bot/message/reply");
+      const replyBody = JSON.parse(calls[0]?.body ?? "{}");
+      expect(replyBody.messages[0].type).toBe("text");
+      expect(replyBody.messages[0].text).toContain("Wallet ID");
+    });
+
+    test("a mention in front of a wallet id is stripped before parsing", async () => {
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls);
+      await seedLastTradeCache();
+
+      await postEvent(
+        app,
+        groupTextEvent("@hfm_bot 98241376", { mentionLength: 8 })
+      );
+
+      await waitFor(() =>
+        calls.some((c) => c.url === "https://api.line.me/v2/bot/message/reply")
+      );
+      const reply = calls.find(
+        (c) => c.url === "https://api.line.me/v2/bot/message/reply"
+      );
+      const replyBody = JSON.parse(reply?.body ?? "{}");
+      expect(replyBody.messages[0].type).toBe("flex");
+    });
+
+    test("report commands are ignored in a group", async () => {
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls);
+
+      await postEvent(app, groupTextEvent("report"));
+
+      await new Promise((r) => setTimeout(r, 100));
+      expect(calls).toEqual([]);
+    });
+
+    test("a group outside the allowlist gets silence", async () => {
+      process.env.LINE_GROUP_WHITELIST_IDS = "Callowed";
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls);
+
+      await postEvent(app, groupTextEvent("98241376"));
+
+      await new Promise((r) => setTimeout(r, 100));
+      expect(calls).toEqual([]);
+    });
+
+    test("a failed reply falls back to a push addressed to the group", async () => {
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls, 400);
+      await seedLastTradeCache();
+
+      await postEvent(app, groupTextEvent("98241376"));
+
+      await waitFor(() =>
+        calls.some((c) => c.url === "https://api.line.me/v2/bot/message/push")
+      );
+      const push = calls.find(
+        (c) => c.url === "https://api.line.me/v2/bot/message/push"
+      );
+      const pushBody = JSON.parse(push?.body ?? "{}");
+      expect(pushBody.to).toBe("Cgroup1");
+    });
+
+    test("a group pagination postback replies with the next page", async () => {
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls);
+      await seedLastTradeCache();
+
+      await postEvent(app, {
+        type: "postback",
+        postback: { data: "action=page&kind=wallet&id=98241376&page=1" },
+        source: { type: "group", groupId: "Cgroup1", userId: "Umember1" },
+        replyToken: "tokenPostback",
+        timestamp: 1716000000000,
+        mode: "active",
+      });
+
+      await waitFor(() =>
+        calls.some((c) => c.url === "https://api.line.me/v2/bot/message/reply")
+      );
+      const reply = calls.find(
+        (c) => c.url === "https://api.line.me/v2/bot/message/reply"
+      );
+      const replyBody = JSON.parse(reply?.body ?? "{}");
+      expect(replyBody.replyToken).toBe("tokenPostback");
+      expect(replyBody.messages[0].type).toBe("flex");
+    });
+
+    test("a multi-person chat works like a group", async () => {
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls);
+      await seedLastTradeCache();
+
+      await postEvent(app, {
+        type: "message",
+        message: { type: "text", id: "1", text: "98241376" },
+        source: { type: "room", roomId: "Rroom1", userId: "Umember1" },
+        replyToken: "tokenRoom",
+        timestamp: 1716000000000,
+        mode: "active",
+      });
+
+      await waitFor(() =>
+        calls.some((c) => c.url === "https://api.line.me/v2/bot/message/reply")
+      );
+      const reply = calls.find(
+        (c) => c.url === "https://api.line.me/v2/bot/message/reply"
+      );
+      expect(JSON.parse(reply?.body ?? "{}").replyToken).toBe("tokenRoom");
+    });
+
+    test("the group is recorded in the registry", async () => {
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls);
+      await seedLastTradeCache();
+
+      await postEvent(app, groupTextEvent("98241376"));
+
+      const db = getDb();
+      let groups = await listLineGroups(db);
+      const startedAt = Date.now();
+      while (groups.length === 0 && Date.now() - startedAt < 1000) {
+        await new Promise((r) => setTimeout(r, 10));
+        groups = await listLineGroups(db);
+      }
+
+      expect(groups.length).toBe(1);
+      expect(groups[0]?.chat_id).toBe("Cgroup1");
+      expect(groups[0]?.chat_type).toBe("group");
+    });
+
+    test("a one-on-one chat is not recorded as a group", async () => {
+      const { app } = await importWebhook();
+      const calls: Call[] = [];
+      mockFetch(calls);
+      await seedLastTradeCache();
+
+      await postEvent(app, {
+        type: "message",
+        message: { type: "text", id: "1", text: "98241376" },
+        source: { type: "user", userId: "Uabc123" },
+        replyToken: "tokenDirect",
+        timestamp: 1716000000000,
+        mode: "active",
+      });
+
+      await waitFor(() =>
+        calls.some((c) => c.url === "https://api.line.me/v2/bot/message/reply")
+      );
+      expect(await listLineGroups(getDb())).toEqual([]);
+    });
+  });
+
 });
 
 async function importWebhook() {

@@ -5,7 +5,7 @@ import { fetchPerformance, resolveLinkedAccounts, checkConditions, parsePerforma
 import {
   replyText,
   replyTexts,
-  showLoading,
+  showLoadingForChat,
   replyOrPushText,
   replyOrPushFlex,
 } from "../services/line.service";
@@ -13,13 +13,15 @@ import { getLastTradeMapWithin } from "../services/last-trade.service";
 import { buildTradingCard, buildPaginationCard, getFlexSummaryVersion } from "../builders/flex-message.builder";
 import { generateReportForUser, type ReportPeriod } from "../jobs/daily-client-report";
 import { isTextMessageEvent, isPostbackEvent } from "../types/line.types";
-import { isWhitelisted } from "../utils/whitelist";
+import { getChatContext, type ChatContext } from "../utils/chat-context";
+import { isBotMentioned, stripBotMention } from "../utils/mention";
+import { isChatAllowed } from "../utils/whitelist";
 import { logError } from "../utils/logger";
-import { getDb } from "../db/connection";
+import { getDb, type DrizzleDb } from "../db/connection";
 import { recordLineUserRequest } from "../repositories/line-user.repository";
+import { recordLineGroupEvent } from "../repositories/line-group.repository";
 import type { WebhookBody, TextMessageEvent, PostbackEvent } from "../types/line.types";
 import type { PerformanceLookup, MonthlyActivity } from "../types/hfm.types";
-
 
 const MAX_WEBHOOK_EVENTS = 20;
 
@@ -37,6 +39,16 @@ const lastTradeDeadlineMs = (): number =>
 // rather than be left staring at silence.
 const RETRY_MESSAGE =
   "\u26A0\uFE0F \u0E23\u0E30\u0E1A\u0E1A\u0E02\u0E31\u0E14\u0E02\u0E49\u0E2D\u0E07\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E2A\u0E48\u0E07 Wallet ID \u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07";
+
+// Sent when the chat is not allowed to use the bot. Shared by the text,
+// postback and join paths.
+const NOT_ALLOWED_MESSAGE =
+  "\u274C \u0E02\u0E2D\u0E2D\u0E20\u0E31\u0E22 \u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E1A\u0E2D\u0E17\u0E19\u0E35\u0E49 \u0E2B\u0E32\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D Support";
+
+// Sent when the text is neither a Wallet ID nor a Trading Account. In a group
+// this only goes out when somebody mentioned the bot.
+const USAGE_MESSAGE =
+  "\u274C \u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E2A\u0E48\u0E07 Wallet ID \u0E2B\u0E23\u0E37\u0E2D Trading Account \u0E02\u0E36\u0E49\u0E19\u0E15\u0E49\u0E19\u0E14\u0E49\u0E27\u0E22 T\n\u0E40\u0E0A\u0E48\u0E19 98241376, WL-98241376, T1928491038\n\u0E1E\u0E34\u0E21\u0E1E\u0E4C lot \u0E19\u0E33\u0E2B\u0E19\u0E49\u0E32 \u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E41\u0E2A\u0E14\u0E07 Volume \u0E40\u0E0A\u0E48\u0E19 lot 98241376";
 
 const webhook = new Hono();
 
@@ -71,26 +83,32 @@ webhook.post(
     const db = getDb();
 
     const eventsToProcess = events.slice(0, MAX_WEBHOOK_EVENTS);
-
     for (const event of eventsToProcess) {
-      const uid = event.source?.userId;
-      if (uid) {
+      // Every later decision (permission, reply target, loading animation)
+      // comes from this triple, never from event.source directly.
+      const ctx = getChatContext(event);
+      if (!ctx) continue;
+
+      if (ctx.userId) {
         // Telemetry only - a database hiccup must never stop the customer's reply.
-        recordLineUserRequest(db, uid, event.type).catch((err) =>
+        recordLineUserRequest(db, ctx.userId, event.type).catch((err) =>
           logError("line-user", err),
         );
       }
+
       if (isTextMessageEvent(event)) {
+        recordGroupTraffic(db, ctx, event.type);
         const { replyToken } = event;
-        processTextEvent(event).catch((err) => {
+        processTextEvent(event, ctx).catch((err) => {
           logError("webhook", err);
-          if (uid) void notifyRetry(replyToken, uid);
+          void notifyRetry(replyToken, ctx);
         });
       } else if (isPostbackEvent(event)) {
+        recordGroupTraffic(db, ctx, event.type);
         const { replyToken } = event;
-        processPostbackEvent(event).catch((err) => {
+        processPostbackEvent(event, ctx).catch((err) => {
           logError("webhook", err);
-          if (uid) void notifyRetry(replyToken, uid);
+          void notifyRetry(replyToken, ctx);
         });
       }
     }
@@ -99,31 +117,50 @@ webhook.post(
   }
 );
 
-async function notifyRetry(replyToken: string, userId: string): Promise<void> {
-  // The catch-all also fires for non-whitelisted users whose rejection
-  // notice failed to send; they must not get a retry prompt.
-  if (!isWhitelisted(userId)) return;
+// Group registry telemetry. join and leave are deliberately not recorded
+// here: their own handlers own the `active` flag, and a fire-and-forget
+// upsert racing with them could resurrect a group the bot has just left.
+function recordGroupTraffic(
+  db: DrizzleDb,
+  ctx: ChatContext,
+  eventType: string,
+): void {
+  if (ctx.chatType === "user") return;
+  recordLineGroupEvent(db, {
+    chatId: ctx.chatId,
+    chatType: ctx.chatType,
+    eventType,
+  }).catch((err) => logError("line-group", err));
+}
+
+async function notifyRetry(replyToken: string, ctx: ChatContext): Promise<void> {
+  // The catch-all also fires for chats that are not allowed and whose
+  // rejection notice failed to send; they must not get a retry prompt.
+  if (!isChatAllowed(ctx)) return;
   try {
-    await replyOrPushText(replyToken, userId, RETRY_MESSAGE);
+    await replyOrPushText(replyToken, ctx.chatId, RETRY_MESSAGE);
   } catch (err) {
     logError("webhook-notify", err);
   }
 }
 
-async function processTextEvent(event: TextMessageEvent): Promise<void> {
-  const userId = event.source.userId;
+async function processTextEvent(
+  event: TextMessageEvent,
+  ctx: ChatContext,
+): Promise<void> {
   const replyToken = event.replyToken;
-  if (!userId) return;
 
-  if (!isWhitelisted(userId)) {
-    await replyText(
-      replyToken,
-      "\u274C \u0E02\u0E2D\u0E2D\u0E20\u0E31\u0E22 \u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E1A\u0E2D\u0E17\u0E19\u0E35\u0E49 \u0E2B\u0E32\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D Support"
-    );
+  if (!isChatAllowed(ctx)) {
+    // An unregistered group is full of people who never asked the bot for
+    // anything, so it gets silence instead of a rejection notice.
+    if (ctx.chatType !== "user") return;
+    await replyText(replyToken, NOT_ALLOWED_MESSAGE);
     return;
   }
 
-  const inputText = event.message.text.trim();
+  // "@hfm_bot 98241376" has to behave like "98241376". Without a mention this
+  // is just the trimmed text.
+  const inputText = stripBotMention(event);
 
   const lower = inputText.toLowerCase();
 
@@ -137,7 +174,11 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
   }
 
   if (reportPeriod) {
-    showLoading(userId).catch((err) => {
+    // Reports aggregate every client under the affiliate account. That is
+    // internal data, and a group can hold customers, so reports stay in
+    // one-on-one chats.
+    if (ctx.chatType !== "user") return;
+    showLoadingForChat(ctx).catch((err) => {
       logError("line-loading", err);
     });
     try {
@@ -160,14 +201,14 @@ async function processTextEvent(event: TextMessageEvent): Promise<void> {
   const lookup = parsePerformanceLookup(inputText);
 
   if (!lookup) {
-    await replyText(
-      replyToken,
-      "\u274C \u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E2A\u0E48\u0E07 Wallet ID \u0E2B\u0E23\u0E37\u0E2D Trading Account \u0E02\u0E36\u0E49\u0E19\u0E15\u0E49\u0E19\u0E14\u0E49\u0E27\u0E22 T\n\u0E40\u0E0A\u0E48\u0E19 98241376, WL-98241376, T1928491038\n\u0E1E\u0E34\u0E21\u0E1E\u0E4C lot \u0E19\u0E33\u0E2B\u0E19\u0E49\u0E32 \u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E41\u0E2A\u0E14\u0E07 Volume \u0E40\u0E0A\u0E48\u0E19 lot 98241376"
-    );
+    // In a group every ordinary human sentence lands here. Answer only when
+    // the bot was actually mentioned, otherwise stay quiet.
+    if (ctx.chatType !== "user" && !isBotMentioned(event)) return;
+    await replyText(replyToken, USAGE_MESSAGE);
     return;
   }
 
-  await handleLookupAndReply(replyToken, userId, lookup, 1);
+  await handleLookupAndReply(replyToken, ctx, lookup, 1);
 }
 
 function parseQueryString(query: string): Record<string, string> {
@@ -182,16 +223,15 @@ function parseQueryString(query: string): Record<string, string> {
   return params;
 }
 
-async function processPostbackEvent(event: PostbackEvent): Promise<void> {
-  const userId = event.source.userId;
+async function processPostbackEvent(
+  event: PostbackEvent,
+  ctx: ChatContext,
+): Promise<void> {
   const replyToken = event.replyToken;
-  if (!userId) return;
 
-  if (!isWhitelisted(userId)) {
-    await replyText(
-      replyToken,
-      "\u274C \u0E02\u0E2D\u0E2D\u0E20\u0E31\u0E22 \u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E1A\u0E2D\u0E17\u0E19\u0E35\u0E49 \u0E2B\u0E32\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D Support"
-    );
+  if (!isChatAllowed(ctx)) {
+    if (ctx.chatType !== "user") return;
+    await replyText(replyToken, NOT_ALLOWED_MESSAGE);
     return;
   }
 
@@ -209,18 +249,20 @@ async function processPostbackEvent(event: PostbackEvent): Promise<void> {
         // Preserve the "lot" opt-in across page navigation.
         showVolume: queryParams.vol === "1",
       };
-      await handleLookupAndReply(replyToken, userId, lookup, page);
+      await handleLookupAndReply(replyToken, ctx, lookup, page);
     }
   }
 }
 
 async function handleLookupAndReply(
   replyToken: string,
-  userId: string,
+  ctx: ChatContext,
   lookup: PerformanceLookup,
   page: number = 1
 ): Promise<void> {
-  showLoading(userId).catch((err) => {
+  // No-op in a group chat: LINE only has the loading animation in
+  // one-on-one chats.
+  showLoadingForChat(ctx).catch((err) => {
     logError("line-loading", err);
   });
 
@@ -275,14 +317,14 @@ async function handleLookupAndReply(
     if (bubbles.length === 1) {
       await replyOrPushFlex(
         replyToken,
-        userId,
+        ctx.chatId,
         `Trading Summary \u2014 ${altLabel}`,
         bubbles[0]!
       );
     } else {
       await replyOrPushFlex(
         replyToken,
-        userId,
+        ctx.chatId,
         `Trading Summary \u2014 ${altLabel}`,
         {
           type: "carousel",
@@ -304,7 +346,7 @@ async function handleLookupAndReply(
         : result.reason === "timeout"
           ? "\u26A0\uFE0F \u0E01\u0E32\u0E23\u0E40\u0E0A\u0E37\u0E48\u0E2D\u0E21\u0E15\u0E48\u0E2D\u0E2B\u0E21\u0E14\u0E40\u0E27\u0E25\u0E32\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07"
           : "\u26A0\uFE0F \u0E23\u0E30\u0E1A\u0E1A HFM API \u0E02\u0E31\u0E14\u0E02\u0E49\u0E2D\u0E07\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E43\u0E19\u0E2D\u0E35\u0E01\u0E2A\u0E31\u0E01\u0E04\u0E23\u0E39\u0E48 \u0E2B\u0E23\u0E37\u0E2D\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D Support";
-  await replyOrPushText(replyToken, userId, errMsg);
+  await replyOrPushText(replyToken, ctx.chatId, errMsg);
 }
 
 export default webhook;

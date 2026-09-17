@@ -2747,7 +2747,7 @@ git commit -m "docs: document group chat support"
 
 ## Task 11: Full verification
 
-- [ ] **Step 1: Run the whole suite**
+- [x] **Step 1: Run the whole suite**
 
 Run from `apps/api`:
 
@@ -2757,7 +2757,7 @@ bun test
 
 Expected: every test passes, including the untouched one-on-one tests.
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run from `apps/api`:
 
@@ -2767,7 +2767,7 @@ bun run typecheck
 
 Expected: no output.
 
-- [ ] **Step 3: Confirm the table lands on a real database**
+- [x] **Step 3: Confirm the table lands on a real database**
 
 Run from `apps/api` against a scratch database, never a production one:
 
@@ -2778,7 +2778,11 @@ bun run db:push
 Expected: drizzle-kit reports `line_groups` as the only new table.
 A production deployment does not need this step, because `initDb()` runs the same `CREATE TABLE IF NOT EXISTS` on startup.
 
+> Deviation: ran as `cd apps/api && DATABASE_URL=postgresql://test:test@localhost:5434/hfm_test bunx drizzle-kit push` so the explicit env var overrides the real `.env` (and 5433 in the plan text is the known port deviation, actual 5434). `line_groups` already existed and matched schema.ts, so no `line_groups` statement was emitted; the push only renamed five pre-existing inline UNIQUE/FK constraints to drizzle-style names (DROP CONSTRAINT + equivalent ADD CONSTRAINT, identical semantics, no table/column/data change) - drift between the `initDb()` DDL and `schema.ts` that predates this plan (present at baseline be3427a). Verified with `--verbose` on a scratch DB rebuilt via `createTestDb()`; post-push full suite on the pushed DB: 305 pass / 0 fail.
+
 - [ ] **Step 4: Manual end-to-end check in a real LINE group**
+
+> Awaiting human: real-device E2E in a LINE group; requires P1 (Allow bot to join group chats) enabled in the LINE console.
 
 Do these in order, with the server running and the webhook reachable:
 
@@ -2804,7 +2808,7 @@ Do these in order, with the server running and the webhook reachable:
 11. Set `LINE_GROUP_WHITELIST_IDS` to some other ID, restart, and send a lookup in the test group.
     Expected: silence.
 
-- [ ] **Step 5: Commit the plan completion**
+- [x] **Step 5: Commit the plan completion**
 
 ```bash
 git add docs/plans/2026-09-17-line-group-chat-support.md

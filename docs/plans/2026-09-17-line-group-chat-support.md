@@ -745,7 +745,7 @@ git commit -m "feat: add bot mention helpers"
 - Modify: `apps/api/src/utils/whitelist.ts:1-20`
 - Test: `apps/api/tests/whitelist.test.ts` (append a new `describe`)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `apps/api/tests/whitelist.test.ts`:
 
@@ -838,7 +838,7 @@ Change that first line to:
 import { test, expect, describe, afterEach } from "bun:test";
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+- [x] **Step 2: Run the test and confirm it fails**
 
 Run from `apps/api`:
 
@@ -848,7 +848,7 @@ bun test tests/whitelist.test.ts
 
 Expected: FAIL with `Export named 'isGroupAllowed' not found`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Replace the whole content of `apps/api/src/utils/whitelist.ts` with:
 
@@ -907,7 +907,7 @@ export function isChatAllowed(ctx: ChatContext): boolean {
 }
 ```
 
-- [ ] **Step 4: Run the test and confirm it passes**
+- [x] **Step 4: Run the test and confirm it passes**
 
 Run from `apps/api`:
 
@@ -917,7 +917,7 @@ bun test tests/whitelist.test.ts
 
 Expected: PASS. The original whitelist tests still pass unchanged, plus 8 new ones.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/utils/whitelist.ts apps/api/tests/whitelist.test.ts

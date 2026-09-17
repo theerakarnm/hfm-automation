@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe, afterEach } from "bun:test";
 import { isWhitelisted } from "../src/utils/whitelist";
 
 describe("isWhitelisted", () => {
@@ -110,5 +110,84 @@ describe("LINE_WHITELIST_ENABLED feature flag", () => {
     expect(isWhitelisted("Ustranger")).toBe(false);
     process.env.LINE_WHITELIST_ENABLED = origFlag;
     process.env.LINE_WHITELIST_UIDS = origUids;
+  });
+});
+import { isGroupAllowed, isChatAllowed } from "../src/utils/whitelist";
+import type { ChatContext } from "../src/utils/chat-context";
+
+describe("isGroupAllowed", () => {
+  const origIds = process.env.LINE_GROUP_WHITELIST_IDS;
+  const origFlag = process.env.LINE_GROUP_WHITELIST_ENABLED;
+
+  afterEach(() => {
+    if (origIds === undefined) delete process.env.LINE_GROUP_WHITELIST_IDS;
+    else process.env.LINE_GROUP_WHITELIST_IDS = origIds;
+    if (origFlag === undefined) delete process.env.LINE_GROUP_WHITELIST_ENABLED;
+    else process.env.LINE_GROUP_WHITELIST_ENABLED = origFlag;
+  });
+
+  test("allows every group when the list is unset", () => {
+    delete process.env.LINE_GROUP_WHITELIST_IDS;
+    expect(isGroupAllowed("Canygroup")).toBe(true);
+  });
+
+  test("allows every group when the list is blank", () => {
+    process.env.LINE_GROUP_WHITELIST_IDS = "   ";
+    expect(isGroupAllowed("Canygroup")).toBe(true);
+  });
+
+  test("allows a listed group and rejects an unlisted one", () => {
+    process.env.LINE_GROUP_WHITELIST_IDS = "Cgroup1, Cgroup2";
+    expect(isGroupAllowed("Cgroup1")).toBe(true);
+    expect(isGroupAllowed("Cgroup2")).toBe(true);
+    expect(isGroupAllowed("Cstranger")).toBe(false);
+  });
+
+  test("flag=false bypasses the group list", () => {
+    process.env.LINE_GROUP_WHITELIST_ENABLED = "false";
+    process.env.LINE_GROUP_WHITELIST_IDS = "Cgroup1";
+    expect(isGroupAllowed("Cstranger")).toBe(true);
+  });
+});
+
+describe("isChatAllowed", () => {
+  const origUids = process.env.LINE_WHITELIST_UIDS;
+  const origIds = process.env.LINE_GROUP_WHITELIST_IDS;
+
+  afterEach(() => {
+    if (origUids === undefined) delete process.env.LINE_WHITELIST_UIDS;
+    else process.env.LINE_WHITELIST_UIDS = origUids;
+    if (origIds === undefined) delete process.env.LINE_GROUP_WHITELIST_IDS;
+    else process.env.LINE_GROUP_WHITELIST_IDS = origIds;
+  });
+
+  test("a one-on-one chat is checked against the UID whitelist", () => {
+    process.env.LINE_WHITELIST_UIDS = "Uallowed";
+    const allowed: ChatContext = { chatType: "user", chatId: "Uallowed", userId: "Uallowed" };
+    const denied: ChatContext = { chatType: "user", chatId: "Ustranger", userId: "Ustranger" };
+    expect(isChatAllowed(allowed)).toBe(true);
+    expect(isChatAllowed(denied)).toBe(false);
+  });
+
+  test("a group member is NOT checked against the UID whitelist", () => {
+    process.env.LINE_WHITELIST_UIDS = "Uallowed";
+    process.env.LINE_GROUP_WHITELIST_IDS = "Cgroup1";
+    const ctx: ChatContext = { chatType: "group", chatId: "Cgroup1", userId: "Ustranger" };
+    expect(isChatAllowed(ctx)).toBe(true);
+  });
+
+  test("an unlisted group is rejected whoever typed", () => {
+    process.env.LINE_WHITELIST_UIDS = "Uallowed";
+    process.env.LINE_GROUP_WHITELIST_IDS = "Cgroup1";
+    const ctx: ChatContext = { chatType: "group", chatId: "Cother", userId: "Uallowed" };
+    expect(isChatAllowed(ctx)).toBe(false);
+  });
+
+  test("a multi-person chat uses the same group list", () => {
+    process.env.LINE_GROUP_WHITELIST_IDS = "Rroom1";
+    const ok: ChatContext = { chatType: "room", chatId: "Rroom1", userId: null };
+    const no: ChatContext = { chatType: "room", chatId: "Rroom2", userId: null };
+    expect(isChatAllowed(ok)).toBe(true);
+    expect(isChatAllowed(no)).toBe(false);
   });
 });

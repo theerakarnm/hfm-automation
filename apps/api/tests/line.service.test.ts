@@ -108,3 +108,88 @@ describe("replyOrPush", () => {
     await expect(replyOrPushText("expired", "U001", "hello")).rejects.toThrow();
   });
 });
+
+import { showLoadingForChat, fetchGroupSummary } from "../src/services/line.service";
+import type { ChatContext } from "../src/utils/chat-context";
+
+describe("showLoadingForChat", () => {
+  const ORIGINAL_FETCH = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = ORIGINAL_FETCH;
+  });
+
+  test("calls the loading API for a one-on-one chat", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: Parameters<typeof globalThis.fetch>[0]) => {
+      urls.push(String(input));
+      return new Response("{}", { status: 202 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const ctx: ChatContext = { chatType: "user", chatId: "Uabc123", userId: "Uabc123" };
+    await showLoadingForChat(ctx);
+
+    expect(urls).toEqual(["https://api.line.me/v2/bot/chat/loading/start"]);
+  });
+
+  test("does nothing for a group chat, which LINE rejects with 400", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: Parameters<typeof globalThis.fetch>[0]) => {
+      urls.push(String(input));
+      return new Response("{}", { status: 202 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const ctx: ChatContext = { chatType: "group", chatId: "Cgroup1", userId: "Umember1" };
+    await showLoadingForChat(ctx);
+
+    expect(urls).toEqual([]);
+  });
+
+  test("does nothing for a multi-person chat", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: Parameters<typeof globalThis.fetch>[0]) => {
+      urls.push(String(input));
+      return new Response("{}", { status: 202 });
+    }) as unknown as typeof globalThis.fetch;
+
+    const ctx: ChatContext = { chatType: "room", chatId: "Rroom1", userId: null };
+    await showLoadingForChat(ctx);
+
+    expect(urls).toEqual([]);
+  });
+});
+
+describe("fetchGroupSummary", () => {
+  const ORIGINAL_FETCH = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = ORIGINAL_FETCH;
+  });
+
+  test("returns the group name", async () => {
+    globalThis.fetch = (async (input: Parameters<typeof globalThis.fetch>[0]) => {
+      expect(String(input)).toBe("https://api.line.me/v2/bot/group/Cgroup1/summary");
+      return new Response(
+        JSON.stringify({ groupId: "Cgroup1", groupName: "HFM VIP" }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as unknown as typeof globalThis.fetch;
+
+    expect(await fetchGroupSummary("Cgroup1")).toBe("HFM VIP");
+  });
+
+  test("returns null on an error response instead of throwing", async () => {
+    globalThis.fetch = (async () =>
+      new Response("{}", { status: 404 })) as unknown as typeof globalThis.fetch;
+
+    expect(await fetchGroupSummary("Cgroup1")).toBeNull();
+  });
+
+  test("returns null when the call throws", async () => {
+    globalThis.fetch = (async () => {
+      throw new Error("network down");
+    }) as unknown as typeof globalThis.fetch;
+
+    expect(await fetchGroupSummary("Cgroup1")).toBeNull();
+  });
+});

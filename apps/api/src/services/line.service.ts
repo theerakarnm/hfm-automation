@@ -1,12 +1,14 @@
 import { logError } from "../utils/logger";
+import type { ChatContext } from "../utils/chat-context";
 
 const LINE_PUSH_API = "https://api.line.me/v2/bot/message/push";
 const LINE_REPLY_API = "https://api.line.me/v2/bot/message/reply";
 const LINE_LOADING_API = "https://api.line.me/v2/bot/chat/loading/start";
+const LINE_GROUP_SUMMARY_API = "https://api.line.me/v2/bot/group";
 const LINE_TIMEOUT_MS = 10_000;
 
 async function pushMessage(
-  userId: string,
+  to: string,
   message: object
 ): Promise<void> {
   const res = await fetch(LINE_PUSH_API, {
@@ -15,7 +17,7 @@ async function pushMessage(
       "Content-Type": "application/json",
       Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
     },
-    body: JSON.stringify({ to: userId, messages: [message] }),
+    body: JSON.stringify({ to, messages: [message] }),
     signal: AbortSignal.timeout(LINE_TIMEOUT_MS),
   });
   if (!res.ok) {
@@ -90,14 +92,14 @@ export async function showLoading(
   }
 }
 
-export const pushText = (userId: string, text: string) =>
-  pushMessage(userId, { type: "text", text });
+export const pushText = (to: string, text: string) =>
+  pushMessage(to, { type: "text", text });
 
 export const pushFlex = (
-  userId: string,
+  to: string,
   altText: string,
   contents: object
-) => pushMessage(userId, { type: "flex", altText, contents });
+) => pushMessage(to, { type: "flex", altText, contents });
 
 export const replyText = (replyToken: string, text: string) =>
   replyMessage(replyToken, { type: "text", text });
@@ -111,9 +113,12 @@ export const replyTexts = (replyToken: string, texts: string[]) =>
 // Replies with the reply token, falling back to a push when the reply is
 // rejected (expired token, LINE 4xx) so the customer is never left with
 // silence. Throws only when the push fails too.
+// `to` is the chat, not the sender: in a group the fallback push goes to the
+// groupId, and LINE bills one message per group member, so this stays a
+// fallback and never the normal path.
 async function replyOrPush(
   replyToken: string,
-  userId: string,
+  to: string,
   message: object
 ): Promise<void> {
   try {
@@ -122,21 +127,21 @@ async function replyOrPush(
   } catch {
     // replyMessage already logged the failure.
   }
-  await pushMessage(userId, message);
+  await pushMessage(to, message);
 }
 
 export const replyOrPushText = (
   replyToken: string,
-  userId: string,
+  to: string,
   text: string
-) => replyOrPush(replyToken, userId, { type: "text", text });
+) => replyOrPush(replyToken, to, { type: "text", text });
 
 export const replyOrPushFlex = (
   replyToken: string,
-  userId: string,
+  to: string,
   altText: string,
   contents: object
-) => replyOrPush(replyToken, userId, { type: "flex", altText, contents });
+) => replyOrPush(replyToken, to, { type: "flex", altText, contents });
 
 export async function pushToAll(uids: string[], text: string): Promise<void> {
   for (let i = 0; i < uids.length; i++) {
@@ -144,5 +149,34 @@ export async function pushToAll(uids: string[], text: string): Promise<void> {
     if (i < uids.length - 1) {
       await Bun.sleep(200);
     }
+  }
+}
+
+// The loading animation exists only in one-on-one chats. Sending a groupId or
+// roomId as chatId returns 400 "Only user id is acceptable", so the rule lives
+// here and no caller can get it wrong.
+export async function showLoadingForChat(ctx: ChatContext): Promise<void> {
+  if (ctx.chatType !== "user") return;
+  await showLoading(ctx.chatId);
+}
+
+// Group display name for the operator-facing group list. Telemetry only:
+// every failure degrades to null, and there is no room equivalent of this
+// endpoint.
+export async function fetchGroupSummary(groupId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${LINE_GROUP_SUMMARY_API}/${groupId}/summary`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+      },
+      signal: AbortSignal.timeout(LINE_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { groupName?: string };
+    return data.groupName ?? null;
+  } catch (err) {
+    logError("line-service", err);
+    return null;
   }
 }

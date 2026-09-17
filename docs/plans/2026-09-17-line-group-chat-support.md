@@ -934,7 +934,7 @@ Three changes: the push target stops being called `userId`, the loading animatio
 - Modify: `apps/api/src/services/line.service.ts:8-149`
 - Test: `apps/api/tests/line.service.test.ts` (append)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `apps/api/tests/line.service.test.ts`:
 
@@ -1031,7 +1031,7 @@ Make sure the first import line of the file includes `afterEach`:
 import { test, expect, describe, afterEach } from "bun:test";
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+- [x] **Step 2: Run the test and confirm it fails**
 
 Run from `apps/api`:
 
@@ -1041,7 +1041,7 @@ bun test tests/line.service.test.ts
 
 Expected: FAIL with `Export named 'showLoadingForChat' not found`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `apps/api/src/services/line.service.ts`, add the import at the top of the file:
 
@@ -1163,7 +1163,7 @@ export async function fetchGroupSummary(groupId: string): Promise<string | null>
 }
 ```
 
-- [ ] **Step 4: Run the test and confirm it passes**
+- [x] **Step 4: Run the test and confirm it passes**
 
 Run from `apps/api`:
 
@@ -1173,7 +1173,7 @@ bun test tests/line.service.test.ts
 
 Expected: PASS. The existing `replyOrPush` and `pushToAll` tests still pass, plus 6 new ones.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/services/line.service.ts apps/api/tests/line.service.test.ts

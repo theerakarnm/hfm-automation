@@ -3,6 +3,17 @@ export interface WebhookBody {
   events: WebhookEvent[];
 }
 
+// One entry of message.mention.mentionees. `isSelf` is present only when
+// `type` is "user", and it is the documented way to know the bot itself was
+// mentioned.
+export interface Mentionee {
+  index: number;
+  length: number;
+  type: "user" | "all";
+  userId?: string;
+  isSelf?: boolean;
+}
+
 export interface WebhookEvent {
   type: string;
   mode: string;
@@ -18,6 +29,7 @@ export interface WebhookEvent {
     type: string;
     id: string;
     text?: string;
+    mention?: { mentionees: Mentionee[] };
   };
   postback?: {
     data: string;
@@ -25,11 +37,18 @@ export interface WebhookEvent {
   };
 }
 
+// Source is deliberately NOT narrowed to a user chat: the same handler serves
+// one-on-one, group and multi-person chats. Use getChatContext() to learn
+// where the event came from.
 export interface TextMessageEvent extends WebhookEvent {
   type: "message";
   replyToken: string;
-  message: { type: "text"; id: string; text: string };
-  source: { type: "user"; userId: string };
+  message: {
+    type: "text";
+    id: string;
+    text: string;
+    mention?: { mentionees: Mentionee[] };
+  };
 }
 
 export function isTextMessageEvent(
@@ -40,8 +59,7 @@ export function isTextMessageEvent(
     event.message != null &&
     event.message.type === "text" &&
     typeof event.message.text === "string" &&
-    event.source.type === "user" &&
-    typeof event.source.userId === "string"
+    typeof event.replyToken === "string"
   );
 }
 
@@ -52,7 +70,6 @@ export interface PostbackEvent extends WebhookEvent {
     data: string;
     params?: Record<string, string>;
   };
-  source: { type: "user"; userId: string };
 }
 
 export function isPostbackEvent(
@@ -62,8 +79,26 @@ export function isPostbackEvent(
     event.type === "postback" &&
     event.postback != null &&
     typeof event.postback.data === "string" &&
-    event.source.type === "user" &&
-    typeof event.source.userId === "string"
+    typeof event.replyToken === "string"
   );
 }
 
+// Fired when the bot is invited into a group or multi-person chat. Unlike
+// `leave`, it carries a reply token.
+export interface JoinEvent extends WebhookEvent {
+  type: "join";
+  replyToken: string;
+}
+
+export function isJoinEvent(event: WebhookEvent): event is JoinEvent {
+  return event.type === "join" && typeof event.replyToken === "string";
+}
+
+// Fired when the bot is removed. No reply token, so nothing can be sent back.
+export interface LeaveEvent extends WebhookEvent {
+  type: "leave";
+}
+
+export function isLeaveEvent(event: WebhookEvent): event is LeaveEvent {
+  return event.type === "leave";
+}

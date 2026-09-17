@@ -311,7 +311,7 @@ git commit -m "feat: add chat context reducer"
 - Modify: `apps/api/src/types/line.types.ts:6-70`
 - Test: `apps/api/tests/line-types.test.ts` (create)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `apps/api/tests/line-types.test.ts`:
 
@@ -430,7 +430,7 @@ describe("isJoinEvent and isLeaveEvent", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+- [x] **Step 2: Run the test and confirm it fails**
 
 Run from `apps/api`:
 
@@ -440,7 +440,7 @@ bun test tests/line-types.test.ts
 
 Expected: FAIL. `isJoinEvent` and `isLeaveEvent` do not exist, and the group and room cases return `false`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Replace the whole content of `apps/api/src/types/line.types.ts` with:
 
@@ -551,7 +551,7 @@ export function isLeaveEvent(event: WebhookEvent): event is LeaveEvent {
 }
 ```
 
-- [ ] **Step 4: Run the test and confirm it passes**
+- [x] **Step 4: Run the test and confirm it passes**
 
 Run from `apps/api`:
 
@@ -561,7 +561,7 @@ bun test tests/line-types.test.ts
 
 Expected: PASS, 9 tests.
 
-- [ ] **Step 5: Confirm the expected type break in the webhook route**
+- [x] **Step 5: Confirm the expected type break in the webhook route**
 
 Run from `apps/api`:
 
@@ -572,8 +572,9 @@ bun run typecheck
 Expected: FAIL in `src/routes/webhook.ts` with errors like `Type 'string | undefined' is not assignable to type 'string'`.
 This is correct and intended: `event.source.userId` is no longer guaranteed, and Task 6 removes those reads.
 Do not patch it here.
+> Deviation: The expected typecheck failure did not occur; `bun run typecheck` stayed clean. `webhook.ts` already reads `event.source.userId` as `string | undefined` and early-returns when it is missing, so removing the narrowed source type breaks nothing. Nothing was patched.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/api/src/types/line.types.ts apps/api/tests/line-types.test.ts

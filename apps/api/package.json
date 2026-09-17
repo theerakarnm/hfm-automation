@@ -8,6 +8,7 @@
     "start": "bun run src/index.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit",
+    "db:push": "bunx drizzle-kit push",
     "trigger:daily-client-report": "bun run scripts/trigger-daily-client-report.ts",
     "trigger:hfm-healthcheck": "bun run scripts/trigger-hfm-healthcheck.ts",
     "fetch:client-performance": "bun run scripts/fetch-client-performance-range.ts",

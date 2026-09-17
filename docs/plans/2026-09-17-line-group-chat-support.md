@@ -591,7 +591,7 @@ git commit -m "feat: accept group events in line guards"
 - Create: `apps/api/src/utils/mention.ts`
 - Test: `apps/api/tests/mention.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `apps/api/tests/mention.test.ts`:
 
@@ -678,7 +678,7 @@ describe("stripBotMention", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+- [x] **Step 2: Run the test and confirm it fails**
 
 Run from `apps/api`:
 
@@ -688,7 +688,7 @@ bun test tests/mention.test.ts
 
 Expected: FAIL with `Cannot find module '../src/utils/mention'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `apps/api/src/utils/mention.ts`:
 
@@ -720,7 +720,7 @@ export function stripBotMention(event: TextMessageEvent): string {
 }
 ```
 
-- [ ] **Step 4: Run the test and confirm it passes**
+- [x] **Step 4: Run the test and confirm it passes**
 
 Run from `apps/api`:
 
@@ -730,7 +730,7 @@ bun test tests/mention.test.ts
 
 Expected: PASS, 9 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/utils/mention.ts apps/api/tests/mention.test.ts

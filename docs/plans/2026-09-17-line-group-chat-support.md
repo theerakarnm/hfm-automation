@@ -172,7 +172,7 @@ Turns any webhook event into the `{chatType, chatId, userId}` triple every later
 - Create: `apps/api/src/utils/chat-context.ts`
 - Test: `apps/api/tests/chat-context.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `apps/api/tests/chat-context.test.ts`:
 
@@ -232,7 +232,7 @@ describe("getChatContext", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+- [x] **Step 2: Run the test and confirm it fails**
 
 Run from `apps/api`:
 
@@ -242,7 +242,7 @@ bun test tests/chat-context.test.ts
 
 Expected: FAIL with a resolve error like `Cannot find module '../src/utils/chat-context'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `apps/api/src/utils/chat-context.ts`:
 
@@ -284,7 +284,7 @@ export function getChatContext(event: WebhookEvent): ChatContext | null {
 }
 ```
 
-- [ ] **Step 4: Run the test and confirm it passes**
+- [x] **Step 4: Run the test and confirm it passes**
 
 Run from `apps/api`:
 
@@ -294,7 +294,7 @@ bun test tests/chat-context.test.ts
 
 Expected: PASS, 7 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/utils/chat-context.ts apps/api/tests/chat-context.test.ts

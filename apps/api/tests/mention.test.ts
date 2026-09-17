@@ -70,6 +70,25 @@ describe("stripBotMention", () => {
     expect(stripBotMention(e)).toBe("@somchai 98241376");
   });
 
+  test("cuts cleanly when Thai text precedes the mention", () => {
+    // Thai is BMP, so LINE's index agrees with JS UTF-16 indices either way.
+    const e = textEvent("สวัสดี@hfm_bot 98241376", [
+      { index: 6, length: 8, type: "user", userId: "Ubot", isSelf: true },
+    ]);
+    expect(stripBotMention(e)).toBe("สวัสดี 98241376");
+  });
+
+  test("keeps the text intact when an astral emoji shifts the offsets", () => {
+    // If LINE counts code points, an emoji before the mention makes the
+    // recorded index point one UTF-16 unit early, and the span no longer
+    // starts with "@". The guard must skip the cut instead of eating the
+    // wrong characters.
+    const e = textEvent("🙌@hfm_bot 98241376", [
+      { index: 1, length: 8, type: "user", userId: "Ubot", isSelf: true },
+    ]);
+    expect(stripBotMention(e)).toBe("🙌@hfm_bot 98241376");
+  });
+
   test("removes two bot mentions without shifting the offsets", () => {
     const e = textEvent("@hfm_bot 98241376 @hfm_bot", [
       { index: 0, length: 8, type: "user", userId: "Ubot", isSelf: true },

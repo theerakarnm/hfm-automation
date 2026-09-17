@@ -22,6 +22,7 @@ beforeEach(async () => {
     DROP TABLE IF EXISTS daily_report_notifications CASCADE;
     DROP TABLE IF EXISTS notify_recipients CASCADE;
     DROP TABLE IF EXISTS client_snapshots CASCADE;
+    DROP TABLE IF EXISTS line_groups CASCADE;
   `);
 });
 
@@ -45,6 +46,7 @@ test("initDb creates tables and indexes", async () => {
   expect(tableNames).toContain("report_range_snapshots");
   expect(tableNames).toContain("client_request_snapshots");
   expect(tableNames).toContain("client_request_snapshot_rows");
+  expect(tableNames).toContain("line_groups");
 
   const indexes = await db.execute(sql`
     SELECT indexname FROM pg_indexes

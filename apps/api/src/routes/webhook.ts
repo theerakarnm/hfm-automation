@@ -145,7 +145,13 @@ async function notifyRetry(replyToken: string, ctx: ChatContext): Promise<void> 
   // rejection notice failed to send; they must not get a retry prompt.
   if (!isChatAllowed(ctx)) return;
   try {
-    await replyOrPushText(replyToken, ctx.chatId, RETRY_MESSAGE);
+    if (ctx.chatType === "user") {
+      await replyOrPushText(replyToken, ctx.chatId, RETRY_MESSAGE);
+    } else {
+      // A push fallback to a group bills one message per member, and a
+      // generic retry notice is not worth that broadcast. Reply only.
+      await replyText(replyToken, RETRY_MESSAGE);
+    }
   } catch (err) {
     logError("webhook-notify", err);
   }
@@ -374,12 +380,19 @@ async function processJoinEvent(
   if (ctx.chatType === "user") return;
 
   const db = getDb();
-  await recordLineGroupEvent(db, {
-    chatId: ctx.chatId,
-    chatType: ctx.chatType,
-    eventType: "join",
-    active: 1,
-  });
+  // The registry is telemetry (D8), so a database hiccup must not cost the
+  // greeting or the not-registered notice that carries the group ID. The
+  // row self-heals on the next event from this chat.
+  try {
+    await recordLineGroupEvent(db, {
+      chatId: ctx.chatId,
+      chatType: ctx.chatType,
+      eventType: "join",
+      active: 1,
+    });
+  } catch (err) {
+    logError("line-group", err);
+  }
 
   // The group name is for the operator list only, and there is no room
   // equivalent of the endpoint, so it must not hold up the welcome reply.

@@ -19,6 +19,14 @@ export function stripBotMention(event: TextMessageEvent): string {
   const ordered = selfMentions(event).sort((a, b) => b.index - a.index);
   let text = event.message.text;
   for (const mention of ordered) {
+    // LINE does not document whether index/length count UTF-16 units or
+    // code points, and one astral emoji before the mention shifts one
+    // reading against the other. Only cut a span that really starts with
+    // "@": a shifted offset then degrades to "text does not parse" instead
+    // of eating the wrong characters. Thai text is BMP, so both readings
+    // agree there and mentions always cut cleanly.
+    const span = text.slice(mention.index, mention.index + mention.length);
+    if (!span.startsWith("@")) continue;
     text = text.slice(0, mention.index) + text.slice(mention.index + mention.length);
   }
   return text.trim();

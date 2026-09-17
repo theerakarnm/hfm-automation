@@ -2707,7 +2707,7 @@ git commit -m "feat: list line groups for operators"
 - Modify: `apps/api/.env.example`
 - Modify: `AGENTS.md` (repo root)
 
-- [ ] **Step 1: Add the env template entries**
+- [x] **Step 1: Add the env template entries**
 
 In `apps/api/.env.example`, add directly under `LINE_WHITELIST_UIDS=`:
 
@@ -2721,7 +2721,7 @@ LINE_GROUP_WHITELIST_ENABLED=true
 LINE_GROUP_WHITELIST_IDS=
 ```
 
-- [ ] **Step 2: Document the behaviour in AGENTS.md**
+- [x] **Step 2: Document the behaviour in AGENTS.md**
 
 In `AGENTS.md`, inside the "Architecture Rules (apps/api)" section, add these bullets after the LINE reply-token bullet:
 
@@ -2736,7 +2736,7 @@ In the "Environment & Security" section, add the two new vars to the secrets and
 - Group access is controlled by `LINE_GROUP_WHITELIST_ENABLED` and `LINE_GROUP_WHITELIST_IDS`; group IDs are listed by `GET /internal/line-groups`.
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/api/.env.example AGENTS.md

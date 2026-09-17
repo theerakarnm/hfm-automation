@@ -55,6 +55,8 @@ Tests drop and recreate tables (see `tests/db-helpers.ts`), so never point them 
 - Routes never query the database directly; they call services or repositories.
 - Cron jobs live in `src/jobs/` and are registered in `src/jobs/index.ts`; schedules are ICT (UTC+7).
 - The LINE reply path must stay under the 60s reply-token expiry, so never let a reply await an unbounded HFM call (see `LAST_TRADE_DEADLINE_MS`).
+- The bot serves one-on-one chats, group chats, and multi-person chats. Every handler works from the `ChatContext` (`chatType`, `chatId`, `userId`) built by `src/utils/chat-context.ts`, never from `event.source.userId`: LINE omits `userId` for group members who have never used the iOS or Android app.
+- Group rules: the whole group is authorized by `LINE_GROUP_WHITELIST_IDS` (an empty list allows every group), report commands stay one-on-one, an unparsed group message is answered only when the bot is mentioned, and the loading animation is skipped because LINE rejects it outside one-on-one chats.
 - Keep the "why" comments. Comments here explain timing budgets and upstream API quirks that the code alone does not show.
 
 ## Environment & Security
@@ -62,6 +64,7 @@ Tests drop and recreate tables (see `tests/db-helpers.ts`), so never point them 
 - Copy `apps/api/.env.example` to `.env`; never commit `.env` or any real secret value.
 - Secrets come from env only: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`, `HFM_API_KEY`, `INTERNAL_API_KEY`, `DATABASE_URL`, `TEST_DATABASE_URL`.
 - `/internal/*` routes are protected by `INTERNAL_API_KEY`; the public webhook is protected by LINE signature validation and UID whitelist.
+- Group access is controlled by `LINE_GROUP_WHITELIST_ENABLED` and `LINE_GROUP_WHITELIST_IDS`; group IDs are listed by `GET /internal/line-groups`.
 
 ## Git Workflow
 

@@ -1191,7 +1191,7 @@ git commit -m "feat: make line service chat aware"
 - Create: `apps/api/src/repositories/line-group.repository.ts`
 - Test: `apps/api/tests/line-group.repository.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `apps/api/tests/line-group.repository.test.ts`:
 
@@ -1294,7 +1294,7 @@ describe("line-group.repository", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and confirm it fails**
+- [x] **Step 2: Run the test and confirm it fails**
 
 Run from `apps/api`:
 
@@ -1304,7 +1304,7 @@ bun test tests/line-group.repository.test.ts
 
 Expected: FAIL with `Cannot find module '../src/repositories/line-group.repository'`.
 
-- [ ] **Step 3: Add the Drizzle table**
+- [x] **Step 3: Add the Drizzle table**
 
 In `apps/api/src/db/schema.ts`, insert after the `lineUsers` block (which ends at line 57):
 
@@ -1328,7 +1328,7 @@ export const lineGroups = pgTable("line_groups", {
 });
 ```
 
-- [ ] **Step 4: Add the startup DDL**
+- [x] **Step 4: Add the startup DDL**
 
 In `apps/api/src/db/connection.ts`, inside the `initDb` template literal, add after the `line_users` block:
 
@@ -1345,7 +1345,7 @@ In `apps/api/src/db/connection.ts`, inside the `initDb` template literal, add af
     );
 ```
 
-- [ ] **Step 5: Add the same table to the test bootstrap**
+- [x] **Step 5: Add the same table to the test bootstrap**
 
 In `apps/api/tests/db-helpers.ts`, add to the `DROP TABLE` block, as the first line inside it:
 
@@ -1364,7 +1364,7 @@ Add the same `DROP TABLE IF EXISTS line_groups CASCADE;` line as the first line 
 
 All three call `initDb()` right after, so the table is recreated for them automatically.
 
-- [ ] **Step 6: Write the repository**
+- [x] **Step 6: Write the repository**
 
 Create `apps/api/src/repositories/line-group.repository.ts`:
 
@@ -1456,7 +1456,7 @@ export async function listLineGroups(db: DrizzleDb): Promise<LineGroupRow[]> {
 
 ```
 
-- [ ] **Step 7: Run the test and confirm it passes**
+- [x] **Step 7: Run the test and confirm it passes**
 
 Run from `apps/api`:
 
@@ -1466,7 +1466,7 @@ bun test tests/line-group.repository.test.ts
 
 Expected: PASS, 7 tests.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add apps/api/src/db/schema.ts apps/api/src/db/connection.ts apps/api/tests/db-helpers.ts apps/api/tests/webhook.test.ts apps/api/tests/line-uids.test.ts apps/api/tests/health.test.ts apps/api/src/repositories/line-group.repository.ts apps/api/tests/line-group.repository.test.ts

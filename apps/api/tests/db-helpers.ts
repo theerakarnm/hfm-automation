@@ -11,6 +11,7 @@ export async function createTestDb() {
   const db = drizzle(client, { schema });
 
   await db.execute(sql`
+    DROP TABLE IF EXISTS line_groups CASCADE;
     DROP TABLE IF EXISTS client_request_snapshot_rows CASCADE;
     DROP TABLE IF EXISTS client_request_snapshots CASCADE;
     DROP TABLE IF EXISTS report_range_snapshots CASCADE;
@@ -51,6 +52,17 @@ export async function createTestDb() {
       last_seen_at    TIMESTAMP NOT NULL DEFAULT now(),
       request_count   INTEGER NOT NULL DEFAULT 1,
       last_event_type TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS line_groups (
+      chat_id         TEXT PRIMARY KEY,
+      chat_type       TEXT NOT NULL,
+      label           TEXT,
+      first_seen_at   TIMESTAMP NOT NULL DEFAULT now(),
+      last_seen_at    TIMESTAMP NOT NULL DEFAULT now(),
+      request_count   INTEGER NOT NULL DEFAULT 1,
+      last_event_type TEXT,
+      active          INTEGER NOT NULL DEFAULT 1
     );
 
     CREATE TABLE IF NOT EXISTS report_range_snapshots (

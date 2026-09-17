@@ -56,6 +56,24 @@ export const lineUsers = pgTable("line_users", {
   lastEventType: text("last_event_type"),
 });
 
+// Registry of every group and multi-person chat the bot has been added to.
+// Telemetry and an operator lookup for group IDs - never the permission
+// source, so the reply path keeps working when the database is down.
+export const lineGroups = pgTable("line_groups", {
+  chatId: text("chat_id").primaryKey(),
+  chatType: text("chat_type").notNull(),
+  label: text("label"),
+  firstSeenAt: timestamp("first_seen_at", { mode: "string" })
+    .notNull()
+    .default(sql`now()`),
+  lastSeenAt: timestamp("last_seen_at", { mode: "string" })
+    .notNull()
+    .default(sql`now()`),
+  requestCount: integer("request_count").notNull().default(1),
+  lastEventType: text("last_event_type"),
+  active: integer("active").notNull().default(1),
+});
+
 export const reportRangeSnapshots = pgTable(
   "report_range_snapshots",
   {

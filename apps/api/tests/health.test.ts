@@ -20,6 +20,7 @@ describe("GET /internal/health", () => {
     const client = postgres(TEST_DATABASE_URL, { max: 1 });
     const db = drizzle(client);
     await db.execute(sql`
+      DROP TABLE IF EXISTS line_groups CASCADE;
       DROP TABLE IF EXISTS client_request_snapshot_rows CASCADE;
       DROP TABLE IF EXISTS client_request_snapshots CASCADE;
       DROP TABLE IF EXISTS report_range_snapshots CASCADE;

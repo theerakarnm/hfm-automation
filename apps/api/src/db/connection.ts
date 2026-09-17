@@ -54,6 +54,17 @@ export async function initDb(db?: DrizzleDb | PostgresJsDatabase<Record<string, 
       last_event_type TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS line_groups (
+      chat_id         TEXT PRIMARY KEY,
+      chat_type       TEXT NOT NULL,
+      label           TEXT,
+      first_seen_at   TIMESTAMP NOT NULL DEFAULT now(),
+      last_seen_at    TIMESTAMP NOT NULL DEFAULT now(),
+      request_count   INTEGER NOT NULL DEFAULT 1,
+      last_event_type TEXT,
+      active          INTEGER NOT NULL DEFAULT 1
+    );
+
     CREATE TABLE IF NOT EXISTS report_range_snapshots (
       id         SERIAL PRIMARY KEY,
       period     TEXT NOT NULL,

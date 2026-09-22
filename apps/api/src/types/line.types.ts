@@ -18,6 +18,11 @@ export interface WebhookEvent {
   type: string;
   mode: string;
   timestamp: number;
+  // LINE-assigned trace id for this event. Older payload shapes may omit it,
+  // so callers must fall back to a locally generated id.
+  webhookEventId?: string;
+  // Redelivery flag: true when LINE re-sent an event it could not deliver.
+  deliveryContext?: { isRedelivery: boolean };
   source: {
     type: "user" | "group" | "room";
     userId?: string;

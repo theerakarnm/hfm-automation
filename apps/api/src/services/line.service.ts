@@ -7,6 +7,23 @@ const LINE_LOADING_API = "https://api.line.me/v2/bot/chat/loading/start";
 const LINE_GROUP_SUMMARY_API = "https://api.line.me/v2/bot/group";
 const LINE_TIMEOUT_MS = 10_000;
 
+// LINE answers every API call with an x-line-request-id header; support asks
+// for that id (plus the HTTP status) when opening a case. It used to be
+// dropped with the Response object, so it is now kept on the error itself.
+interface LineApiError extends Error {
+  httpStatus: number;
+  lineRequestId?: string;
+}
+
+function lineApiError(kind: string, res: Response, body: string): LineApiError {
+  const err = new Error(
+    `LINE ${kind} failed ${res.status}: ${body}`
+  ) as LineApiError;
+  err.httpStatus = res.status;
+  err.lineRequestId = res.headers.get("x-line-request-id") ?? undefined;
+  return err;
+}
+
 async function pushMessage(
   to: string,
   message: object
@@ -22,7 +39,7 @@ async function pushMessage(
   });
   if (!res.ok) {
     const errText = await res.text();
-    const err = new Error(`LINE push failed ${res.status}: ${errText}`);
+    const err = lineApiError("push", res, errText);
     logError("line-service", err);
     throw err;
   }
@@ -43,7 +60,7 @@ async function replyMessages(
   });
   if (!res.ok) {
     const errText = await res.text();
-    const err = new Error(`LINE reply failed ${res.status}: ${errText}`);
+    const err = lineApiError("reply", res, errText);
     logError("line-service", err);
     throw err;
   }
@@ -64,7 +81,7 @@ async function replyMessage(
   });
   if (!res.ok) {
     const errText = await res.text();
-    const err = new Error(`LINE reply failed ${res.status}: ${errText}`);
+    const err = lineApiError("reply", res, errText);
     logError("line-service", err);
     throw err;
   }
@@ -86,7 +103,7 @@ export async function showLoading(
 
   if (!res.ok) {
     const errText = await res.text();
-    const err = new Error(`LINE loading indicator failed ${res.status}: ${errText}`);
+    const err = lineApiError("loading indicator", res, errText);
     logError("line-service", err);
     throw err;
   }

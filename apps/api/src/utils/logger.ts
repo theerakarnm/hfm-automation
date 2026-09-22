@@ -24,6 +24,25 @@ export function logError(context: string, error: unknown): void {
   logger.error({ context }, message);
 }
 
+// Structured info/warn for permanent production logging. `fields` carries the
+// searchable values (ids, durations, reason enums); `message` stays a short
+// stable phrase so log greps stay simple.
+export function logInfo(
+  context: string,
+  fields: Record<string, unknown>,
+  message: string,
+): void {
+  logger.info({ context, ...fields }, message);
+}
+
+export function logWarn(
+  context: string,
+  fields: Record<string, unknown>,
+  message: string,
+): void {
+  logger.warn({ context, ...fields }, message);
+}
+
 export function readLog(date: string, maxBytes = MAX_LOG_READ_BYTES): string | null {
   if (!existsSync(LOG_DIR)) return null;
   const files = readdirSync(LOG_DIR).filter(

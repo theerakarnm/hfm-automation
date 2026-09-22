@@ -1,4 +1,4 @@
-import { test, expect, describe, afterEach } from "bun:test";
+import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { fetchPerformance, extractWalletNumber, checkConditions, fetchClients, fetchAllClients, fetchClientsByRange, parsePerformanceLookup, resolveLinkedAccounts, fetchMonthlyVolumeMap } from "../src/services/hfm.service";
 import type { HFMClientsPerformanceResponse } from "../src/types/hfm.types";
 
@@ -338,7 +338,15 @@ describe("fetchClientsByRange", () => {
   });
 });
 
-describe("parsePerformanceLookup", () => {
+describe("parsePerformanceLookup in lot_prefix_only mode", () => {
+  beforeEach(() => {
+    process.env.LOT_DISPLAY_MODE = "lot_prefix_only";
+  });
+
+  afterEach(() => {
+    delete process.env.LOT_DISPLAY_MODE;
+  });
+
   test("WL- prefix returns wallet lookup", () => {
     const result = parsePerformanceLookup("WL-98241376");
     expect(result).toEqual({ kind: "wallet", id: 98241376, label: "WL-98241376" });
@@ -434,6 +442,51 @@ describe("parsePerformanceLookup", () => {
 
   test("lot prefix with garbage id returns null", () => {
     expect(parsePerformanceLookup("lot abc")).toBeNull();
+  });
+});
+
+describe("parsePerformanceLookup in always mode (default)", () => {
+  beforeEach(() => {
+    delete process.env.LOT_DISPLAY_MODE;
+  });
+
+  afterEach(() => {
+    delete process.env.LOT_DISPLAY_MODE;
+  });
+
+  test("plain wallet lookup opts into Volume", () => {
+    const result = parsePerformanceLookup("98241376");
+    expect(result).toEqual({
+      kind: "wallet",
+      id: 98241376,
+      label: "98241376",
+      showVolume: true,
+    });
+  });
+
+  test("plain account lookup opts into Volume", () => {
+    const result = parsePerformanceLookup("T1928491038");
+    expect(result).toEqual({
+      kind: "account",
+      id: 1928491038,
+      label: "1928491038",
+      showVolume: true,
+    });
+  });
+
+  test("lot prefix still sets showVolume", () => {
+    const result = parsePerformanceLookup("lot 98241376");
+    expect(result?.showVolume).toBe(true);
+  });
+
+  test("invalid input still returns null", () => {
+    expect(parsePerformanceLookup("abc")).toBeNull();
+  });
+
+  test("unknown mode value falls back to always", () => {
+    process.env.LOT_DISPLAY_MODE = "nonsense";
+    const result = parsePerformanceLookup("98241376");
+    expect(result?.showVolume).toBe(true);
   });
 });
 

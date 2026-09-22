@@ -76,6 +76,7 @@ describe("webhook", () => {
     delete process.env.DATABASE_URL;
     delete process.env.TARGET_WALLET;
     delete process.env.LAST_TRADE_DEADLINE_MS;
+    delete process.env.LOT_DISPLAY_MODE;
     resetDbForTests();
   });
 
@@ -1073,7 +1074,8 @@ describe("webhook", () => {
   });
 
 
-  test("plain wallet lookup hides volume while lot-prefixed lookup shows it", async () => {
+  test("default always mode shows volume on a plain wallet lookup", async () => {
+    delete process.env.LOT_DISPLAY_MODE;
     const { app } = await importWebhook();
 
     const mockClients = [
@@ -1095,62 +1097,51 @@ describe("webhook", () => {
     ];
 
     const fetchCalls: Array<{ url: string; body?: string }> = [];
-    globalThis.fetch = (async (
-      input: Parameters<typeof globalThis.fetch>[0],
-      init?: Parameters<typeof globalThis.fetch>[1]
-    ) => {
-      const url = String(input);
-      fetchCalls.push({
-        url,
-        body: typeof init?.body === "string" ? init.body : undefined,
-      });
-
-      if (url.endsWith("/v2/bot/chat/loading/start")) {
-        return new Response("{}", { status: 202 });
-      }
-
-      if (url.includes("/api/performance/client-performance")) {
-        return new Response(
-          JSON.stringify({ clients: mockClients, totals: {} }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        );
-      }
-
-      return new Response("{}", { status: 200 });
-    }) as unknown as typeof globalThis.fetch;
+    mockPerformanceFetch(fetchCalls, mockClients);
 
     await getLastTradeMap({
       fetchClientsFn: async () => ({ ok: true, data: [] as HFMClientRow[] }),
     });
 
-    const sendText = async (text: string, replyToken: string) => {
-      const bodyText = JSON.stringify({
-        destination: "U123",
-        events: [
-          {
-            type: "message",
-            message: { type: "text", id: `msg_${replyToken}`, text },
-            source: { type: "user", userId: "Uabc123" },
-            replyToken,
-            timestamp: 1716000000000,
-            mode: "active",
-          },
-        ],
-      });
-      const res = await app.fetch(
-        new Request("http://localhost/webhook", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-line-signature": computeSig(bodyText, SECRET),
-          },
-          body: bodyText,
-        })
-      );
-      expect(res.status).toBe(200);
-    };
+    await sendTextEvent(app, "98241376", "reply_plain");
+    await waitFor(() => fetchCalls.length >= 3);
+    const replyPlain = JSON.parse(fetchCalls[2]?.body ?? "{}");
+    const plainCardJson = JSON.stringify(replyPlain.messages[0].contents);
+    expect(plainCardJson).toContain("\"Trades\"");
+    expect(plainCardJson).toContain("\"Volume\"");
+    expect(plainCardJson).toContain("1.50 lots");
+  });
 
-    await sendText("98241376", "reply_plain");
+  test("lot_prefix_only mode keeps volume hidden on plain lookup and shown on lot-prefixed lookup", async () => {
+    process.env.LOT_DISPLAY_MODE = "lot_prefix_only";
+    const { app } = await importWebhook();
+
+    const mockClients = [
+      {
+        client_id: 45219,
+        account_id: 1000001,
+        activity_status: "active",
+        trades: 10,
+        volume: 1.5,
+        account_type: "Standard",
+        balance: 5000,
+        account_currency: "USD",
+        equity: 5100,
+        archived: false,
+        subaffiliate: 98241376,
+        account_regdate: "2024-06-01T00:00:00Z",
+        status: "approved",
+      },
+    ];
+
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    mockPerformanceFetch(fetchCalls, mockClients);
+
+    await getLastTradeMap({
+      fetchClientsFn: async () => ({ ok: true, data: [] as HFMClientRow[] }),
+    });
+
+    await sendTextEvent(app, "98241376", "reply_plain");
     await waitFor(() => fetchCalls.length >= 3);
     const replyPlain = JSON.parse(fetchCalls[2]?.body ?? "{}");
     const plainCardJson = JSON.stringify(replyPlain.messages[0].contents);
@@ -1160,13 +1151,79 @@ describe("webhook", () => {
 
     fetchCalls.length = 0;
 
-    await sendText("lot 98241376", "reply_lot");
+    await sendTextEvent(app, "lot 98241376", "reply_lot");
     await waitFor(() => fetchCalls.length >= 3);
     const replyLot = JSON.parse(fetchCalls[2]?.body ?? "{}");
     const lotCardJson = JSON.stringify(replyLot.messages[0].contents);
     expect(lotCardJson).toContain("\"Trades\"");
     expect(lotCardJson).toContain("\"Volume\"");
     expect(lotCardJson).toContain("1.50 lots");
+  });
+
+  test("pagination postback without vol keeps volume in always mode", async () => {
+    delete process.env.LOT_DISPLAY_MODE;
+    const { app } = await importWebhook();
+
+    const mockClients = Array.from({ length: 7 }, (_, i) => ({
+      client_id: 45219,
+      account_id: 1000000 + i,
+      activity_status: "active",
+      trades: 10,
+      volume: 1.5,
+      account_type: "Standard",
+      balance: 5000,
+      account_currency: "USD",
+      equity: 5100,
+      archived: false,
+      subaffiliate: 98241376,
+      account_regdate: "2024-06-01T00:00:00Z",
+      status: "approved",
+    }));
+
+    const fetchCalls: Array<{ url: string; body?: string }> = [];
+    mockPerformanceFetch(fetchCalls, mockClients);
+
+    await getLastTradeMap({
+      fetchClientsFn: async () => ({ ok: true, data: [] as HFMClientRow[] }),
+    });
+
+    await sendTextEvent(app, "98241376", "reply_page1");
+    await waitFor(() => fetchCalls.length >= 3);
+    const reply1 = JSON.parse(fetchCalls[2]?.body ?? "{}");
+    expect(JSON.stringify(reply1.messages[0].contents)).toContain("\"Volume\"");
+
+    fetchCalls.length = 0;
+
+    // No vol=1 flag: in always mode the next page must keep showing Volume.
+    const bodyPostback = JSON.stringify({
+      destination: "U123",
+      events: [
+        {
+          type: "postback",
+          postback: { data: "action=page&kind=wallet&id=98241376&page=2" },
+          source: { type: "user", userId: "Uabc123" },
+          replyToken: "reply_page2",
+          timestamp: 1716000000001,
+          mode: "active",
+        },
+      ],
+    });
+    const sigPostback = computeSig(bodyPostback, SECRET);
+    const resPostback = await app.fetch(
+      new Request("http://localhost/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-line-signature": sigPostback,
+        },
+        body: bodyPostback,
+      })
+    );
+    expect(resPostback.status).toBe(200);
+
+    await waitFor(() => fetchCalls.length >= 3);
+    const reply2 = JSON.parse(fetchCalls[2]?.body ?? "{}");
+    expect(JSON.stringify(reply2.messages[0].contents)).toContain("\"Volume\"");
   });
 
   test("invalid input returns format error message", async () => {
@@ -2111,6 +2168,70 @@ describe("webhook", () => {
   });
 
 });
+
+// Mock only the HFM performance endpoint; every other request gets an
+// empty 200 so the reply path can complete without real upstreams.
+function mockPerformanceFetch(
+  fetchCalls: Array<{ url: string; body?: string }>,
+  // Partial HFM rows are fine here: they are only serialized into a fake
+  // upstream response, never consumed as full HFMClientRow values.
+  mockClients: unknown[]
+): void {
+  globalThis.fetch = (async (
+    input: Parameters<typeof globalThis.fetch>[0],
+    init?: Parameters<typeof globalThis.fetch>[1]
+  ) => {
+    const url = String(input);
+    fetchCalls.push({
+      url,
+      body: typeof init?.body === "string" ? init.body : undefined,
+    });
+
+    if (url.endsWith("/v2/bot/chat/loading/start")) {
+      return new Response("{}", { status: 202 });
+    }
+
+    if (url.includes("/api/performance/client-performance")) {
+      return new Response(
+        JSON.stringify({ clients: mockClients, totals: {} }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    return new Response("{}", { status: 200 });
+  }) as unknown as typeof globalThis.fetch;
+}
+
+async function sendTextEvent(
+  app: Hono,
+  text: string,
+  replyToken: string
+): Promise<void> {
+  const body = JSON.stringify({
+    destination: "U123",
+    events: [
+      {
+        type: "message",
+        message: { type: "text", id: `msg_${replyToken}`, text },
+        source: { type: "user", userId: "Uabc123" },
+        replyToken,
+        timestamp: 1716000000000,
+        mode: "active",
+      },
+    ],
+  });
+  const res = await app.fetch(
+    new Request("http://localhost/webhook", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-line-signature": computeSig(body, SECRET),
+      },
+      body,
+    })
+  );
+  expect(res.status).toBe(200);
+}
 
 async function importWebhook() {
   process.env.DATABASE_URL = TEST_DATABASE_URL;

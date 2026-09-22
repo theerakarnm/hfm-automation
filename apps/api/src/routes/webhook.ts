@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { verifyLineSignature } from "../utils/signature";
-import { fetchPerformance, resolveLinkedAccounts, checkConditions, parsePerformanceLookup, fetchMonthlyVolumeMap } from "../services/hfm.service";
+import { fetchPerformance, resolveLinkedAccounts, checkConditions, parsePerformanceLookup, getLotDisplayMode, fetchMonthlyVolumeMap } from "../services/hfm.service";
 import {
   replyText,
   replyTexts,
@@ -47,9 +47,19 @@ const NOT_ALLOWED_MESSAGE =
   "\u274C \u0E02\u0E2D\u0E2D\u0E20\u0E31\u0E22 \u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E1A\u0E2D\u0E17\u0E19\u0E35\u0E49 \u0E2B\u0E32\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D Support";
 
 // Sent when the text is neither a Wallet ID nor a Trading Account. In a group
-// this only goes out when somebody mentioned the bot.
-const USAGE_MESSAGE =
-  "\u274C \u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E2A\u0E48\u0E07 Wallet ID \u0E2B\u0E23\u0E37\u0E2D Trading Account \u0E02\u0E36\u0E49\u0E19\u0E15\u0E49\u0E19\u0E14\u0E49\u0E27\u0E22 T\n\u0E40\u0E0A\u0E48\u0E19 98241376, WL-98241376, T1928491038\n\u0E1E\u0E34\u0E21\u0E1E\u0E4C lot \u0E19\u0E33\u0E2B\u0E19\u0E49\u0E32 \u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E41\u0E2A\u0E14\u0E07 Volume \u0E40\u0E0A\u0E48\u0E19 lot 98241376";
+// this only goes out when somebody mentioned the bot. The "lot" hint only
+// makes sense when Volume is opt-in (LOT_DISPLAY_MODE=lot_prefix_only); the
+// default "always" mode already shows Volume on plain lookups, so the hint
+// is dropped there.
+const USAGE_MESSAGE_BODY =
+  "\u274C \u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\n\u0E01\u0E23\u0E38\u0E13\u0E32\u0E2A\u0E48\u0E07 Wallet ID \u0E2B\u0E23\u0E37\u0E2D Trading Account \u0E02\u0E36\u0E49\u0E19\u0E15\u0E49\u0E19\u0E14\u0E49\u0E27\u0E22 T\n\u0E40\u0E0A\u0E48\u0E19 98241376, WL-98241376, T1928491038";
+const USAGE_MESSAGE_LOT_HINT =
+  "\n\u0E1E\u0E34\u0E21\u0E1E\u0E4C lot \u0E19\u0E33\u0E2B\u0E19\u0E49\u0E32 \u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E41\u0E2A\u0E14\u0E07 Volume \u0E40\u0E0A\u0E48\u0E19 lot 98241376";
+
+const usageMessage = (): string =>
+  getLotDisplayMode() === "lot_prefix_only"
+    ? USAGE_MESSAGE_BODY + USAGE_MESSAGE_LOT_HINT
+    : USAGE_MESSAGE_BODY;
 
 const webhook = new Hono();
 
@@ -217,7 +227,7 @@ async function processTextEvent(
     // In a group every ordinary human sentence lands here. Answer only when
     // the bot was actually mentioned, otherwise stay quiet.
     if (ctx.chatType !== "user" && !isBotMentioned(event)) return;
-    await replyText(replyToken, USAGE_MESSAGE);
+    await replyText(replyToken, usageMessage());
     return;
   }
 
@@ -259,8 +269,11 @@ async function processPostbackEvent(
         kind,
         id,
         label: kind === "wallet" ? `WL-${id}` : String(id),
-        // Preserve the "lot" opt-in across page navigation.
-        showVolume: queryParams.vol === "1",
+        // Preserve the "lot" opt-in across page navigation. In the default
+        // "always" mode Volume is on regardless of vol=1, so every page
+        // keeps showing it.
+        showVolume:
+          queryParams.vol === "1" || getLotDisplayMode() === "always",
       };
       await handleLookupAndReply(replyToken, ctx, lookup, page);
     }
@@ -363,8 +376,18 @@ async function handleLookupAndReply(
 }
 
 // Greeting for a group the bot may serve. Sent once, on the join event.
-const GROUP_WELCOME_MESSAGE =
-  "สวัสดีครับ 🙌\nพิมพ์ Wallet ID หรือ Trading Account ในกลุ่มนี้ได้เลย\nเช่น 98241376, WL-98241376, T1928491038\nพิมพ์ lot นำหน้า เพื่อดู Volume เช่น lot 98241376";
+// Like the usage text, the "lot" hint appears only when Volume is opt-in
+// (LOT_DISPLAY_MODE=lot_prefix_only); the default "always" mode already
+// shows Volume on every lookup.
+const GROUP_WELCOME_BODY =
+  "สวัสดีครับ 🙌\nพิมพ์ Wallet ID หรือ Trading Account ในกลุ่มนี้ได้เลย\nเช่น 98241376, WL-98241376, T1928491038";
+const GROUP_WELCOME_LOT_HINT =
+  "\nพิมพ์ lot นำหน้า เพื่อดู Volume เช่น lot 98241376";
+
+const groupWelcomeMessage = (): string =>
+  getLotDisplayMode() === "lot_prefix_only"
+    ? GROUP_WELCOME_BODY + GROUP_WELCOME_LOT_HINT
+    : GROUP_WELCOME_BODY;
 
 // The chat ID is the only easy way for an operator to read it, so the
 // rejection notice carries it.
@@ -403,7 +426,7 @@ async function processJoinEvent(
     return;
   }
 
-  await replyText(event.replyToken, GROUP_WELCOME_MESSAGE);
+  await replyText(event.replyToken, groupWelcomeMessage());
 }
 
 async function labelGroup(db: DrizzleDb, chatId: string): Promise<void> {

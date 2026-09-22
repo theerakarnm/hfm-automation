@@ -57,6 +57,19 @@ function parseLookupBody(trimmed: string): PerformanceLookup | null {
   return null;
 }
 
+// Volume display mode for the trading card (flex-v1). "always" - the
+// default - shows the Volume metric on every Wallet ID / Trading Account
+// lookup; "lot_prefix_only" keeps the opt-in behavior where only a
+// "lot"-prefixed input reveals it. Any other value falls back to "always".
+// Read per call: Bun caches the module, so a module-load read cannot be
+// overridden by tests that re-import this route.
+export type LotDisplayMode = "always" | "lot_prefix_only";
+
+export function getLotDisplayMode(): LotDisplayMode {
+  const raw = (process.env.LOT_DISPLAY_MODE ?? "").trim().toLowerCase();
+  return raw === "lot_prefix_only" ? "lot_prefix_only" : "always";
+}
+
 // Deposit threshold for the matchAll condition, per reporting currency.
 // USC accounts report balances in cents, so its threshold is expressed in
 // cents too: the default 200_00 equals 200.00 USC. DEPOSIT_THRESHOLD_USD /
@@ -78,8 +91,9 @@ export function parsePerformanceLookup(input: string): PerformanceLookup | null 
   const trimmed = input.trim();
 
   // An optional "lot" prefix (case-insensitive, separator optional) opts the
-  // request into showing the Volume metric on the trading card. Without it
-  // the card hides the lot section entirely.
+  // request into showing the Volume metric on the trading card. With
+  // LOT_DISPLAY_MODE=always (the default) a plain wallet/account input opts
+  // in implicitly; lot_prefix_only makes the prefix the only opt-in.
   const lotPrefix = trimmed.match(/^lot[-\s]*/i);
   if (lotPrefix) {
     const rest = trimmed.slice(lotPrefix[0].length).trim();
@@ -87,7 +101,11 @@ export function parsePerformanceLookup(input: string): PerformanceLookup | null 
     return lookup ? { ...lookup, showVolume: true } : null;
   }
 
-  return parseLookupBody(trimmed);
+  const lookup = parseLookupBody(trimmed);
+  if (lookup && getLotDisplayMode() === "always") {
+    return { ...lookup, showVolume: true };
+  }
+  return lookup;
 }
 
 export function checkConditions(

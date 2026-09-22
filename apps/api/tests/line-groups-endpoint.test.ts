@@ -7,7 +7,7 @@ import { initDb, getDb, resetDbForTests } from "../src/db/connection";
 import { recordLineGroupEvent } from "../src/repositories/line-group.repository";
 
 const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ?? "postgresql://test:test@localhost:5433/hfm_test";
+  process.env.TEST_DATABASE_URL ?? "postgresql://jametirakarn@localhost:5432/hfm_test";
 
 async function setupTestDb(): Promise<void> {
   const client = postgres(TEST_DATABASE_URL, { max: 1 });

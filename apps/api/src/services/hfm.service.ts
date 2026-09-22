@@ -57,6 +57,23 @@ function parseLookupBody(trimmed: string): PerformanceLookup | null {
   return null;
 }
 
+// Deposit threshold for the matchAll condition, per reporting currency.
+// USC accounts report balances in cents, so its threshold is expressed in
+// cents too: the default 200_00 equals 200.00 USC. DEPOSIT_THRESHOLD_USD /
+// DEPOSIT_THRESHOLD_USC override the defaults; a missing, invalid, or
+// negative value falls back. Read per call: Bun caches the module, so a
+// module-load read cannot be overridden by tests that re-import this route.
+export function getDepositThreshold(accountCurrency: string): number {
+  const isUsc = accountCurrency === "USC";
+  const fallback = isUsc ? 200_00 : 200;
+  const raw = (
+    isUsc ? process.env.DEPOSIT_THRESHOLD_USC : process.env.DEPOSIT_THRESHOLD_USD
+  )?.trim();
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
 export function parsePerformanceLookup(input: string): PerformanceLookup | null {
   const trimmed = input.trim();
 
@@ -87,7 +104,7 @@ export function checkConditions(
   const underTargetWallet =
     !Number.isNaN(targetWallet) && walletNum === targetWallet;
 
-  const depositThreshold = data.account_currency === "USC" ? 200_00 : 200;
+  const depositThreshold = getDepositThreshold(data.account_currency);
   const depositThresholdMet = data.balance >= depositThreshold;
 
   const matchAll = underTargetWallet && depositThresholdMet;

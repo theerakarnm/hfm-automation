@@ -172,6 +172,8 @@ describe("checkConditions", () => {
 
   afterEach(() => {
     delete process.env.TARGET_WALLET;
+    delete process.env.DEPOSIT_THRESHOLD_USD;
+    delete process.env.DEPOSIT_THRESHOLD_USC;
   });
 
   test("match all when wallet matches target and balance >= 200 USD", () => {
@@ -215,6 +217,31 @@ describe("checkConditions", () => {
     const result = checkConditions(baseData);
     expect(result.underTargetWallet).toBe(false);
     expect(result.matchAll).toBe(false);
+  });
+
+  test("custom USD threshold from DEPOSIT_THRESHOLD_USD", () => {
+    process.env.TARGET_WALLET = "98241376";
+    process.env.DEPOSIT_THRESHOLD_USD = "500";
+    const result = checkConditions({ ...baseData, balance: 300 });
+    expect(result.depositThresholdMet).toBe(false);
+    expect(result.matchAll).toBe(false);
+  });
+
+  test("custom USC threshold from DEPOSIT_THRESHOLD_USC", () => {
+    process.env.TARGET_WALLET = "98241376";
+    process.env.DEPOSIT_THRESHOLD_USC = "30000";
+    const below = { ...baseData, balance: 299_99, account_currency: "USC" };
+    expect(checkConditions(below).depositThresholdMet).toBe(false);
+    const met = { ...baseData, balance: 300_00, account_currency: "USC" };
+    expect(checkConditions(met).depositThresholdMet).toBe(true);
+  });
+
+  test("invalid DEPOSIT_THRESHOLD_USD falls back to default 200", () => {
+    process.env.TARGET_WALLET = "98241376";
+    process.env.DEPOSIT_THRESHOLD_USD = "not-a-number";
+    const result = checkConditions({ ...baseData, balance: 250 });
+    expect(result.depositThresholdMet).toBe(true);
+    expect(result.matchAll).toBe(true);
   });
 });
 

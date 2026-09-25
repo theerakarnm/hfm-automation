@@ -153,3 +153,17 @@ For multi-step tasks, state a brief plan:
 ```
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+## Logs
+
+There is no `logs/` directory and no `/internal/logs` endpoint any more.
+The Worker emits one JSON object per log line through `console.log` and `console.error`.
+
+- Live tail one tenant: `bun run tail:maow` or `bun run tail:simple-trade`.
+- Filter a live tail by level: `bun run tail:maow -- --status error`.
+- Historical search: the Workers Logs UI for the tenant Worker, which indexes
+  every field of the emitted object (`level`, `tenant`, `context`, `msg`, ids).
+- Retention is 7 days on the Paid plan, 3 days on Free.
+
+Never log an HFM or LINE payload.
+Workers Logs caps one request at 256 KB of log data and drops the rest.

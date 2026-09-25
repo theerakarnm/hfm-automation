@@ -13,7 +13,9 @@
     "trigger:hfm-healthcheck": "bun run scripts/trigger-hfm-healthcheck.ts",
     "fetch:client-performance": "bun run scripts/fetch-client-performance-range.ts",
     "compare:client-performance": "bun run scripts/compare-client-performance-files.ts",
-    "seed:mock-snapshots": "bun run scripts/seed-mock-client-snapshots.ts"
+    "seed:mock-snapshots": "bun run scripts/seed-mock-client-snapshots.ts",
+    "tail:maow": "wrangler tail -c wrangler.maow.jsonc",
+    "tail:simple-trade": "wrangler tail -c wrangler.simple-trade.jsonc"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260922.1",
@@ -29,9 +31,6 @@
     "dayjs": "^1.11.20",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.15",
-    "pino": "^10.3.1",
-    "pino-pretty": "^13.1.3",
-    "pino-roll": "^4.0.0",
     "postgres": "^3.4.9"
   }
 }

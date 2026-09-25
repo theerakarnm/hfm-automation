@@ -4006,7 +4006,7 @@ purpose in commit `96e6a0e` ("drop 5am cron job"), and this migration must not b
 - Create: `apps/api/tests/worker.test.ts`
 - Delete: `apps/api/src/index.ts`
 
-- [ ] **Step 1: Write the failing cron dispatch test**
+- [x] **Step 1: Write the failing cron dispatch test**
 
 Create `apps/api/tests/worker.test.ts`:
 
@@ -4032,7 +4032,7 @@ describe("cron dispatch", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 cd apps/api && bun test tests/worker.test.ts
@@ -4040,7 +4040,7 @@ cd apps/api && bun test tests/worker.test.ts
 
 Expected: FAIL with `Export named 'cronJobName' not found in module`.
 
-- [ ] **Step 3: Rewrite the job registry**
+- [x] **Step 3: Rewrite the job registry**
 
 Replace the whole of `apps/api/src/jobs/index.ts`:
 
@@ -4105,7 +4105,7 @@ export async function dispatchCron(cron: string): Promise<void> {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 cd apps/api && bun test tests/worker.test.ts

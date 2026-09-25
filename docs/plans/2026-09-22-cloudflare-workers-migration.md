@@ -4306,7 +4306,7 @@ Sequential awaiting also keeps exactly one outbound connection waiting for heade
 Workers limit of 6.
 If real pacing is ever needed, it belongs in Queues `delaySeconds`, not in a timer.
 
-- [ ] **Step 1: Write the failing pacing test**
+- [x] **Step 1: Write the failing pacing test**
 
 Append to `apps/api/tests/line.service.test.ts`:
 
@@ -4332,7 +4332,7 @@ describe("pushToAll pacing", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 cd apps/api && bun test tests/line.service.test.ts -t "does not sleep between pushes"
@@ -4347,7 +4347,12 @@ Expected: < 100
 Received: 405
 ```
 
-- [ ] **Step 3: Remove the sleep**
+- [x] **Step 3: Remove the sleep**
+  > Deviation: the confirm grep `grep -rn "Bun\." src` cannot return "no output" as the step
+  > expects, because the step's own replacement comment contains the string "Bun.sleep" and
+  > `src/types/workers-types-compat.d.ts` mentions `Bun.file(...)` and `Bun.Image` in doc
+  > comments and type declarations. Checked the intent instead: the only non-`.d.ts` match is
+  > the new comment itself, and no runtime `Bun.` call remains in `src/`.
 
 Replace `apps/api/src/services/line.service.ts:163-170`:
 
@@ -4373,7 +4378,7 @@ cd apps/api && grep -rn "Bun\." src
 
 Expected: no output.
 
-- [ ] **Step 4: Run the LINE service tests**
+- [x] **Step 4: Run the LINE service tests**
 
 ```bash
 cd apps/api && bun test tests/line.service.test.ts
@@ -4381,7 +4386,7 @@ cd apps/api && bun test tests/line.service.test.ts
 
 Expected: PASS, 14 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/services/line.service.ts apps/api/tests/line.service.test.ts
@@ -4427,7 +4432,7 @@ without a fix every timeout would be reported as `server_error`.
 `DOMException` is not an `Error` subclass on every runtime, so the new check is name-based and
 avoids `instanceof`.
 
-- [ ] **Step 6: Write the failing timeout test**
+- [x] **Step 6: Write the failing timeout test**
 
 Create `apps/api/tests/hfm-timeouts.test.ts`:
 
@@ -4486,7 +4491,7 @@ describe("HFM timeouts are reported as timeouts", () => {
 });
 ```
 
-- [ ] **Step 7: Run the test to verify it fails**
+- [x] **Step 7: Run the test to verify it fails**
 
 ```bash
 cd apps/api && bun test tests/hfm-timeouts.test.ts
@@ -4501,7 +4506,7 @@ Expected: "timeout"
 Received: "server_error"
 ```
 
-- [ ] **Step 8: Add the timeout-error helper**
+- [x] **Step 8: Add the timeout-error helper**
 
 In `apps/api/src/services/hfm.service.ts`, insert after line 15
 (`const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;`):
@@ -4519,7 +4524,7 @@ function isTimeoutError(e: unknown): boolean {
 }
 ```
 
-- [ ] **Step 9: Convert `fetchPerformance`**
+- [x] **Step 9: Convert `fetchPerformance`**
 
 In `apps/api/src/services/hfm.service.ts`, delete lines 147-148:
 
@@ -4548,7 +4553,7 @@ Replace the closing `catch`/`finally` of the function (currently lines 192-202) 
 }
 ```
 
-- [ ] **Step 10: Convert `fetchClients` and lower its default**
+- [x] **Step 10: Convert `fetchClients` and lower its default**
 
 In `apps/api/src/services/hfm.service.ts`, replace lines 262-264:
 
@@ -4581,7 +4586,7 @@ Replace the closing `catch`/`finally` of the function (currently lines 287-297) 
 }
 ```
 
-- [ ] **Step 11: Convert `fetchAllClients`**
+- [x] **Step 11: Convert `fetchAllClients`**
 
 In `apps/api/src/services/hfm.service.ts`, replace lines 299-301:
 
@@ -4610,7 +4615,7 @@ Replace the closing `catch`/`finally` of the function (currently lines 321-331) 
 }
 ```
 
-- [ ] **Step 12: Convert `fetchClientsByRange`**
+- [x] **Step 12: Convert `fetchClientsByRange`**
 
 In `apps/api/src/services/hfm.service.ts`, replace lines 337-339 (the end of the signature and
 the two timer lines) with:
@@ -4640,7 +4645,10 @@ Replace the closing `catch`/`finally` of the function (currently lines 361-371) 
 }
 ```
 
-- [ ] **Step 13: Convert `fetchMonthlyVolumeMap`**
+- [x] **Step 13: Convert `fetchMonthlyVolumeMap`**
+  > Deviation: the confirm grep cannot return "no output" as written, because the helper comment inserted in
+  > Step 8 (text taken verbatim from the plan) contains the word "AbortController". That comment line is the
+  > only match; no code-level AbortController/clearTimeout remains in the file.
 
 In `apps/api/src/services/hfm.service.ts`, delete lines 383-384:
 
@@ -4676,7 +4684,7 @@ cd apps/api && grep -n "AbortController\|clearTimeout" src/services/hfm.service.
 
 Expected: no output.
 
-- [ ] **Step 14: Run the HFM tests**
+- [x] **Step 14: Run the HFM tests**
 
 ```bash
 cd apps/api && bun test tests/hfm-timeouts.test.ts tests/hfm.service.test.ts
@@ -4686,7 +4694,7 @@ Expected: PASS, 64 tests.
 `tests/hfm.service.test.ts:279-294` still passes: it aborts through the injected signal with
 its own `AbortError`, and `isTimeoutError` accepts that name too.
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 git add apps/api/src/services/hfm.service.ts apps/api/tests/hfm-timeouts.test.ts
@@ -4707,7 +4715,7 @@ The spacing between attempts is then the call itself: each attempt is a real `/a
 round trip, about 7 seconds when HFM is healthy and at most `CRON_FETCH_TIMEOUT_MS` when it is
 not, so three attempts are 135 seconds worst case.
 
-- [ ] **Step 16: Tighten the retry test**
+- [x] **Step 16: Tighten the retry test**
 
 Replace lines 518-539 of `apps/api/tests/daily-client-report.test.ts`:
 
@@ -4745,7 +4753,7 @@ Replace lines 518-539 of `apps/api/tests/daily-client-report.test.ts`:
 The `30_000` timeout argument is deliberately gone: the test must finish inside the default
 5 second budget now.
 
-- [ ] **Step 17: Run the test to verify it fails**
+- [x] **Step 17: Run the test to verify it fails**
 
 ```bash
 cd apps/api && bun test tests/daily-client-report.test.ts -t "does not throw when HFM fetch fails after retries"
@@ -4765,7 +4773,7 @@ and these two lines above it:
 [cron] ensureTodaySnapshot attempt 2/3 failed (server_error), retrying in 10s...
 ```
 
-- [ ] **Step 18: Remove the sleeps and add explicit ceilings**
+- [x] **Step 18: Remove the sleeps and add explicit ceilings**
 
 In `apps/api/src/jobs/daily-client-report.ts`, insert before line 212
 (`export interface RunDailyClientReportOptions {`):
@@ -4807,7 +4815,7 @@ Replace line 482 inside `runDailyClientReport`:
     options.fetchClientsFn ?? (() => fetchClients(CRON_FETCH_TIMEOUT_MS));
 ```
 
-- [ ] **Step 19: Run the daily report tests**
+- [x] **Step 19: Run the daily report tests**
 
 ```bash
 cd apps/api && bun test tests/daily-client-report.test.ts
@@ -4817,7 +4825,7 @@ Expected: PASS, 21 tests.
 The file drops from about 15 seconds of wall time to under half a second, because the two
 sleeps were the bulk of it.
 
-- [ ] **Step 20: Commit**
+- [x] **Step 20: Commit**
 
 ```bash
 git add apps/api/src/jobs/daily-client-report.ts apps/api/tests/daily-client-report.test.ts
@@ -4854,7 +4862,7 @@ The five existing tests in `tests/signature.test.ts` keep passing untouched:
 One test is added for a non-ASCII body, because both `Buffer.from(rawBody)` inside the HMAC
 and the UTF-8 decoding of the webhook body must behave the same on Workers as on Bun.
 
-- [ ] **Step 21: Add the non-ASCII signature test**
+- [x] **Step 21: Add the non-ASCII signature test**
 
 Append to `apps/api/tests/signature.test.ts`:
 
@@ -4867,7 +4875,7 @@ test("verifies a body with non-ASCII characters", () => {
 });
 ```
 
-- [ ] **Step 22: Document why the file stays on node:crypto**
+- [x] **Step 22: Document why the file stays on node:crypto**
 
 Replace the whole of `apps/api/src/utils/signature.ts`:
 
@@ -4900,7 +4908,7 @@ export function verifyLineSignature(
 }
 ```
 
-- [ ] **Step 23: Run the signature tests**
+- [x] **Step 23: Run the signature tests**
 
 ```bash
 cd apps/api && bun test tests/signature.test.ts
@@ -4908,7 +4916,7 @@ cd apps/api && bun test tests/signature.test.ts
 
 Expected: PASS, 6 tests.
 
-- [ ] **Step 24: Commit**
+- [x] **Step 24: Commit**
 
 ```bash
 git add apps/api/src/utils/signature.ts apps/api/tests/signature.test.ts
@@ -4953,7 +4961,7 @@ Adding one now would be speculative code with no caller.
 Instead the audit is frozen as a test, so the next `Promise.all` over fetch cannot land
 unnoticed.
 
-- [ ] **Step 25: Add the fan-out guard test**
+- [x] **Step 25: Add the fan-out guard test**
 
 Create `apps/api/tests/no-unbounded-fanout.test.ts`:
 
@@ -4993,7 +5001,7 @@ test("src/ has no unbounded Promise.all fan-out", () => {
 This test uses `node:fs` against the checked-out source tree, so it runs under `bun test` only.
 It is never bundled into the Worker.
 
-- [ ] **Step 26: Run the guard test**
+- [x] **Step 26: Run the guard test**
 
 ```bash
 cd apps/api && bun test tests/no-unbounded-fanout.test.ts
@@ -5002,7 +5010,7 @@ cd apps/api && bun test tests/no-unbounded-fanout.test.ts
 Expected: PASS, 1 test.
 It passes immediately because the audit found nothing to fix; its value is the next change.
 
-- [ ] **Step 27: Run the whole suite and typecheck**
+- [x] **Step 27: Run the whole suite and typecheck**
 
 ```bash
 cd apps/api && bun test && bun run typecheck
@@ -5010,7 +5018,7 @@ cd apps/api && bun test && bun run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 28: Commit**
+- [x] **Step 28: Commit**
 
 ```bash
 git add apps/api/tests/no-unbounded-fanout.test.ts

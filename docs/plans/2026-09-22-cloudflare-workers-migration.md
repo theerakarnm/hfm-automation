@@ -992,7 +992,7 @@ cd apps/api && bun test && bun run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add apps/api/src apps/api/tests

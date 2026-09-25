@@ -194,7 +194,7 @@ cd apps/api && bun run typecheck && bun test
 Expected: typecheck exits 0 and every test passes. Nothing uses the new types yet, so this
 proves the tsconfig change alone breaks nothing.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/api/package.json apps/api/bun.lock apps/api/tsconfig.json
@@ -238,7 +238,7 @@ test("throws when process.env holds another tenant", () => {
 });
 ```
 
-- [ ] **Step 6: Run the test to verify it fails**
+- [x] **Step 6: Run the test to verify it fails**
 
 ```bash
 cd apps/api && bun test tests/worker-env.test.ts

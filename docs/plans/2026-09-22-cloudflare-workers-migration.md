@@ -2398,7 +2398,7 @@ git add src/db/connection.ts src/index.ts scripts/seed-mock-client-snapshots.ts 
 git commit -m "feat: per-invocation db handle with ALS scope"
 ```
 
-- [ ] **Step 18: Add the tenant migration script**
+- [x] **Step 18: Add the tenant migration script**
 
 Create `apps/api/scripts/migrate-tenant.ts` with this content.
 
@@ -2455,7 +2455,7 @@ Replace the `"db:push"` line (currently line 11) with:
 `db:push` is removed on purpose.
 `drizzle-kit push` diffs straight against a live database and never writes a file, so it would silently undo the whole point of committing `drizzle/`.
 
-- [ ] **Step 19: Smoke-test the migration script against the test database**
+- [x] **Step 19: Smoke-test the migration script against the test database**
 
 Run it against a scratch database so a real tenant is never touched:
 

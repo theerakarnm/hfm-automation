@@ -15,8 +15,9 @@ logs
 _.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
-# Drizzle Kit generated migrations
-drizzle/
+# Drizzle Kit generated migrations are committed on purpose: they are the only
+# thing that builds a tenant database now that boot-time DDL is gone.
+# Never hand-edit them, regenerate with `bun run db:generate`.
 
 # dotenv environment variable files
 .env

@@ -1694,7 +1694,7 @@ Those tests set `process.env.DATABASE_URL` and rely on `getDb()` picking it up:
 The 11 Postgres-backed test files are `webhook`, `webhook-logging`, `line-uids`, `line-groups-endpoint`, `health`, `daily-client-report`, `snapshot.repository`, `line-group.repository`, `line-user.repository`, `recipient.repository` and `sqlite.service`.
 With the ALS fallback in place, none of them changes its database wiring.
 
-- [ ] **Step 1: Write the migration drift guard test**
+- [x] **Step 1: Write the migration drift guard test**
 
 Create `apps/api/tests/migrations.test.ts` with this content.
 
@@ -1755,14 +1755,14 @@ test("the drizzle journal exists", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd apps/api && bun test tests/migrations.test.ts`
 
 Expected: FAIL, all 3 tests.
 The failure is `ENOENT: no such file or directory, scandir 'drizzle'`, because `apps/api/drizzle/` does not exist yet.
 
-- [ ] **Step 3: Un-ignore drizzle/ and generate the migrations**
+- [x] **Step 3: Un-ignore drizzle/ and generate the migrations**
 
 `apps/api/.gitignore:18-19` currently reads:
 
@@ -1799,7 +1799,7 @@ grep -c "CREATE TABLE" drizzle/0000_init_schema.sql
 
 Expected: `drizzle/0000_init_schema.sql` plus `drizzle/meta/_journal.json` and `drizzle/meta/0000_snapshot.json`, and a `CREATE TABLE` count of 8.
 
-- [ ] **Step 4: Run the drift guard to verify it passes**
+- [x] **Step 4: Run the drift guard to verify it passes**
 
 Run: `cd apps/api && bun test tests/migrations.test.ts`
 Expected: PASS, 3 pass, 0 fail.

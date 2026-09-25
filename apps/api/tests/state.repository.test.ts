@@ -1,6 +1,8 @@
 import { expect, test, describe, beforeAll, afterAll } from "bun:test";
 import { createTestDb, closeTestDb } from "./db-helpers";
-import { getJobState, setJobState } from "../src/db/state.repository";
+import { claimLineEvent, getJobState, purgeEventClaims, setJobState } from "../src/db/state.repository";
+import { eq } from "drizzle-orm";
+import { jobState } from "../src/db/schema";
 import type { DrizzleDb } from "../src/db/connection";
 import type postgres from "postgres";
 
@@ -38,5 +40,39 @@ describe("job state repository", () => {
     await setJobState(db, "key:b", "0");
     expect(await getJobState(db, "key:a")).toBe("1");
     expect(await getJobState(db, "key:b")).toBe("0");
+  });
+});
+
+describe("LINE event claims", () => {
+  test("the first claim wins and a repeat claim loses", async () => {
+    expect(await claimLineEvent(db, "evt-claim-1")).toBe(true);
+    expect(await claimLineEvent(db, "evt-claim-1")).toBe(false);
+  });
+
+  test("concurrent claims for one event have exactly one winner", async () => {
+    const results = await Promise.all([
+      claimLineEvent(db, "evt-race"),
+      claimLineEvent(db, "evt-race"),
+      claimLineEvent(db, "evt-race"),
+    ]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+  });
+
+  test("purge removes only old event claims", async () => {
+    await claimLineEvent(db, "evt-old");
+    await claimLineEvent(db, "evt-new");
+    await setJobState(db, "hfm_healthcheck:last_healthy", "1");
+    await db
+      .update(jobState)
+      .set({ updatedAt: "2000-01-01T00:00:00.000Z" })
+      .where(eq(jobState.key, "line_event:evt-old"));
+
+    expect(await purgeEventClaims(db, 60_000)).toBe(1);
+
+    // evt-old is gone, so it can be claimed again; evt-new is still held.
+    expect(await claimLineEvent(db, "evt-old")).toBe(true);
+    expect(await claimLineEvent(db, "evt-new")).toBe(false);
+    // Job state that is not an event claim is never purged.
+    expect(await getJobState(db, "hfm_healthcheck:last_healthy")).toBe("1");
   });
 });

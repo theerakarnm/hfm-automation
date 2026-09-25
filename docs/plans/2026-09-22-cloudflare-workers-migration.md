@@ -3653,7 +3653,7 @@ cd apps/api && bun test tests/hfm-healthcheck.test.ts
 
 Expected: PASS, 6 tests.
 
-- [ ] **Step 17: Commit**
+- [x] **Step 17: Commit**
 
 ```bash
 git add apps/api/src/db/schema.ts apps/api/src/db/state.repository.ts apps/api/src/db/connection.ts apps/api/src/jobs/hfm-healthcheck.ts apps/api/tests
@@ -3695,7 +3695,7 @@ customer's reply.
 - Modify: `apps/api/tests/webhook.test.ts`, `tests/webhook-logging.test.ts`, `tests/line-uids.test.ts`,
   `tests/health.test.ts`, `tests/sqlite.service.test.ts` (one line each in the inline `DROP TABLE` list)
 
-- [ ] **Step 18: Write the failing claim tests**
+- [x] **Step 18: Write the failing claim tests**
 
 Append to `apps/api/tests/state.repository.test.ts`, and extend its import from
 `../src/db/state.repository` to
@@ -3743,7 +3743,7 @@ describe("LINE event claims", () => {
 });
 ```
 
-- [ ] **Step 19: Run the tests to verify they fail**
+- [x] **Step 19: Run the tests to verify they fail**
 
 ```bash
 cd apps/api && bun test tests/state.repository.test.ts
@@ -3752,7 +3752,7 @@ cd apps/api && bun test tests/state.repository.test.ts
 Expected: FAIL with
 `SyntaxError: Export named 'claimLineEvent' not found in module '.../src/db/state.repository.ts'`.
 
-- [ ] **Step 20: Implement the claim and the purge**
+- [x] **Step 20: Implement the claim and the purge**
 
 In `apps/api/src/db/state.repository.ts`, change the first import to:
 
@@ -3811,7 +3811,7 @@ export async function purgeEventClaims(
 }
 ```
 
-- [ ] **Step 21: Run the claim tests**
+- [x] **Step 21: Run the claim tests**
 
 ```bash
 cd apps/api && bun test tests/state.repository.test.ts

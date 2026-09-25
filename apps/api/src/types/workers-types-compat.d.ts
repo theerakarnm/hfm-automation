@@ -19,8 +19,9 @@
  *   bun-types' typed process global and with it the `never` return of
  *   process.exit(), so `if (bad) process.exit(1)` no longer narrows. The
  *   /// reference below pulls @types/node (a bun-types dependency, always
- *   installed) back into the program; until the pino removal it was loaded
- *   transitively through pino's own .d.ts imports.
+ *   installed) back into the program. Before the Workers migration the
+ *   program got Node types transitively through the disk-backed logger's
+ *   own .d.ts imports.
  *
  * If a future workers-types or bun-types release drops more members, extend
  * this file instead of weakening the tsconfig.

@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import * as loggerMod from "../src/utils/logger";
-import { logError, logInfo, logWarn, logger } from "../src/utils/logger";
+import type * as loggerModType from "../src/utils/logger";
+
+// webhook-logging.test.ts calls mock.module on the plain specifier for the
+// whole suite, and bun registers those mocks before other files' imports, so
+// a static import here would resolve to its recording stub. The "?real"
+// query gives this file its own unmocked instance of the same real module.
+const loggerSpecifier = "../src/utils/logger?real";
+const loggerMod = (await import(loggerSpecifier)) as typeof loggerModType;
+const { logError, logInfo, logWarn, logger } = loggerMod;
 
 const ORIGINAL_LOG = console.log;
 const ORIGINAL_ERROR = console.error;

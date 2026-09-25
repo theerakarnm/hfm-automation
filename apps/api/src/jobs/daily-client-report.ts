@@ -209,6 +209,13 @@ export function buildComparisonReportMessage(options: {
   return msg.trimEnd();
 }
 
+// The reply path answers a LINE event whose reply token dies 60s after the
+// event, so its HFM budget is 20s. The cron has the 15 minute wall budget of a
+// >= 1h-interval trigger, so it can afford 45s per attempt; three attempts is
+// 135s worst case.
+const REPLY_FETCH_TIMEOUT_MS = 20_000;
+const CRON_FETCH_TIMEOUT_MS = 45_000;
+
 export interface RunDailyClientReportOptions {
   now?: Date;
   db?: DrizzleDb;
@@ -266,11 +273,12 @@ async function ensureTodaySnapshot(
       reason = result.reason;
     }
     if (attempt < maxRetries) {
-      const delayMs = attempt * 5_000;
+      // No sleep between attempts. setTimeout does not reliably delay on
+      // Workers, and the spacing comes from the call itself: every attempt is
+      // a real /api/clients/ round trip of ~7s, bounded by CRON_FETCH_TIMEOUT_MS.
       console.warn(
-        `[cron] ensureTodaySnapshot attempt ${attempt}/${maxRetries} failed (${reason}), retrying in ${delayMs / 1000}s...`,
+        `[cron] ensureTodaySnapshot attempt ${attempt}/${maxRetries} failed (${reason}), retrying now...`,
       );
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
     } else {
       console.error(
         `[cron] ensureTodaySnapshot failed after ${maxRetries} attempts: ${reason}`,
@@ -469,7 +477,8 @@ async function buildReportMessages(
 export async function generateReportForUser(options: RunDailyClientReportOptions = {}): Promise<string[]> {
   const now = options.now ?? new Date();
   const db = options.db ?? getDb();
-  const fetchCurrent = options.fetchClientsFn ?? fetchClients;
+  const fetchCurrent =
+    options.fetchClientsFn ?? (() => fetchClients(REPLY_FETCH_TIMEOUT_MS));
   const period = options.reportPeriod ?? "day";
 
   const today = getIctDateString(now);
@@ -479,7 +488,8 @@ export async function generateReportForUser(options: RunDailyClientReportOptions
 export async function runDailyClientReport(options: RunDailyClientReportOptions = {}): Promise<void> {
   const now = options.now ?? new Date();
   const db = options.db ?? getDb();
-  const fetchCurrent = options.fetchClientsFn ?? fetchClients;
+  const fetchCurrent =
+    options.fetchClientsFn ?? (() => fetchClients(CRON_FETCH_TIMEOUT_MS));
   const pushAll = options.pushToAllFn ?? pushToAll;
 
   await seedFromEnv(db, process.env.LINE_NOTIFY_UIDS ?? "");

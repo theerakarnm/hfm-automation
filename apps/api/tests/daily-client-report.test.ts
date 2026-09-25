@@ -526,17 +526,23 @@ describe("runDailyClientReport", () => {
     };
     const mockPushAll = async () => {};
 
+    const startedAt = Date.now();
     await runDailyClientReport({
       now: new Date("2026-04-25T22:00:00.000Z"),
       db,
       fetchClientsFn: mockFetchFail,
       pushToAllFn: mockPushAll,
     });
+    const elapsed = Date.now() - startedAt;
 
     expect(calls).toBe(3);
+    // The retry ladder used to sleep 5s then 10s between attempts. setTimeout
+    // does not reliably delay on Workers, so the sleeps are gone and the wall
+    // time is now only the cost of the calls themselves.
+    expect(elapsed).toBeLessThan(1_000);
     const today = getIctDateString(new Date("2026-04-25T22:00:00.000Z"));
     expect(await countByDate(db, today)).toBe(0);
-  }, 30_000);
+  });
 
   test("warns but does not throw when no active recipients", async () => {
     process.env.TARGET_WALLET = "30506525";

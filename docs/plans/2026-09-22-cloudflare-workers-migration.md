@@ -1066,7 +1066,16 @@ No other file in `src/`, `tests/` or `scripts/` imports the logger.
 
 `grep -rn "internal/logs" tests` returns nothing, so no test covers the two deleted routes today.
 
-- [ ] **Step 1: Rewrite tests/logger.test.ts against the JSON logger**
+- [x] **Step 1: Rewrite tests/logger.test.ts against the JSON logger**
+> Deviation: The file is the plan's content except its import block. In the full suite,
+> tests/webhook-logging.test.ts calls mock.module on the plain "../src/utils/logger"
+> specifier, and bun registers those mocks before other files' imports, so this file
+> resolved to the recording stub and all 9 console-capture tests failed (11 pass
+> standalone, 9 fail in the suite). bun 1.3.5 has no per-file isolation and
+> mock.restore() does not undo mock.module. Correction: load the real module through a
+> runtime-variable "?real" query specifier (its own unmocked module instance) with a
+> type-only import as the type anchor; every test body stays byte-identical to the
+> plan.
 
 Replace the whole content of `apps/api/tests/logger.test.ts` with this file.
 
@@ -1212,7 +1221,7 @@ test("the filesystem log readers are gone", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd apps/api && bun test tests/logger.test.ts`
 
@@ -1220,7 +1229,14 @@ Expected: FAIL.
 The current pino logger writes to stdout through its own stream, not through `console.log` or `console.error`, so the captured line arrays stay empty and the shape tests fail with `expect(received).toHaveLength(expected)`.
 `the filesystem log readers are gone` fails too, because `readLog`, `parseLog` and `listLogDates` are still exported.
 
-- [ ] **Step 3: Rewrite src/utils/logger.ts**
+- [x] **Step 3: Rewrite src/utils/logger.ts**
+> Deviation: The rewritten logger drops pino, whose .d.ts imports were the only thing
+> pulling @types/node into the tsc program. Without it, workers-types' `declare const
+> process: any` flattened bun-types' typed `process`, `process.exit(1)` returned `any`,
+> and untouched scripts/fetch-client-performance-range.ts:18 failed to narrow (TS2339).
+> Extended src/types/workers-types-compat.d.ts additively (its documented purpose) with
+> `/// <reference types="node" />`; @types/node is a bun-types dependency, so the
+> reference always resolves. tsconfig untouched.
 
 Replace the whole content of `apps/api/src/utils/logger.ts` (currently 117 lines) with this file.
 
@@ -1314,12 +1330,18 @@ export function logWarn(
 }
 ```
 
-- [ ] **Step 4: Run the logger test to verify it passes**
+- [x] **Step 4: Run the logger test to verify it passes**
 
 Run: `cd apps/api && bun test tests/logger.test.ts`
 Expected: PASS, 11 pass, 0 fail.
 
-- [ ] **Step 5: Fix the type of the logger stub in the flex builder test**
+- [x] **Step 5: Fix the type of the logger stub in the flex builder test**
+> Deviation: The stub retyping lands exactly as specified and its tests pass (44 pass,
+> including "unrecognized value falls back to flex-v1 and warns once"). The step's
+> "typecheck clean" condition cannot hold between Steps 3 and 9: src/routes/internal.ts
+> still imports the deleted readLog/parseLog/listLogDates (TS2305), which the plan's own
+> Step 8 anticipates ("the route file must be fixed now anyway"). Step 5 is verified
+> after Step 9 lands and before the Step 6 commit.
 
 `apps/api/tests/flex-message.builder.test.ts:436-438` currently reads:
 
@@ -1357,7 +1379,12 @@ bun test tests/flex-message.builder.test.ts
 
 Expected: typecheck clean, and the flex builder tests pass, including `"unrecognized value falls back to flex-v1 and warns once"`.
 
-- [ ] **Step 6: Commit the logger rewrite**
+- [x] **Step 6: Commit the logger rewrite**
+> Deviation: The commit lands after Step 9's route deletion so the working tree (and the
+> pre-commit gate) typechecks clean, and before the Step 11 commit; both commits keep the
+> staged file sets this step prescribes. It additionally stages the Step 3 Deviation
+> repair, src/types/workers-types-compat.d.ts, which the logger rewrite typechecks only
+> with. Commit: 4dbfa88.
 
 ```bash
 cd apps/api
@@ -1365,7 +1392,7 @@ git add src/utils/logger.ts tests/logger.test.ts tests/flex-message.builder.test
 git commit -m "refactor: replace pino with JSON console logger"
 ```
 
-- [ ] **Step 7: Write the failing test for the deleted /internal/logs routes**
+- [x] **Step 7: Write the failing test for the deleted /internal/logs routes**
 
 Append this describe block to the end of `apps/api/tests/health.test.ts`.
 It sits outside the existing `describe("GET /internal/health", ...)` block, so it needs no database.
@@ -1404,7 +1431,7 @@ describe("removed log routes", () => {
 });
 ```
 
-- [ ] **Step 8: Run it to verify it fails**
+- [x] **Step 8: Run it to verify it fails**
 
 Run: `cd apps/api && bun test tests/health.test.ts -t "log routes"`
 
@@ -1412,7 +1439,7 @@ Expected: FAIL.
 Both tests fail with `expect(received).toBe(expected)` showing `Received: 200` for `/internal/logs`, because `src/routes/internal.ts:50-53` still answers with `{ dates: [] }`.
 If the import itself throws `Export named 'readLog' not found`, the logger rewrite in Step 3 already landed and the route file must be fixed now anyway.
 
-- [ ] **Step 9: Delete the log routes from src/routes/internal.ts**
+- [x] **Step 9: Delete the log routes from src/routes/internal.ts**
 
 Delete line 3 exactly:
 
@@ -1453,13 +1480,14 @@ internal.get("/logs/:date", async (c) => {
 Nothing else in the file changes.
 `/internal/health`, `/internal/line-uids` and `/internal/line-groups` stay exactly as they are, including the comment at `:82-83`.
 
-- [ ] **Step 10: Run the route tests to verify they pass**
+- [x] **Step 10: Run the route tests to verify they pass**
 
 Run: `cd apps/api && bun test tests/health.test.ts`
 Expected: PASS, including the 2 new tests.
 This file needs the test database, so start it first from the repo root with `docker compose up -d postgres-test` and export `TEST_DATABASE_URL=postgresql://test:test@localhost:5433/hfm_test`.
 
-- [ ] **Step 11: Commit the route deletion**
+- [x] **Step 11: Commit the route deletion**
+> Deviation: Commit 4f49843.
 
 ```bash
 cd apps/api
@@ -1467,7 +1495,7 @@ git add src/routes/internal.ts tests/health.test.ts
 git commit -m "feat: drop disk-backed /internal/logs routes"
 ```
 
-- [ ] **Step 12: Remove pino from package.json and add the tail scripts**
+- [x] **Step 12: Remove pino from package.json and add the tail scripts**
 
 In `apps/api/package.json`, delete these three lines from `dependencies` (currently lines 26, 27, 28):
 
@@ -1504,7 +1532,11 @@ cd apps/api
 bun install
 ```
 
-- [ ] **Step 13: Verify pino is really gone**
+- [x] **Step 13: Verify pino is really gone**
+> Deviation: The grep is not literally empty: tests/webhook-logging.test.ts:27 keeps a
+> pre-existing prose comment ("Swap the pino logger for a recording stub...") and this
+> task must not touch that file. No code, import, config, or lockfile reference remains
+> (bun.lock has zero pino entries); the dependency is fully gone.
 
 ```bash
 cd apps/api
@@ -1522,7 +1554,7 @@ bun test
 
 Expected: typecheck clean, all tests pass.
 
-- [ ] **Step 14: Document the operator replacement for /internal/logs**
+- [x] **Step 14: Document the operator replacement for /internal/logs**
 
 Add `LOG_LEVEL` to `apps/api/.env.example`, right after line 25 (`PORT=3000`):
 
@@ -1549,7 +1581,8 @@ Never log an HFM or LINE payload.
 Workers Logs caps one request at 256 KB of log data and drops the rest.
 ```
 
-- [ ] **Step 15: Commit the dependency and docs change**
+- [x] **Step 15: Commit the dependency and docs change**
+> Deviation: Commit e03e651.
 
 ```bash
 cd apps/api
@@ -6626,7 +6659,6 @@ Collect the CPU time of five consecutive `*/5 * * * *` invocations.
 Pass: every 5-minute invocation under 15,000 ms, which is half the budget.
 Investigate: any 5-minute invocation between 15,000 ms and 30,000 ms.
 Fail, do not cut over: any 5-minute invocation at or above 30,000 ms, or an invocation whose outcome is `exceededCpu`.
-
 
 - [ ] **Step 20: Record the measurements in the plan file**
 

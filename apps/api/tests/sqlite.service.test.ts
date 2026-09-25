@@ -47,6 +47,7 @@ test("applyTestSchema creates tables and indexes", async () => {
   expect(tableNames).toContain("client_request_snapshots");
   expect(tableNames).toContain("client_request_snapshot_rows");
   expect(tableNames).toContain("line_groups");
+  expect(tableNames).toContain("job_state");
 
   const indexes = await db.execute(sql`
     SELECT indexname FROM pg_indexes

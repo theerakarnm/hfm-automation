@@ -8,6 +8,13 @@
       "when": 1790362855507,
       "tag": "0000_init_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790363925023,
+      "tag": "0001_furry_king_cobra",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { runHfmHealthCheck, __resetHealthState } from "../src/jobs/hfm-healthcheck";
+import { runHfmHealthCheck } from "../src/jobs/hfm-healthcheck";
 import { checkHfmApiHealthy } from "../src/services/hfm.service";
 import { closeDb } from "../src/db/connection";
 
@@ -29,10 +29,6 @@ async function main() {
         console.log("---");
       }
     : undefined;
-
-  // The cron keeps state in memory across ticks; a one-shot trigger starts from
-  // the "up" baseline so a forced "down" actually fires the down alert.
-  __resetHealthState();
 
   try {
     await runHfmHealthCheck({ checkHealthyFn, pushToAllFn });

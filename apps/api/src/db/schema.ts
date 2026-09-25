@@ -123,3 +123,16 @@ export const clientRequestSnapshotRows = pgTable(
     ),
   ],
 );
+
+// Durable key/value state for jobs. The Bun server kept edge-detection flags in
+// module memory; a Worker isolate can be evicted between two cron ticks, so the
+// flag has to live somewhere that survives the isolate. The database is used
+// rather than KV because KV is eventually consistent for up to 60 seconds and
+// an edge detector must read its own last write.
+export const jobState = pgTable("job_state", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at", { mode: "string" })
+    .notNull()
+    .default(sql`now()`),
+});

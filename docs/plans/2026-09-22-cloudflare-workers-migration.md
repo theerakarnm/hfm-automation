@@ -2709,7 +2709,7 @@ Nothing in the request path writes it.
 They keep passing because they never pass a `kv` option and no `runWithCache` scope is open
 under `bun test`, so `getCache()` returns `null` and the old single-flight path runs untouched.
 
-- [ ] **Step 1: Write the failing KV test**
+- [x] **Step 1: Write the failing KV test**
 
 Create `apps/api/tests/last-trade-kv.test.ts`:
 
@@ -2907,7 +2907,7 @@ describe("last-trade KV cache", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 cd apps/api && bun test tests/last-trade-kv.test.ts
@@ -2919,7 +2919,7 @@ Expected: FAIL with
 error: Cannot find module '../src/cache/kv' from '/.../apps/api/tests/last-trade-kv.test.ts'
 ```
 
-- [ ] **Step 3: Create the KV scope**
+- [x] **Step 3: Create the KV scope**
 
 Create `apps/api/src/cache/kv.ts`:
 
@@ -2962,7 +2962,7 @@ export function getCache(): KvCache | null {
 }
 ```
 
-- [ ] **Step 4: Rewrite the last-trade service**
+- [x] **Step 4: Rewrite the last-trade service**
 
 Replace the whole of `apps/api/src/services/last-trade.service.ts`:
 
@@ -3216,7 +3216,7 @@ async function refresh(
 }
 ```
 
-- [ ] **Step 5: Run both last-trade test files**
+- [x] **Step 5: Run both last-trade test files**
 
 ```bash
 cd apps/api && bun test tests/last-trade-kv.test.ts tests/last-trade.service.test.ts
@@ -3224,7 +3224,7 @@ cd apps/api && bun test tests/last-trade-kv.test.ts tests/last-trade.service.tes
 
 Expected: PASS, 17 tests (8 new plus the 9 listed above, unchanged).
 
-- [ ] **Step 6: Typecheck**
+- [x] **Step 6: Typecheck**
 
 ```bash
 cd apps/api && bun run typecheck
@@ -3232,7 +3232,7 @@ cd apps/api && bun run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/api/src/cache/kv.ts apps/api/src/services/last-trade.service.ts apps/api/tests/last-trade-kv.test.ts
@@ -3256,7 +3256,7 @@ cached too, so a tick could read "up" right after writing "down" and alert twice
 Edge detection needs read-after-write, so it uses the database.
 The cost is one `SELECT` and, only on a transition, one `INSERT ... ON CONFLICT` every 5 minutes.
 
-- [ ] **Step 8: Add the job_state table to the schema**
+- [x] **Step 8: Add the job_state table to the schema**
 
 Append to `apps/api/src/db/schema.ts` (after `clientRequestSnapshotRows`, which ends at line 125):
 
@@ -3289,7 +3289,7 @@ Expected: a new file in `apps/api/drizzle/` that creates `job_state`. Commit it 
 Then add `"job_state"` to the `REQUIRED_TABLES` list in `apps/api/tests/migrations.test.ts`
 (Task 4), so the drift guard fails if the table ever drops out of the migrations.
 
-- [ ] **Step 9: Write the failing state repository test**
+- [x] **Step 9: Write the failing state repository test**
 
 Create `apps/api/tests/state.repository.test.ts`:
 
@@ -3338,7 +3338,7 @@ describe("job state repository", () => {
 });
 ```
 
-- [ ] **Step 10: Run the test to verify it fails**
+- [x] **Step 10: Run the test to verify it fails**
 
 The suite needs the test database.
 From the repo root run `docker compose up -d postgres-test` and export
@@ -3354,7 +3354,7 @@ Expected: FAIL with
 error: Cannot find module '../src/db/state.repository' from '/.../apps/api/tests/state.repository.test.ts'
 ```
 
-- [ ] **Step 11: Create the state repository and the test tables**
+- [x] **Step 11: Create the state repository and the test tables**
 
 Create `apps/api/src/db/state.repository.ts`:
 
@@ -3426,7 +3426,7 @@ Add one assertion to `apps/api/tests/sqlite.service.test.ts` after line 49:
   expect(tableNames).toContain("job_state");
 ```
 
-- [ ] **Step 12: Run the state tests**
+- [x] **Step 12: Run the state tests**
 
 ```bash
 cd apps/api && bun test tests/state.repository.test.ts tests/sqlite.service.test.ts
@@ -3434,7 +3434,7 @@ cd apps/api && bun test tests/state.repository.test.ts tests/sqlite.service.test
 
 Expected: PASS, 7 tests.
 
-- [ ] **Step 13: Write the failing health-check test**
+- [x] **Step 13: Write the failing health-check test**
 
 Replace the whole of `apps/api/tests/hfm-healthcheck.test.ts`:
 
@@ -3548,7 +3548,7 @@ describe("no recipients", () => {
 });
 ```
 
-- [ ] **Step 14: Run the test to verify it fails**
+- [x] **Step 14: Run the test to verify it fails**
 
 ```bash
 cd apps/api && bun test tests/hfm-healthcheck.test.ts
@@ -3560,7 +3560,7 @@ Expected: FAIL with
 SyntaxError: Export named 'LAST_HEALTHY_KEY' not found in module '/.../apps/api/src/jobs/hfm-healthcheck.ts'.
 ```
 
-- [ ] **Step 15: Move the flag into the database**
+- [x] **Step 15: Move the flag into the database**
 
 Apply five edits to `apps/api/src/jobs/hfm-healthcheck.ts`.
 Do not touch `DOWN_MESSAGE` and `RECOVERED_MESSAGE` at lines 6-8.
@@ -3643,8 +3643,9 @@ cd apps/api && grep -rn "__resetHealthState" src tests scripts
 ```
 
 Expected: no output.
+> Deviation: Step 15 delete of `__resetHealthState` broke `scripts/trigger-hfm-healthcheck.ts`, which still imported and called it (the plan grep expected no output but listed it). Removed the import, the call and its stale in-memory-baseline comment from that script; no new repository function was invented. The one-shot trigger now reads whatever the database holds.
 
-- [ ] **Step 16: Run the health-check tests**
+- [x] **Step 16: Run the health-check tests**
 
 ```bash
 cd apps/api && bun test tests/hfm-healthcheck.test.ts

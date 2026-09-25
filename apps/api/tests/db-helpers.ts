@@ -85,6 +85,12 @@ export async function applyTestSchema(
       client_id   INTEGER NOT NULL,
       UNIQUE(snapshot_id, client_id)
     );
+
+    CREATE TABLE IF NOT EXISTS job_state (
+      key        TEXT PRIMARY KEY,
+      value      TEXT NOT NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT now()
+    );
   `);
 }
 
@@ -101,6 +107,7 @@ export async function createTestDb() {
     DROP TABLE IF EXISTS daily_report_notifications CASCADE;
     DROP TABLE IF EXISTS notify_recipients CASCADE;
     DROP TABLE IF EXISTS client_snapshots CASCADE;
+    DROP TABLE IF EXISTS job_state CASCADE;
   `);
 
   await applyTestSchema(db);

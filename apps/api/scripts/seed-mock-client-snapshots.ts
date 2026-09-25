@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { normalizeClientRow } from "../src/services/hfm.service";
-import { getDb, initDb, closeDb } from "../src/db/connection";
+import { getDb, closeDb } from "../src/db/connection";
 import { countByDate, insertMany } from "../src/repositories/snapshot.repository";
 import { dailyReportNotifications, clientSnapshots } from "../src/db/schema";
 import type { HFMClientRow } from "../src/types/hfm.types";
@@ -102,8 +102,9 @@ async function main() {
   }
   console.log(`[seed] will seed ${dates.length} snapshot dates`);
 
+  // Schema comes from drizzle/ now, not from the app. Run
+  // `bun run migrate:maow` (or the matching tenant) before seeding.
   const db = getDb();
-  await initDb(db);
 
   if (MOCK_REPLACE) {
     console.log("[seed] MOCK_REPLACE=1 — deleting existing snapshots in range...");

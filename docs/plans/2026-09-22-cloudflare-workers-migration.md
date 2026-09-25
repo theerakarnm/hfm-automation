@@ -2099,7 +2099,7 @@ git add tests/db-helpers.ts tests/daily-client-report.test.ts tests/health.test.
 git commit -m "test: move boot DDL into applyTestSchema helper"
 ```
 
-- [ ] **Step 10: Drop initDb from the seed script**
+- [x] **Step 10: Drop initDb from the seed script**
 
 `apps/api/scripts/seed-mock-client-snapshots.ts` line 3, replace:
 
@@ -2137,7 +2137,7 @@ bun run typecheck
 
 Expected: no errors.
 
-- [ ] **Step 11: Write the failing test for the new connection layer**
+- [x] **Step 11: Write the failing test for the new connection layer**
 
 Create `apps/api/tests/db-connection.test.ts` with this content.
 
@@ -2252,14 +2252,14 @@ test("initDb is gone from the runtime path", () => {
 });
 ```
 
-- [ ] **Step 12: Run it to verify it fails**
+- [x] **Step 12: Run it to verify it fails**
 
 Run: `cd apps/api && bun test tests/db-connection.test.ts`
 
 Expected: FAIL.
 Bun fails at import time with `SyntaxError: Export named 'openDb' not found in module '.../src/db/connection.ts'.`
 
-- [ ] **Step 13: Rewrite src/db/connection.ts**
+- [x] **Step 13: Rewrite src/db/connection.ts**
 
 Replace the whole content of `apps/api/src/db/connection.ts` (currently 106 lines) with this file.
 
@@ -2344,7 +2344,7 @@ export function resetDbForTests(): void {
 `initDb` is deleted with this rewrite.
 No file under `src/` calls it any more after Step 14.
 
-- [ ] **Step 14: Drop initDb from src/index.ts**
+- [x] **Step 14: Drop initDb from src/index.ts**
 
 `apps/api/src/index.ts` line 7, replace:
 
@@ -2368,7 +2368,7 @@ await initDb(db);
 The file keeps everything else, including the middleware at `:14-28`, the route mounts at `:30-31`, `registerJobs()` at `:33` and the shutdown handlers at `:43-49`.
 `src/index.ts` itself is deleted at the end of the migration by the worker task.
 
-- [ ] **Step 15: Run the connection test to verify it passes**
+- [x] **Step 15: Run the connection test to verify it passes**
 
 ```bash
 docker compose up -d postgres-test   # from the repo root, if not already running

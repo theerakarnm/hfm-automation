@@ -1,97 +1,66 @@
 import postgres from "postgres";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { sql } from "drizzle-orm";
+import { AsyncLocalStorage } from "node:async_hooks";
 import * as schema from "./schema";
 
 export type DrizzleDb = PostgresJsDatabase<typeof schema>;
 
+/** Per-invocation. `dispose()` MUST be handed to ctx.waitUntil(). */
+export interface DbHandle {
+  db: DrizzleDb;
+  dispose: () => Promise<void>;
+}
+
+// One client per Worker invocation. Hyperdrive owns the real pool and the warm
+// origin connections, so this client only has to outlive a single fetch,
+// scheduled or queue call.
+//
+// max 5, never higher: a Worker may keep at most 6 outbound connections waiting
+// for response headers at once, and the LINE reply and HFM fetches compete for
+// that same budget. 5 leaves exactly one slot for the reply that pays the
+// 60s reply-token deadline.
+// fetch_types false: skips the type-introspection round trip postgres.js
+// otherwise makes on connect. We use no custom array types.
+// prepare true: Hyperdrive can only cache prepared statements, and an unnamed
+// statement defeats its pool.
+export function openDb(connectionString: string): DbHandle {
+  const client = postgres(connectionString, {
+    max: 5,
+    fetch_types: false,
+    prepare: true,
+  });
+  const db = drizzle(client, { schema });
+  return { db, dispose: () => client.end() };
+}
+
+const dbStorage = new AsyncLocalStorage<DbHandle>();
+
+/** ALS-scoped accessor so existing call sites keep using `getDb()` with no args. */
+export function runWithDb<T>(handle: DbHandle, fn: () => T): T {
+  return dbStorage.run(handle, fn);
+}
+
+// Fallback client for `bun test` and the bun scripts in scripts/, which run in
+// a normal process with no Worker bindings and no ALS scope. Built lazily, so
+// a test can set process.env.DATABASE_URL, call resetDbForTests() and get a
+// client for the new URL (tests/webhook.test.ts:769-770 depends on exactly
+// that to simulate a dead database).
 let _client: postgres.Sql | null = null;
 let _db: DrizzleDb | null = null;
 
-export function getDb(url?: string): DrizzleDb {
+export function getDb(): DrizzleDb {
+  const scoped = dbStorage.getStore();
+  if (scoped) return scoped.db;
+
   if (_db) return _db;
-  const connUrl = url ?? process.env.DATABASE_URL;
+  const connUrl = process.env.DATABASE_URL;
   if (!connUrl) throw new Error("DATABASE_URL is not set");
-  _client = postgres(connUrl, { max: 10 });
+  _client = postgres(connUrl, { max: 5, fetch_types: false, prepare: true });
   _db = drizzle(_client, { schema });
   return _db;
 }
 
-export async function initDb(db?: DrizzleDb | PostgresJsDatabase<Record<string, unknown>>): Promise<void> {
-  const target = (db ?? getDb()) as PostgresJsDatabase<Record<string, unknown>>;
-  await target.execute(sql`
-    CREATE TABLE IF NOT EXISTS client_snapshots (
-      id              SERIAL PRIMARY KEY,
-      snapshot_date   TEXT NOT NULL,
-      client_id       INTEGER NOT NULL,
-      name            TEXT,
-      email           TEXT,
-      created_at      TIMESTAMP NOT NULL DEFAULT now(),
-      UNIQUE(snapshot_date, client_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_snapshot_date
-      ON client_snapshots(snapshot_date);
-    ALTER TABLE client_snapshots ADD COLUMN IF NOT EXISTS name TEXT;
-    ALTER TABLE client_snapshots ADD COLUMN IF NOT EXISTS email TEXT;
-
-    CREATE TABLE IF NOT EXISTS notify_recipients (
-      id         SERIAL PRIMARY KEY,
-      line_uid   TEXT NOT NULL UNIQUE,
-      label      TEXT,
-      active     INTEGER NOT NULL DEFAULT 1
-    );
-
-    CREATE TABLE IF NOT EXISTS daily_report_notifications (
-      snapshot_date TEXT PRIMARY KEY,
-      sent_at       TIMESTAMP NOT NULL DEFAULT now()
-    );
-
-    CREATE TABLE IF NOT EXISTS line_users (
-      line_uid        TEXT PRIMARY KEY,
-      first_seen_at   TIMESTAMP NOT NULL DEFAULT now(),
-      last_seen_at    TIMESTAMP NOT NULL DEFAULT now(),
-      request_count   INTEGER NOT NULL DEFAULT 1,
-      last_event_type TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS line_groups (
-      chat_id         TEXT PRIMARY KEY,
-      chat_type       TEXT NOT NULL,
-      label           TEXT,
-      first_seen_at   TIMESTAMP NOT NULL DEFAULT now(),
-      last_seen_at    TIMESTAMP NOT NULL DEFAULT now(),
-      request_count   INTEGER NOT NULL DEFAULT 1,
-      last_event_type TEXT,
-      active          INTEGER NOT NULL DEFAULT 1
-    );
-
-    CREATE TABLE IF NOT EXISTS report_range_snapshots (
-      id         SERIAL PRIMARY KEY,
-      period     TEXT NOT NULL,
-      from_date  TEXT NOT NULL,
-      to_date    TEXT NOT NULL,
-      raw_json   TEXT NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT now(),
-      UNIQUE(period, from_date, to_date)
-    );
-
-    CREATE TABLE IF NOT EXISTS client_request_snapshots (
-      id            SERIAL PRIMARY KEY,
-      snapshot_date TEXT NOT NULL,
-      created_at    TIMESTAMP NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_req_snapshot_date
-      ON client_request_snapshots(snapshot_date);
-
-    CREATE TABLE IF NOT EXISTS client_request_snapshot_rows (
-      id          SERIAL PRIMARY KEY,
-      snapshot_id INTEGER NOT NULL REFERENCES client_request_snapshots(id),
-      client_id   INTEGER NOT NULL,
-      UNIQUE(snapshot_id, client_id)
-    );
-  `);
-}
-
+/** Closes the process.env fallback client. Scripts and tests only. */
 export async function closeDb(): Promise<void> {
   if (_client) {
     await _client.end();

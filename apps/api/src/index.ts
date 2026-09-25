@@ -4,12 +4,9 @@ import internal from "./routes/internal";
 import { registerJobs } from "./jobs";
 import { logger, logError } from "./utils/logger";
 import { getLastTradeMap } from "./services/last-trade.service";
-import { getDb, initDb, closeDb } from "./db/connection";
+import { closeDb } from "./db/connection";
 
 const app = new Hono();
-
-const db = getDb();
-await initDb(db);
 
 app.use("*", async (c, next) => {
   const start = Date.now();

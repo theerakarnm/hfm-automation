@@ -4113,14 +4113,20 @@ cd apps/api && bun test tests/worker.test.ts
 
 Expected: PASS, 3 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/jobs/index.ts apps/api/tests/worker.test.ts
 git commit -m "refactor: replace croner registry with cron dispatch"
 ```
 
-- [ ] **Step 6: Write the Worker entrypoint**
+> Deviation: the plan's own step order makes `bun run typecheck` red at this
+> intermediate commit: Step 3 removed `registerJobs`, which the still-present
+> `src/index.ts` imports (only importer, verified by grep); the file is deleted
+> in Step 7 and typecheck is verified clean at Step 8 before the final commit,
+> as this task's loop requires.
+
+- [x] **Step 6: Write the Worker entrypoint**
 
 Create `apps/api/src/worker.ts`:
 
@@ -4206,7 +4212,12 @@ export default {
 } satisfies ExportedHandler<WorkerEnv, QueueMessage>;
 ```
 
-- [ ] **Step 7: Delete the Bun entrypoint**
+> Deviation: `app.fetch` returns `Response | Promise<Response>`, which the
+> typechecker rejects against `withScope`'s `() => Promise<T>` parameter. The
+> fetch lambda is `async () => app.fetch(request, env, ctx)` so the union
+> flattens to `Promise<Response>`. Intent unchanged.
+
+- [x] **Step 7: Delete the Bun entrypoint**
 
 ```bash
 cd apps/api && git rm src/index.ts
@@ -4220,7 +4231,7 @@ cd apps/api && grep -rn "src/index\|from \"\.\./index\"" src tests scripts
 
 Expected: no output. No test file imports `src/index.ts` today.
 
-- [ ] **Step 8: Typecheck and run the whole suite**
+- [x] **Step 8: Typecheck and run the whole suite**
 
 ```bash
 cd apps/api && bun run typecheck && bun test
@@ -4230,7 +4241,7 @@ Expected: PASS. The Workers types (`ExecutionContext`, `MessageBatch`, `Schedule
 `ExportedHandler`) resolve because Task 1 installed `@cloudflare/workers-types` and set
 `types` in `tsconfig.json`.
 
-- [ ] **Step 9: Build the Worker bundle**
+- [x] **Step 9: Build the Worker bundle**
 
 `bun test` runs on Bun, so it cannot catch a module that only fails inside workerd. The
 Wrangler dry run bundles `src/worker.ts` for the real runtime:
@@ -4244,7 +4255,7 @@ Expected: `--dry-run: exiting now.` with no build error. A failure names the imp
 workerd cannot load (for example a leftover `pino` or `node:fs` import) - fix it before moving on.
 Task 8 replaces this command with the per-tenant `bun run check:bundle:<tenant>`.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add apps/api

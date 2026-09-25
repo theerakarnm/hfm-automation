@@ -2486,6 +2486,7 @@ git commit -m "feat: add per-tenant drizzle migration script"
 ```
 
 - [ ] **Step 21: Create one Hyperdrive config per tenant**
+> Awaiting operator: real Cloudflare resources and the tenant origin DB URLs (`wrangler hyperdrive create` per tenant, never from this session).
 
 These are operator commands, not code.
 Run them once per tenant with the origin Postgres credentials for that tenant.
@@ -2520,7 +2521,7 @@ If a caching config is ever wanted for a genuinely read-only query, create a sec
 Note: the Wrangler CLI is a Node CLI and running it through `bunx` is not verified by Cloudflare docs.
 If `bunx wrangler` misbehaves, put the same command in a package.json script and run it with `bun run`, which is the form the deploy scripts already use.
 
-- [ ] **Step 22: Document the local dev and migration env vars**
+- [x] **Step 22: Document the local dev and migration env vars**
 
 Add these lines to `apps/api/.env.example`, after line 23 (`TEST_DATABASE_URL=...`):
 
@@ -2544,7 +2545,7 @@ export CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE="postgresql://us
 bun run dev:maow
 ```
 
-- [ ] **Step 23: State where dispose() is handed to ctx.waitUntil**
+- [x] **Step 23: State where dispose() is handed to ctx.waitUntil**
 
 No code in this task calls `ctx.waitUntil`.
 `src/worker.ts` is owned by the worker task, and that task must open and dispose the handle in every one of the three entrypoints:
@@ -2564,6 +2565,7 @@ The dispose call must be chained onto the end of the deferred work, not passed t
 The whole extension is capped at 30s after the response, which is well inside the 60s LINE reply-token window.
 
 - [ ] **Step 24: Check the production databases before the first migrate**
+> Awaiting operator: the tenant origin DB URLs (`DATABASE_URL_MAOW` / `DATABASE_URL_SIMPLE_TRADE`); no production database may be touched here.
 
 Before `bun run migrate:maow` or `bun run migrate:simple-trade` touches a database that already holds data, confirm the two historic columns are present:
 
@@ -2588,7 +2590,8 @@ bun run migrate:simple-trade
 
 Expected: `[migrate] migrations applied to maow` and `[migrate] migrations applied to simple-trade`.
 
-- [ ] **Step 25: Final verification and commit**
+- [x] **Step 25: Final verification and commit**
+> Deviation: the literal `grep -rn "initDb" tests scripts` still shows 4 lines that are the plan's own reference code from Steps 1, 6 and 11 (the `initDb is gone from the runtime path` guard test and two comments). The step's intent holds: no live import or call remains - `grep -rn "initDb" src` and `grep -rn "max: 10" src` both return nothing.
 
 ```bash
 cd apps/api

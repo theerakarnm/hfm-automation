@@ -14,6 +14,16 @@ import type {
 
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 
+// AbortSignal.timeout() aborts with a DOMException named "TimeoutError", while
+// a caller-supplied AbortController aborts with "AbortError". Both mean the
+// same thing to us, and DOMException is not an Error subclass on every
+// runtime, so the check is name-based and does not use instanceof.
+function isTimeoutError(e: unknown): boolean {
+  if (typeof e !== "object" || e === null || !("name" in e)) return false;
+  const name = (e as { name?: unknown }).name;
+  return name === "TimeoutError" || name === "AbortError";
+}
+
 // Liveness probe for the HFM upstream API. Pings the wallet/balance endpoint
 // and reports only up/down — used by the /internal/health route and the
 // hfm-healthcheck cron. Any non-2xx response, timeout, or thrown error => down.
@@ -144,13 +154,11 @@ export async function fetchPerformance(
   const paramKey = lookup.kind === "wallet" ? "wallets" : "accounts";
   const paramValue = lookup.id;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
   try {
     const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
     const url = `${baseUrl}/api/performance/client-performance?${paramKey}=${paramValue}`;
     const res = await fetch(url, {
-      signal: controller.signal,
+      signal: AbortSignal.timeout(10_000),
       headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
     });
 
@@ -190,14 +198,12 @@ export async function fetchPerformance(
 
     return { ok: true, data };
   } catch (e: unknown) {
-    if (e instanceof Error && e.name === "AbortError") {
+    if (isTimeoutError(e)) {
       logError("hfm-service", `Request timeout for ${lookup.kind} ${lookup.id}`);
       return { ok: false, reason: "timeout" };
     }
     logError("hfm-service", e);
     return { ok: false, reason: "server_error" };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -259,14 +265,16 @@ export function normalizeClientRow(row: HFMClientRow): HFMPerformanceData {
   };
 }
 
-export async function fetchClients(timeoutMs = 120_000): Promise<HFMClientsResult> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+// The ceiling is 30s, not the old 120s: this call is reachable from the LINE
+// reply path (generateReportForUser in jobs/daily-client-report.ts), and the
+// reply token dies 60s after the event. A caller with a bigger budget, like
+// the daily cron, passes its own timeout explicitly.
+export async function fetchClients(timeoutMs = 30_000): Promise<HFMClientsResult> {
   try {
     const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
     const url = `${baseUrl}/api/clients/`;
     const res = await fetch(url, {
-      signal: controller.signal,
+      signal: AbortSignal.timeout(timeoutMs),
       headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
     });
 
@@ -285,25 +293,21 @@ export async function fetchClients(timeoutMs = 120_000): Promise<HFMClientsResul
 
     return { ok: true, data: body.data };
   } catch (e: unknown) {
-    if (e instanceof Error && e.name === "AbortError") {
+    if (isTimeoutError(e)) {
       logError("hfm-service", "fetchClients request timeout");
       return { ok: false, reason: "timeout" };
     }
     logError("hfm-service", e);
     return { ok: false, reason: "server_error" };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
 export async function fetchAllClients(timeoutMs = 10_000): Promise<HFMAllClientsResult> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
     const url = `${baseUrl}/api/performance/client-performance`;
     const res = await fetch(url, {
-      signal: controller.signal,
+      signal: AbortSignal.timeout(timeoutMs),
       headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
     });
 
@@ -319,14 +323,12 @@ export async function fetchAllClients(timeoutMs = 10_000): Promise<HFMAllClients
 
     return { ok: true, data: body };
   } catch (e: unknown) {
-    if (e instanceof Error && e.name === "AbortError") {
+    if (isTimeoutError(e)) {
       logError("hfm-service", "fetchAllClients request timeout");
       return { ok: false, reason: "timeout" };
     }
     logError("hfm-service", e);
     return { ok: false, reason: "server_error" };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -335,15 +337,13 @@ export async function fetchClientsByRange(
   toDate: string,
   timeoutMs = 30_000,
 ): Promise<HFMAllClientsResult> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
     const params = new URLSearchParams({ from_date: fromDate, to_date: toDate });
     const url = `${baseUrl}/api/performance/client-performance?${params}`;
 
     const res = await fetch(url, {
-      signal: controller.signal,
+      signal: AbortSignal.timeout(timeoutMs),
       headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
     });
 
@@ -359,14 +359,12 @@ export async function fetchClientsByRange(
 
     return { ok: true, data: body };
   } catch (e: unknown) {
-    if (e instanceof Error && e.name === "AbortError") {
+    if (isTimeoutError(e)) {
       logError("hfm-service", "fetchClientsByRange request timeout");
       return { ok: false, reason: "timeout" };
     }
     logError("hfm-service", e);
     return { ok: false, reason: "server_error" };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -380,8 +378,6 @@ export async function fetchMonthlyVolumeMap(
   timeoutMs = 6_000,
 ): Promise<Map<number, MonthlyActivity> | null> {
   const { from, to } = getThisMonthRange();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const baseUrl = process.env.HFM_API_BASE_URL ?? "https://api.hfaffiliates.com";
     const params = new URLSearchParams({
@@ -391,7 +387,7 @@ export async function fetchMonthlyVolumeMap(
     });
     const url = `${baseUrl}/api/performance/client-performance?${params}`;
     const res = await fetch(url, {
-      signal: controller.signal,
+      signal: AbortSignal.timeout(timeoutMs),
       headers: { Authorization: `Bearer ${process.env.HFM_API_KEY}` },
     });
 
@@ -416,7 +412,5 @@ export async function fetchMonthlyVolumeMap(
   } catch (e: unknown) {
     logError("hfm-service", e);
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }

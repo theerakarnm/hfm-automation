@@ -29,6 +29,7 @@ describe("GET /internal/health", () => {
       DROP TABLE IF EXISTS daily_report_notifications CASCADE;
       DROP TABLE IF EXISTS notify_recipients CASCADE;
       DROP TABLE IF EXISTS client_snapshots CASCADE;
+      DROP TABLE IF EXISTS job_state CASCADE;
     `);
     await applyTestSchema(db);
     await client.end();

@@ -3819,14 +3819,14 @@ cd apps/api && bun test tests/state.repository.test.ts
 
 Expected: PASS, 7 tests.
 
-- [ ] **Step 22: Commit**
+- [x] **Step 22: Commit**
 
 ```bash
 git add apps/api/src/db/state.repository.ts apps/api/tests/state.repository.test.ts
 git commit -m "feat: claim LINE events in job_state"
 ```
 
-- [ ] **Step 23: Write the failing duplicate-delivery test**
+- [x] **Step 23: Write the failing duplicate-delivery test**
 
 Create `apps/api/tests/webhook-dispatcher.test.ts`:
 
@@ -3903,7 +3903,7 @@ test("a different event is still answered", async () => {
 });
 ```
 
-- [ ] **Step 24: Run the test to verify it fails**
+- [x] **Step 24: Run the test to verify it fails**
 
 ```bash
 cd apps/api && bun test tests/webhook-dispatcher.test.ts
@@ -3911,7 +3911,7 @@ cd apps/api && bun test tests/webhook-dispatcher.test.ts
 
 Expected: FAIL on the first test with `Expected length: 1` / `Received length: 2`.
 
-- [ ] **Step 25: Claim the event before replying**
+- [x] **Step 25: Claim the event before replying**
 
 In `apps/api/src/services/webhook-dispatcher.ts`, add to the imports:
 
@@ -3944,7 +3944,7 @@ In `dispatchWebhookEvent`, directly after the `"webhook event received"` log cal
   }
 ```
 
-- [ ] **Step 26: Drop `job_state` in every inline test schema reset**
+- [x] **Step 26: Drop `job_state` in every inline test schema reset**
 
 Five test files reset their tables with their own inline `DROP TABLE` list instead of
 `createTestDb()`. Without `job_state` in that list, event claims survive from one `bun test`
@@ -3969,7 +3969,7 @@ cd apps/api && grep -rL "DROP TABLE IF EXISTS job_state" $(grep -rl "DROP TABLE 
 
 Expected: no output.
 
-- [ ] **Step 27: Run the dispatcher test and the whole suite twice**
+- [x] **Step 27: Run the dispatcher test and the whole suite twice**
 
 ```bash
 cd apps/api && bun test tests/webhook-dispatcher.test.ts && bun test && bun test && bun run typecheck
@@ -3977,7 +3977,7 @@ cd apps/api && bun test tests/webhook-dispatcher.test.ts && bun test && bun test
 
 Expected: PASS every time. The second full run proves no claim leaks between runs.
 
-- [ ] **Step 28: Commit**
+- [x] **Step 28: Commit**
 
 ```bash
 git add apps/api/src/services/webhook-dispatcher.ts apps/api/tests

@@ -32,6 +32,7 @@ import { isBotMentioned, stripBotMention } from "../utils/mention";
 import { isChatAllowed } from "../utils/whitelist";
 import { logError, logInfo, logWarn } from "../utils/logger";
 import { getDb, type DrizzleDb } from "../db/connection";
+import { claimLineEvent } from "../db/state.repository";
 import { recordLineUserRequest } from "../repositories/line-user.repository";
 import {
   recordLineGroupEvent,
@@ -614,6 +615,25 @@ export async function dispatchWebhookEvent(
     "webhook event received",
   );
 
+  // Queues deliver at least once. A second delivery would find the reply
+  // token spent, and replyOrPush would push a duplicate answer, billed per
+  // member in a group. Only the delivery that claims the event replies.
+  // Fails open: a database hiccup must never stop the customer's reply, so a
+  // claim error is logged and the event is handled anyway.
+  let firstDelivery = true;
+  try {
+    firstDelivery = await claimLineEvent(db, webhookEventId);
+  } catch (err) {
+    logError("webhook-claim", err);
+  }
+  if (!firstDelivery) {
+    logInfo(
+      "webhook",
+      { webhookEventId, reason: "duplicate_delivery" },
+      "event skipped",
+    );
+    return;
+  }
   // Every later decision (permission, reply target, loading animation) comes
   // from this triple, never from event.source directly.
   const ctx = getChatContext(event);

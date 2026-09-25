@@ -201,7 +201,7 @@ git add apps/api/package.json apps/api/bun.lock apps/api/tsconfig.json
 git commit -m "chore: add wrangler and Workers types"
 ```
 
-- [ ] **Step 5: Write the failing test**
+- [x] **Step 5: Write the failing test**
 
 Create `apps/api/tests/worker-env.test.ts`:
 
@@ -246,7 +246,7 @@ cd apps/api && bun test tests/worker-env.test.ts
 
 Expected: FAIL with `Cannot find module '../src/config/env'`.
 
-- [ ] **Step 7: Write the binding contract**
+- [x] **Step 7: Write the binding contract**
 
 Create `apps/api/src/config/env.ts`:
 
@@ -308,7 +308,7 @@ export function assertProcessEnvPopulated(env: WorkerEnv): void {
 }
 ```
 
-- [ ] **Step 8: Run the test to verify it passes**
+- [x] **Step 8: Run the test to verify it passes**
 
 ```bash
 cd apps/api && bun test tests/worker-env.test.ts && bun run typecheck
@@ -316,7 +316,7 @@ cd apps/api && bun test tests/worker-env.test.ts && bun run typecheck
 
 Expected: PASS, 3 tests, and typecheck exits 0.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add apps/api/src/config/env.ts apps/api/tests/worker-env.test.ts

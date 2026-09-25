@@ -1,20 +1,63 @@
-import pino from "pino";
-import { join } from "node:path";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dayjs } from "./dayjs";
+type Level = "debug" | "info" | "warn" | "error";
 
-const LOG_DIR = "logs";
-const MAX_LOG_READ_BYTES = 512 * 1024;
-
-const isTest = process.env.NODE_ENV === "test";
-
-const options: pino.LoggerOptions = {
-  level: process.env.LOG_LEVEL ?? "info",
+const LEVEL_VALUE: Record<Level, number> = {
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50,
 };
 
-export const logger = isTest
-  ? pino(options)
-  : pino(options);
+const DEFAULT_LEVEL_VALUE = LEVEL_VALUE.info;
+
+// Workers Logs truncates a single log line at 256 KB and caps the whole
+// request at 256 KB of log data, after which the rest of the request's logs
+// are dropped. So log ids, counts, reason enums and durations only. Never dump
+// an HFM or LINE payload in here: one dump costs the entire incident's logs.
+
+function thresholdValue(): number {
+  // Read per call, not at module load, so tests can flip LOG_LEVEL between
+  // cases. On Workers, process.env holds this tenant's vars.
+  const configured = (process.env.LOG_LEVEL ?? "info").trim() as Level;
+  return LEVEL_VALUE[configured] ?? DEFAULT_LEVEL_VALUE;
+}
+
+function emit(level: Level, obj: object, msg?: string): void {
+  if (LEVEL_VALUE[level] < thresholdValue()) return;
+
+  // One object argument, not a pre-stringified line: Workers Logs indexes
+  // every field of an object passed to console.log with unlimited cardinality,
+  // while a JSON string arrives as one unqueryable message blob.
+  const line: Record<string, unknown> = {
+    level,
+    time: Date.now(),
+    tenant: process.env.TENANT ?? "unknown",
+    ...obj,
+    ...(msg === undefined ? {} : { msg }),
+  };
+
+  if (level === "warn" || level === "error") {
+    console.error(line);
+  } else {
+    console.log(line);
+  }
+}
+
+// A plain mutable object on purpose. tests/flex-message.builder.test.ts:438
+// swaps `logger.warn` for a recorder and restores it at :443.
+export const logger = {
+  debug(o: object, m?: string): void {
+    emit("debug", o, m);
+  },
+  info(o: object, m?: string): void {
+    emit("info", o, m);
+  },
+  warn(o: object, m?: string): void {
+    emit("warn", o, m);
+  },
+  error(o: object, m?: string): void {
+    emit("error", o, m);
+  },
+};
 
 export function logError(context: string, error: unknown): void {
   const message =
@@ -41,76 +84,4 @@ export function logWarn(
   message: string,
 ): void {
   logger.warn({ context, ...fields }, message);
-}
-
-export function readLog(date: string, maxBytes = MAX_LOG_READ_BYTES): string | null {
-  if (!existsSync(LOG_DIR)) return null;
-  const files = readdirSync(LOG_DIR).filter(
-    (f) => f.startsWith(`log.${date}`) && f.endsWith(".log")
-  );
-  if (files.length === 0) return null;
-  const path = join(LOG_DIR, files[files.length - 1]!);
-  try {
-    const buf = readFileSync(path);
-    if (buf.byteLength > maxBytes) {
-      return buf.subarray(buf.byteLength - maxBytes).toString("utf-8");
-    }
-    return buf.toString("utf-8");
-  } catch {
-    return null;
-  }
-}
-
-export interface LogEntry {
-  timestamp: string;
-  level: string;
-  context: string;
-  message: string;
-}
-
-export function parseLog(content: string, maxEntries = 500): LogEntry[] {
-  const lines = content.split("\n").filter((line) => line.trim());
-  const sliced = lines.length > maxEntries ? lines.slice(-maxEntries) : lines;
-  return sliced
-    .map((line) => {
-      try {
-        const obj = JSON.parse(line);
-        return {
-          timestamp: dayjs(obj.time).utc().format("YYYY-MM-DD HH:mm:ss.SSS"),
-          level: Object.keys(pino.levels.labels).includes(String(obj.level))
-            ? pino.levels.labels[obj.level as keyof typeof pino.levels.labels]!
-            : String(obj.level),
-          context: obj.context ?? "",
-          message: obj.msg ?? "",
-        };
-      } catch {
-        const match = line.match(
-          /^\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+(.+)$/
-        );
-        if (!match) return null;
-        return {
-          timestamp: match[1]!,
-          level: match[2]!,
-          context: match[3]!,
-          message: match[4]!,
-        };
-      }
-    })
-    .filter((e): e is LogEntry => e !== null);
-}
-
-export function listLogDates(): string[] {
-  if (!existsSync(LOG_DIR)) return [];
-  try {
-    const dates = new Set<string>();
-    readdirSync(LOG_DIR)
-      .filter((f) => f.startsWith("log.") && f.endsWith(".log"))
-      .forEach((f) => {
-        const match = f.match(/^log\.(\d{8})\./);
-        if (match) dates.add(match[1]!);
-      });
-    return [...dates].sort().reverse();
-  } catch {
-    return [];
-  }
 }

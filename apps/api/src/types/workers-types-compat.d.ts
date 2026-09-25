@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 /**
  * Repairs the global types that @cloudflare/workers-types corrupts when it is
  * loaded alongside bun-types ("types": ["@cloudflare/workers-types", "bun"]).
@@ -13,6 +15,12 @@
  * - Buffer.toString(encoding?, start?, end?): workers-types declares
  *   `const Buffer: any`, which collapses the merged overload set to zero
  *   arguments. src/utils/logger.ts reads log tails with toString("utf-8").
+ * - process: workers-types declares `const process: any`, which erases
+ *   bun-types' typed process global and with it the `never` return of
+ *   process.exit(), so `if (bad) process.exit(1)` no longer narrows. The
+ *   /// reference below pulls @types/node (a bun-types dependency, always
+ *   installed) back into the program; until the pino removal it was loaded
+ *   transitively through pino's own .d.ts imports.
  *
  * If a future workers-types or bun-types release drops more members, extend
  * this file instead of weakening the tsconfig.

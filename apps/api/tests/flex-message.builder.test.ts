@@ -433,9 +433,10 @@ describe("getFlexSummaryVersion", () => {
   test("unrecognized value falls back to flex-v1 and warns once", () => {
     process.env.FLEX_SUMMARY_VERSION = "flex-v9";
     const warned: string[] = [];
-    const originalWarn = logger.warn.bind(logger);
-    // @ts-expect-error - test double for the pino warn signature
-    logger.warn = (_obj: unknown, msg: string) => warned.push(msg);
+    const originalWarn = logger.warn;
+    logger.warn = (_obj: object, msg?: string) => {
+      warned.push(msg ?? "");
+    };
     try {
       expect(getFlexSummaryVersion()).toBe("flex-v1");
       expect(getFlexSummaryVersion()).toBe("flex-v1");

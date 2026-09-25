@@ -1804,7 +1804,7 @@ Expected: `drizzle/0000_init_schema.sql` plus `drizzle/meta/_journal.json` and `
 Run: `cd apps/api && bun test tests/migrations.test.ts`
 Expected: PASS, 3 pass, 0 fail.
 
-- [ ] **Step 5: Commit the generated migrations**
+- [x] **Step 5: Commit the generated migrations**
 
 ```bash
 cd apps/api
@@ -2088,7 +2088,7 @@ bun test
 Expected: PASS, the same test count as before plus the 3 from `tests/migrations.test.ts`.
 `initDb` is still exported at this point, just unused by the test suite.
 
-- [ ] **Step 9: Commit the test-helper move**
+- [x] **Step 9: Commit the test-helper move**
 
 ```bash
 cd apps/api
@@ -2379,7 +2379,7 @@ bun test tests/db-connection.test.ts
 
 Expected: PASS, 9 pass, 0 fail.
 
-- [ ] **Step 16: Run the full suite and the typechecker**
+- [x] **Step 16: Run the full suite and the typechecker**
 
 ```bash
 cd apps/api
@@ -2390,7 +2390,7 @@ bun test
 Expected: typecheck clean, every test file green.
 If `tests/webhook.test.ts` reports `too many clients already`, a handle or the fallback client was left open; check the `afterEach` in `tests/db-connection.test.ts`.
 
-- [ ] **Step 17: Commit the connection rewrite**
+- [x] **Step 17: Commit the connection rewrite**
 
 ```bash
 cd apps/api
@@ -2477,7 +2477,7 @@ psql postgresql://test:test@localhost:5433/hfm_test -c "\dt"
 Expected: the 8 application tables are listed.
 Run it a second time and confirm it is a no-op that still prints `[migrate] migrations applied to scratch`, because drizzle records applied migrations in its own `drizzle.__drizzle_migrations` table.
 
-- [ ] **Step 20: Commit the migration script**
+- [x] **Step 20: Commit the migration script**
 
 ```bash
 cd apps/api

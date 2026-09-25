@@ -193,3 +193,23 @@ describe("fetchGroupSummary", () => {
     expect(await fetchGroupSummary("Cgroup1")).toBeNull();
   });
 });
+
+
+describe("pushToAll pacing", () => {
+  afterEach(() => {
+    globalThis.fetch = ORIGINAL_FETCH;
+  });
+
+  test("does not sleep between pushes", async () => {
+    globalThis.fetch = (async () =>
+      new Response("{}", { status: 200 })) as unknown as typeof globalThis.fetch;
+
+    const startedAt = Date.now();
+    await pushToAll(["U001", "U002", "U003"], "hello");
+    const elapsed = Date.now() - startedAt;
+
+    // The old implementation slept 200ms between pushes, so three recipients
+    // cost 400ms. Bun.sleep does not exist on Workers.
+    expect(elapsed).toBeLessThan(100);
+  });
+});

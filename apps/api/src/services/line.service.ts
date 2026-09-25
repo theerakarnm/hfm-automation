@@ -160,12 +160,15 @@ export const replyOrPushFlex = (
   contents: object
 ) => replyOrPush(replyToken, to, { type: "flex", altText, contents });
 
+// Sequential on purpose. Each push is awaited, so N recipients cost N round
+// trips and at most one outbound connection is ever waiting for headers, well
+// inside the Workers limit of 6. There is no pacing delay any more: Bun.sleep
+// does not exist on Workers and setTimeout is not a reliable sleep there, and
+// LINE allows 2,000 requests per second for push, which an awaited loop cannot
+// approach. (https://developers.line.biz/en/reference/messaging-api/#rate-limits)
 export async function pushToAll(uids: string[], text: string): Promise<void> {
-  for (let i = 0; i < uids.length; i++) {
-    await pushText(uids[i]!, text);
-    if (i < uids.length - 1) {
-      await Bun.sleep(200);
-    }
+  for (const uid of uids) {
+    await pushText(uid, text);
   }
 }
 

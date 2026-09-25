@@ -800,7 +800,7 @@ export function withInlineQueue<T extends Hono<any>>(app: T): T {
 }
 ```
 
-- [ ] **Step 7: Point the existing app tests at the inline queue**
+- [x] **Step 7: Point the existing app tests at the inline queue**
 
 Each of the three files builds its app in exactly one factory function. Change only that
 factory, so none of the 35 `app.fetch(...)` call sites needs an edit.

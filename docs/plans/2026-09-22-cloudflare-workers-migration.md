@@ -106,7 +106,7 @@ request. Task 6 calls it in every handler.
 - Create: `apps/api/src/config/env.ts`
 - Create: `apps/api/tests/worker-env.test.ts`
 
-- [ ] **Step 1: Install the Cloudflare toolchain**
+- [x] **Step 1: Install the Cloudflare toolchain**
 
 ```bash
 cd apps/api
@@ -127,7 +127,9 @@ The `devDependencies` block in `apps/api/package.json` must then read exactly:
   },
 ```
 
-- [ ] **Step 2: Replace `apps/api/tsconfig.json` with the Workers-aware version**
+> Deviation: `bun add` saved the two new deps as exact pins (`5.20260922.1`, `4.136.2`, no caret), so the carets were added by hand to match this block; `bun install` afterwards confirms the lockfile already satisfies the caret ranges ("no changes").
+
+- [x] **Step 2: Replace `apps/api/tsconfig.json` with the Workers-aware version**
 
 The current file has no `types` key, so TypeScript knows nothing about `Hyperdrive`,
 `KVNamespace`, `Queue`, `MessageBatch`, `ExecutionContext` or `ScheduledController`.
@@ -176,7 +178,9 @@ This combination was verified on TypeScript 5.9.3 with `@cloudflare/workers-type
 and `@types/bun@1.4.2`: Workers globals and `bun:test` compile together with no duplicate-global
 errors.
 
-- [ ] **Step 3: Run the typecheck and the suite**
+> Deviation: against this repo the exact tsconfig above does not typecheck on its own: workers-types 5.20260922.1 re-declares the web platform globally (`class Blob`, `declare const Buffer: any`, ...), and under `skipLibCheck` the silent merges drop `Blob.json`/`Blob.formData`/`Blob.image` and collapse `Buffer.toString` to zero args (6 errors in scripts/ and src/utils/logger.ts). Fixed forward with one additive ambient file, `apps/api/src/types/workers-types-compat.d.ts`, which restores exactly those bun-types members; the tsconfig above is unchanged. The lockfile resolution of the floating `"@types/bun": "latest"` entry was also refreshed 1.3.13 -> 1.4.2 (the version this step cites); package.json is unchanged.
+
+- [x] **Step 3: Run the typecheck and the suite**
 
 Start the test database first, from the repo root:
 

@@ -16,8 +16,10 @@
     "seed:mock-snapshots": "bun run scripts/seed-mock-client-snapshots.ts"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "drizzle-kit": "^0.31.10"
+    "@cloudflare/workers-types": "^5.20260922.1",
+    "@types/bun": "^1.4.2",
+    "drizzle-kit": "^0.31.10",
+    "wrangler": "^4.136.2"
   },
   "peerDependencies": {
     "typescript": "^5"

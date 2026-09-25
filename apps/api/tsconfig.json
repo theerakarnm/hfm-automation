@@ -14,6 +14,11 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
 
+    // Workers runtime globals (Hyperdrive, KVNamespace, Queue, ExecutionContext,
+    // ScheduledController) plus the Bun globals the test suite still needs.
+    // Both must be listed: setting "types" turns off automatic @types inclusion.
+    "types": ["@cloudflare/workers-types", "bun"],
+
     // Best practices
     "strict": true,
     "skipLibCheck": true,

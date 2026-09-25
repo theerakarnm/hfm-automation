@@ -1,13 +1,11 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { readLog, parseLog, listLogDates } from "../utils/logger";
 import { getDb } from "../db/connection";
 import { listLineUsers } from "../repositories/line-user.repository";
 import { listLineGroups } from "../repositories/line-group.repository";
 
 const internal = new Hono();
 
-const MAX_LOG_ENTRIES = 200;
 const MAX_LINE_UIDS = 500;
 const MAX_LINE_GROUPS = 200;
 
@@ -45,26 +43,6 @@ internal.get("/health", async (c) => {
 
   const allOk = Object.values(checks).every((v) => v === "ok");
   return c.json({ status: allOk ? "healthy" : "unhealthy", checks }, allOk ? 200 : 503);
-});
-
-internal.get("/logs", async (c) => {
-  const dates = listLogDates();
-  return c.json({ dates });
-});
-
-internal.get("/logs/:date", async (c) => {
-  const date = c.req.param("date");
-  const limitParam = c.req.query("limit");
-  const limit = Math.min(
-    Number(limitParam) || MAX_LOG_ENTRIES,
-    MAX_LOG_ENTRIES
-  );
-  const content = readLog(date);
-  if (!content) {
-    return c.json({ error: "No logs found for this date" }, 404);
-  }
-  const entries = parseLog(content, limit);
-  return c.json({ date, entries });
 });
 
 internal.get("/line-uids", async (c) => {

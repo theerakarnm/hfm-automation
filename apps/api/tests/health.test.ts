@@ -110,3 +110,35 @@ describe("GET /internal/health", () => {
     expect(body.checks.hfm_api).toBe("error");
   });
 });
+
+describe("removed log routes", () => {
+  beforeEach(() => {
+    process.env.INTERNAL_API_KEY = "test_key";
+  });
+
+  afterEach(() => {
+    delete process.env.INTERNAL_API_KEY;
+  });
+
+  test("GET /internal/logs is gone", async () => {
+    const internalMod = await import("../src/routes/internal");
+    const app = new Hono();
+    app.route("/internal", internalMod.default);
+
+    const res = await app.fetch(
+      new Request("http://localhost/internal/logs?key=test_key"),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  test("GET /internal/logs/:date is gone", async () => {
+    const internalMod = await import("../src/routes/internal");
+    const app = new Hono();
+    app.route("/internal", internalMod.default);
+
+    const res = await app.fetch(
+      new Request("http://localhost/internal/logs/20260922?key=test_key"),
+    );
+    expect(res.status).toBe(404);
+  });
+});

@@ -12,6 +12,7 @@ import {
   resetLastTradeCache,
 } from "../src/services/last-trade.service";
 import type { HFMClientRow } from "../src/types/hfm.types";
+import { withInlineQueue } from "./helpers/inline-queue";
 
 const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? "postgresql://jametirakarn@localhost:5432/hfm_test";
@@ -149,7 +150,6 @@ describe("webhook", () => {
     const response = await res;
     expect(response.status).toBe(200);
 
-    await new Promise((r) => setTimeout(r, 50));
     expect(pushCalled).toBe(false);
   });
 
@@ -759,8 +759,6 @@ describe("webhook", () => {
     );
     expect(response.status).toBe(200);
 
-    // Absence assertion: give the handler and its catch-all time to finish.
-    await new Promise((resolve) => setTimeout(resolve, 300));
     expect(pushes).toHaveLength(0);
   });
 
@@ -1842,8 +1840,6 @@ describe("webhook", () => {
       mockFetch(calls);
 
       await postEvent(app, groupTextEvent("ไปกินข้าวกันไหมครับ"));
-
-      await new Promise((r) => setTimeout(r, 100));
       expect(calls).toEqual([]);
     });
 
@@ -1891,8 +1887,6 @@ describe("webhook", () => {
       mockFetch(calls);
 
       await postEvent(app, groupTextEvent("report"));
-
-      await new Promise((r) => setTimeout(r, 100));
       expect(calls).toEqual([]);
     });
 
@@ -1903,8 +1897,6 @@ describe("webhook", () => {
       mockFetch(calls);
 
       await postEvent(app, groupTextEvent("98241376"));
-
-      await new Promise((r) => setTimeout(r, 100));
       expect(calls).toEqual([]);
     });
 
@@ -2245,5 +2237,5 @@ async function importWebhook() {
   const webhookMod = await import("../src/routes/webhook");
   const app = new Hono();
   app.route("/webhook", webhookMod.default);
-  return { app };
+  return { app: withInlineQueue(app) };
 }

@@ -352,7 +352,7 @@ be thin HTTP handlers; today `webhook.ts` holds 24 KB of business logic.
 - Modify: `apps/api/tests/webhook.test.ts:2236`, `tests/webhook-logging.test.ts:114`,
   `tests/line-uids.test.ts:311` (one app factory per file, no assertion changes)
 
-- [ ] **Step 1: Create the queue message types**
+- [x] **Step 1: Create the queue message types**
 
 Create `apps/api/src/queue/types.ts`:
 
@@ -376,7 +376,7 @@ export interface LineEventMessage {
 export type QueueMessage = LineEventMessage;
 ```
 
-- [ ] **Step 2: Move the event-processing logic into a service**
+- [x] **Step 2: Move the event-processing logic into a service**
 
 Create `apps/api/src/services/webhook-dispatcher.ts`. This is a **pure move** with no
 logic change. Cut these top-level declarations out of `src/routes/webhook.ts` and paste
@@ -494,7 +494,7 @@ export async function dispatchWebhookEvent(
 }
 ```
 
-- [ ] **Step 3: Await the background work the move carried over**
+- [x] **Step 3: Await the background work the move carried over**
 
 The move in Step 2 also carried four fire-and-forget calls into the dispatcher. In a queue
 consumer they are the same defect this task exists to fix: once `dispatchWebhookEvent`
@@ -594,7 +594,7 @@ Expected: only lines that begin with `await` (the two loading calls and
 `await recordLineUserRequest(...).catch(...)`). Any other hit is a call that the runtime can
 cancel; await it.
 
-- [ ] **Step 4: Shrink the route to a producer**
+- [x] **Step 4: Shrink the route to a producer**
 
 Replace the whole of `apps/api/src/routes/webhook.ts` with:
 
@@ -686,7 +686,7 @@ webhook.post(
 export default webhook;
 ```
 
-- [ ] **Step 5: Write the queue consumer**
+- [x] **Step 5: Write the queue consumer**
 
 Create `apps/api/src/queue/consumer.ts`:
 
@@ -735,7 +735,7 @@ export async function handleQueueBatch(
 }
 ```
 
-- [ ] **Step 6: Write the inline queue test helper**
+- [x] **Step 6: Write the inline queue test helper**
 
 The existing suite asserts on reply content by posting to the route. Keeping those
 2,000 lines of assertions is worth more than testing the transport split, so the tests
@@ -835,13 +835,20 @@ Add this import at the top of each of the three files:
 import { withInlineQueue } from "./helpers/inline-queue";
 ```
 
+> Deviation: The plan's `Bun.sleep(...)` waits are `new Promise((r) => setTimeout(r, ...))` in the
+> current files. Only the 5 fixed waits that solely covered fire-and-forget work were removed
+> (webhook.test.ts: one 50ms, one 300ms, three 100ms group-silence waits; the 300ms wait's
+> dedicated comment went with it). The 7 remaining sleeps are poll intervals inside adaptive
+> while-loops (`waitFor`, `waitForUsers`, `waitForGroups`) and stay, so their polling behaviour
+> is unchanged. Per the plan, a wait is removed only if the test still passes without it.
+
 Because the route now awaits `sendBatch`, and the inline queue awaits the consumer, every
 assertion that relied on the old floating promise now has a real happens-before edge. A
 `Bun.sleep(...)` that only waited for background work can be removed. There are 9 such waits
 in `tests/webhook.test.ts`, 2 in `tests/webhook-logging.test.ts` and 1 in
 `tests/line-uids.test.ts`. Remove a wait only if the test still passes without it.
 
-- [ ] **Step 8: Run the existing suite**
+- [x] **Step 8: Run the existing suite**
 
 ```bash
 cd apps/api && bun test tests/webhook.test.ts tests/webhook-logging.test.ts tests/line-uids.test.ts
@@ -850,7 +857,7 @@ cd apps/api && bun test tests/webhook.test.ts tests/webhook-logging.test.ts test
 Expected: PASS with no assertion changes. If a test fails on ordering, it was depending
 on the old fire-and-forget timing; fix the test, not the code.
 
-- [ ] **Step 9: Write the producer test**
+- [x] **Step 9: Write the producer test**
 
 Create `apps/api/tests/webhook-producer.test.ts`:
 
@@ -969,7 +976,7 @@ describe("webhook producer", () => {
 });
 ```
 
-- [ ] **Step 10: Run the producer test**
+- [x] **Step 10: Run the producer test**
 
 ```bash
 cd apps/api && bun test tests/webhook-producer.test.ts
@@ -977,7 +984,7 @@ cd apps/api && bun test tests/webhook-producer.test.ts
 
 Expected: PASS, 4 tests.
 
-- [ ] **Step 11: Run the whole suite and typecheck**
+- [x] **Step 11: Run the whole suite and typecheck**
 
 ```bash
 cd apps/api && bun test && bun run typecheck

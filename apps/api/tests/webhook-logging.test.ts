@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
 import { closeDb, initDb, resetDbForTests } from "../src/db/connection";
 import { resetLastTradeCache } from "../src/services/last-trade.service";
+import { withInlineQueue } from "./helpers/inline-queue";
 
 const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? "postgresql://jametirakarn@localhost:5432/hfm_test";
@@ -115,7 +116,7 @@ async function importWebhook() {
   const webhookMod = await import("../src/routes/webhook");
   const app = new Hono();
   app.route("/webhook", webhookMod.default);
-  return { app };
+  return { app: withInlineQueue(app) };
 }
 
 async function postEvent(

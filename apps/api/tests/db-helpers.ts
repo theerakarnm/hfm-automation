@@ -1,27 +1,21 @@
 import postgres from "postgres";
-import { drizzle } from "drizzle-orm/postgres-js";
+import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
 import * as schema from "../src/db/schema";
 
 export const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? "postgresql://jametirakarn@localhost:5432/hfm_test";
 
-export async function createTestDb() {
-  const client = postgres(TEST_DATABASE_URL, { max: 1 });
-  const db = drizzle(client, { schema });
-
-  await db.execute(sql`
-    DROP TABLE IF EXISTS line_groups CASCADE;
-    DROP TABLE IF EXISTS client_request_snapshot_rows CASCADE;
-    DROP TABLE IF EXISTS client_request_snapshots CASCADE;
-    DROP TABLE IF EXISTS report_range_snapshots CASCADE;
-    DROP TABLE IF EXISTS line_users CASCADE;
-    DROP TABLE IF EXISTS daily_report_notifications CASCADE;
-    DROP TABLE IF EXISTS notify_recipients CASCADE;
-    DROP TABLE IF EXISTS client_snapshots CASCADE;
-  `);
-
-  await db.execute(sql`
+// Test-only schema builder. This DDL used to live in src/db/connection.ts as
+// initDb() and ran on every boot. The Worker has no boot step, so production
+// schema now comes from drizzle/ through scripts/migrate-tenant.ts, and the
+// test suite keeps this fast idempotent copy instead of running the migrator
+// once per test file.
+export async function applyTestSchema(
+  db: PostgresJsDatabase<Record<string, unknown>> | PostgresJsDatabase<typeof schema>,
+): Promise<void> {
+  const target = db as PostgresJsDatabase<Record<string, unknown>>;
+  await target.execute(sql`
     CREATE TABLE IF NOT EXISTS client_snapshots (
       id              SERIAL PRIMARY KEY,
       snapshot_date   TEXT NOT NULL,
@@ -33,6 +27,8 @@ export async function createTestDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_snapshot_date
       ON client_snapshots(snapshot_date);
+    ALTER TABLE client_snapshots ADD COLUMN IF NOT EXISTS name TEXT;
+    ALTER TABLE client_snapshots ADD COLUMN IF NOT EXISTS email TEXT;
 
     CREATE TABLE IF NOT EXISTS notify_recipients (
       id         SERIAL PRIMARY KEY,
@@ -90,6 +86,24 @@ export async function createTestDb() {
       UNIQUE(snapshot_id, client_id)
     );
   `);
+}
+
+export async function createTestDb() {
+  const client = postgres(TEST_DATABASE_URL, { max: 1 });
+  const db = drizzle(client, { schema });
+
+  await db.execute(sql`
+    DROP TABLE IF EXISTS line_groups CASCADE;
+    DROP TABLE IF EXISTS client_request_snapshot_rows CASCADE;
+    DROP TABLE IF EXISTS client_request_snapshots CASCADE;
+    DROP TABLE IF EXISTS report_range_snapshots CASCADE;
+    DROP TABLE IF EXISTS line_users CASCADE;
+    DROP TABLE IF EXISTS daily_report_notifications CASCADE;
+    DROP TABLE IF EXISTS notify_recipients CASCADE;
+    DROP TABLE IF EXISTS client_snapshots CASCADE;
+  `);
+
+  await applyTestSchema(db);
 
   return { db, client };
 }

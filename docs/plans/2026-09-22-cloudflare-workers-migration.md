@@ -1812,7 +1812,7 @@ git add .gitignore drizzle tests/migrations.test.ts
 git commit -m "feat: commit drizzle migrations for tenant DBs"
 ```
 
-- [ ] **Step 6: Move the boot DDL into the test helper**
+- [x] **Step 6: Move the boot DDL into the test helper**
 
 Add `applyTestSchema` to `apps/api/tests/db-helpers.ts`.
 The SQL is copied verbatim from `src/db/connection.ts:22-92`, including the two `ALTER TABLE` statements, so nothing a test relies on changes.
@@ -1934,7 +1934,7 @@ export async function closeTestDb(client: postgres.Sql) {
 }
 ```
 
-- [ ] **Step 7: Repoint all 8 test files from initDb to applyTestSchema**
+- [x] **Step 7: Repoint all 8 test files from initDb to applyTestSchema**
 
 Make exactly these edits. Nothing else in these files changes.
 
@@ -2074,7 +2074,7 @@ and replace lines 79-80 with:
   await expect(applyTestSchema(db)).resolves.toBeUndefined();
 ```
 
-- [ ] **Step 8: Run the full suite to verify nothing regressed**
+- [x] **Step 8: Run the full suite to verify nothing regressed**
 
 Start the test database from the repo root first:
 

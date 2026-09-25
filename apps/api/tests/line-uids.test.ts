@@ -4,7 +4,8 @@ import { createHmac } from "node:crypto";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
-import { initDb, resetDbForTests, getDb } from "../src/db/connection";
+import { resetDbForTests, getDb } from "../src/db/connection";
+import { applyTestSchema } from "./db-helpers";
 import { listLineUsers } from "../src/repositories/line-user.repository";
 import { withInlineQueue } from "./helpers/inline-queue";
 
@@ -49,7 +50,7 @@ async function setupTestDb() {
     DROP TABLE IF EXISTS notify_recipients CASCADE;
     DROP TABLE IF EXISTS client_snapshots CASCADE;
   `);
-  await initDb(db);
+  await applyTestSchema(db);
   await client.end();
   resetDbForTests();
 }

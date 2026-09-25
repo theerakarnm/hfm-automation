@@ -3,7 +3,8 @@ import { Hono } from "hono";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
-import { initDb, getDb, resetDbForTests } from "../src/db/connection";
+import { getDb, resetDbForTests } from "../src/db/connection";
+import { applyTestSchema } from "./db-helpers";
 import { recordLineGroupEvent } from "../src/repositories/line-group.repository";
 
 const TEST_DATABASE_URL =
@@ -13,7 +14,7 @@ async function setupTestDb(): Promise<void> {
   const client = postgres(TEST_DATABASE_URL, { max: 1 });
   const db = drizzle(client);
   await db.execute(sql`DROP TABLE IF EXISTS line_groups CASCADE;`);
-  await initDb(db);
+  await applyTestSchema(db);
   await client.end();
   resetDbForTests();
 }

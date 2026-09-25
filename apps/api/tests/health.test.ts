@@ -3,7 +3,8 @@ import { Hono } from "hono";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
-import { initDb, resetDbForTests } from "../src/db/connection";
+import { resetDbForTests } from "../src/db/connection";
+import { applyTestSchema } from "./db-helpers";
 
 const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? "postgresql://jametirakarn@localhost:5432/hfm_test";
@@ -29,7 +30,7 @@ describe("GET /internal/health", () => {
       DROP TABLE IF EXISTS notify_recipients CASCADE;
       DROP TABLE IF EXISTS client_snapshots CASCADE;
     `);
-    await initDb(db);
+    await applyTestSchema(db);
     await client.end();
     resetDbForTests();
   });

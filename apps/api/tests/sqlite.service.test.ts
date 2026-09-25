@@ -2,7 +2,7 @@ import { expect, test, beforeEach, afterEach } from "bun:test";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
-import { initDb } from "../src/db/connection";
+import { applyTestSchema } from "./db-helpers";
 import * as schema from "../src/db/schema";
 
 const TEST_DATABASE_URL =
@@ -30,8 +30,8 @@ afterEach(async () => {
   await client.end();
 });
 
-test("initDb creates tables and indexes", async () => {
-  await initDb(db);
+test("applyTestSchema creates tables and indexes", async () => {
+  await applyTestSchema(db);
 
   const tables = await db.execute(sql`
     SELECT tablename FROM pg_tables
@@ -59,7 +59,7 @@ test("initDb creates tables and indexes", async () => {
 });
 
 test("client_snapshots has UNIQUE constraint on snapshot_date and client_id", async () => {
-  await initDb(db);
+  await applyTestSchema(db);
 
   await db.execute(sql`
     INSERT INTO client_snapshots (snapshot_date, client_id) VALUES ('2026-04-26', 456)
@@ -75,7 +75,7 @@ test("client_snapshots has UNIQUE constraint on snapshot_date and client_id", as
   ).rejects.toThrow();
 });
 
-test("initDb is idempotent — calling twice does not error", async () => {
-  await initDb(db);
-  await expect(initDb(db)).resolves.toBeUndefined();
+test("applyTestSchema is idempotent, calling twice does not error", async () => {
+  await applyTestSchema(db);
+  await expect(applyTestSchema(db)).resolves.toBeUndefined();
 });

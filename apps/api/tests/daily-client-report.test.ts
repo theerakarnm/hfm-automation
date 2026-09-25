@@ -2,7 +2,7 @@ import { expect, test, describe, beforeEach, afterEach } from "bun:test";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
-import { initDb } from "../src/db/connection";
+import { applyTestSchema } from "./db-helpers";
 import { insertMany, countByDate } from "../src/repositories/snapshot.repository";
 import { seedFromEnv } from "../src/repositories/recipient.repository";
 import {
@@ -39,7 +39,7 @@ async function clearTables() {
 beforeEach(async () => {
   client = postgres(TEST_DATABASE_URL, { max: 1 });
   db = drizzle(client);
-  await initDb(db);
+  await applyTestSchema(db);
   await clearTables();
 });
 

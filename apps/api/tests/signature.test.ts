@@ -30,3 +30,9 @@ test("length-mismatched signature returns false without throwing", () => {
 test("empty signature returns false", () => {
   expect(verifyLineSignature(BODY, "", SECRET)).toBe(false);
 });
+
+test("verifies a body with non-ASCII characters", () => {
+  const body = '{"events":[{"message":{"text":"สวัสดี"}}]}';
+  const sig = computeSig(body, SECRET);
+  expect(verifyLineSignature(body, sig, SECRET)).toBe(true);
+});

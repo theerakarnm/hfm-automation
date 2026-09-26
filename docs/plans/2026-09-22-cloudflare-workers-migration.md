@@ -5944,7 +5944,7 @@ Wrangler is a Node CLI.
 `bun x wrangler` is documented as UNVERIFIED in `docs/research/cf-workers-migration-facts.md` section 1.
 It did work for `wrangler --version` and `wrangler deploy --dry-run` during this plan's verification on wrangler 4.136.2, but the `scripts` entries below still use the plain `wrangler ...` form so the deploy path never depends on that.
 
-- [ ] **Step 1: Confirm the toolchain from Task 1 is installed**
+- [x] **Step 1: Confirm the toolchain from Task 1 is installed**
 
 Run: `cd apps/api && bunx wrangler --version`
 Expected: `4.136.2`.
@@ -5967,7 +5967,7 @@ After the install, the `devDependencies` block in `apps/api/package.json` must r
   },
 ```
 
-- [ ] **Step 2: Write the failing deploy-surface test**
+- [x] **Step 2: Write the failing deploy-surface test**
 
 Create `apps/api/tests/deploy-scripts.test.ts` with exactly this content.
 
@@ -6066,7 +6066,7 @@ describe("package.json deploy surface", () => {
 });
 ```
 
-- [ ] **Step 3: Run the deploy-surface test and confirm it fails**
+- [x] **Step 3: Run the deploy-surface test and confirm it fails**
 
 Run: `bun test tests/deploy-scripts.test.ts`
 
@@ -6092,7 +6092,7 @@ Received: "deploy:all covers maow: false"
 The fourth failure is `the Bun server scripts are gone`, which stays red while `dev` and `start` are still present.
 The two passing tests are `test and typecheck stay Bun commands` and `every migrate script targets its own tenant database`: Task 4 already added `migrate:maow` and `migrate:simple-trade`.
 
-- [ ] **Step 4: Replace the `scripts` block in `apps/api/package.json`**
+- [x] **Step 4: Replace the `scripts` block in `apps/api/package.json`**
 
 `apps/api/package.json:6-16` was this before the migration (Tasks 3 and 4 have since added `db:generate`, `migrate:<tenant>` and `tail:<tenant>`; the replacement below keeps all of them):
 
@@ -6146,7 +6146,7 @@ What changed and why:
 - `test` and `typecheck` are unchanged and stay Bun commands.
 - The five `trigger:` / `fetch:` / `compare:` / `seed:` operator scripts stay. They run locally under Bun, not on Workers. Select a tenant for them with `bun --env-file=.env.maow.admin run scripts/trigger-hfm-healthcheck.ts`.
 
-- [ ] **Step 5: Run the deploy-surface test and confirm it passes**
+- [x] **Step 5: Run the deploy-surface test and confirm it passes**
 
 Run: `bun test tests/deploy-scripts.test.ts`
 
@@ -6157,7 +6157,7 @@ Expected: PASS.
  0 fail
 ```
 
-- [ ] **Step 6: Confirm the Workers-aware tsconfig from Task 1**
+- [x] **Step 6: Confirm the Workers-aware tsconfig from Task 1**
 
 ```bash
 cd apps/api && grep -n '"types"' tsconfig.json
@@ -6166,12 +6166,13 @@ cd apps/api && grep -n '"types"' tsconfig.json
 Expected: `"types": ["@cloudflare/workers-types", "bun"],`.
 If the line is missing, apply Task 1 Step 2 before continuing.
 
-- [ ] **Step 7: Run the typecheck**
+- [x] **Step 7: Run the typecheck**
 
 Run: `bun run typecheck`
 Expected: no output and exit code 0.
 
-- [ ] **Step 8: Run the whole suite**
+- [x] **Step 8: Run the whole suite**
+> Deviation: the podman test DB (127.0.0.1:5433) was down and podman machines are off-limits for this run. Used the native Homebrew postgresql@16 on 127.0.0.1:5432 instead: created the missing login role `test` (password `test`), transferred ownership of the already-present `hfm_test` database, and ran with `TEST_DATABASE_URL=postgresql://test:test@localhost:5432/hfm_test`. Suite: 414 pass, 0 fail, 36 files, including both new guard files.
 
 Run: `bun test`
 

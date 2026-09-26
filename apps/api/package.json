@@ -4,10 +4,19 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun run --watch src/index.ts",
-    "start": "bun run src/index.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit",
+    "check:bundle:maow": "wrangler deploy --dry-run --outdir bundled/maow -c wrangler.maow.jsonc",
+    "check:bundle:simple-trade": "wrangler deploy --dry-run --outdir bundled/simple-trade -c wrangler.simple-trade.jsonc",
+    "dev:maow": "wrangler dev -c wrangler.maow.jsonc --test-scheduled",
+    "dev:simple-trade": "wrangler dev -c wrangler.simple-trade.jsonc --test-scheduled",
+    "deploy:maow": "wrangler deploy -c wrangler.maow.jsonc",
+    "deploy:simple-trade": "wrangler deploy -c wrangler.simple-trade.jsonc",
+    "deploy:all": "bun run deploy:maow && bun run deploy:simple-trade",
+    "tail:maow": "wrangler tail -c wrangler.maow.jsonc --format pretty",
+    "tail:simple-trade": "wrangler tail -c wrangler.simple-trade.jsonc --format pretty",
+    "secrets:maow": "wrangler secret list -c wrangler.maow.jsonc",
+    "secrets:simple-trade": "wrangler secret list -c wrangler.simple-trade.jsonc",
     "db:generate": "bunx drizzle-kit generate",
     "migrate:maow": "bun --env-file=.env.maow.admin run scripts/migrate-tenant.ts maow",
     "migrate:simple-trade": "bun --env-file=.env.simple-trade.admin run scripts/migrate-tenant.ts simple-trade",
@@ -15,9 +24,7 @@
     "trigger:hfm-healthcheck": "bun run scripts/trigger-hfm-healthcheck.ts",
     "fetch:client-performance": "bun run scripts/fetch-client-performance-range.ts",
     "compare:client-performance": "bun run scripts/compare-client-performance-files.ts",
-    "seed:mock-snapshots": "bun run scripts/seed-mock-client-snapshots.ts",
-    "tail:maow": "wrangler tail -c wrangler.maow.jsonc",
-    "tail:simple-trade": "wrangler tail -c wrangler.simple-trade.jsonc"
+    "seed:mock-snapshots": "bun run scripts/seed-mock-client-snapshots.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260922.1",

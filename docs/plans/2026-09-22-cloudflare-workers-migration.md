@@ -6187,7 +6187,7 @@ cd apps/api && bun test
 
 Expected: every test passes, including the two new guards `tests/tenant-config.test.ts` and `tests/deploy-scripts.test.ts`.
 
-- [ ] **Step 9: Commit the scripts**
+- [x] **Step 9: Commit the scripts**
 
 ```bash
 git add apps/api/package.json apps/api/tests/deploy-scripts.test.ts
@@ -6195,6 +6195,7 @@ git commit -m "chore: add per-tenant wrangler scripts"
 ```
 
 - [ ] **Step 10: Create the per-tenant admin env files for migrations**
+> Awaiting operator: both files are created with the plan's empty templates and are git-ignored via `.env.*.admin`; they need the real tenant origin DB URLs filled in from the operator's password manager.
 
 `scripts/migrate-tenant.ts` (Task 4) connects straight to PostgreSQL over TCP from the developer machine.
 It does not go through Hyperdrive and it is not part of the Worker bundle.
@@ -6225,6 +6226,7 @@ Fill each with that tenant's PostgreSQL URL from the operator's password manager
 Both file names match the `.env.*.admin` ignore pattern added in Task 8 Step 21.
 
 - [ ] **Step 11: Apply the migrations to each tenant database**
+> Awaiting operator: `bun run migrate:maow` and `bun run migrate:simple-trade` need the real tenant origin DB URLs in `.env.maow.admin` / `.env.simple-trade.admin` first.
 
 ```bash
 cd apps/api
@@ -6237,7 +6239,8 @@ Expected: `[migrate] migrations applied to maow`, then `[migrate] migrations app
 This replaces the old boot-time DDL in `src/db/connection.ts:22-92`, which ran `CREATE TABLE` on every process start.
 A Worker has no boot hook that may do that, so the schema is now applied out of band and before the deploy.
 
-- [ ] **Step 12: Run the Workers-compatibility gate for both tenants**
+- [x] **Step 12: Run the Workers-compatibility gate for both tenants**
+> Deviation: both dry-runs exit 0 with the bindings table and no `Unexpected fields` warning, but `env.HYPERDRIVE` still shows the placeholder ids `<MAOW_HYPERDRIVE_ID>` / `<SIMPLE_TRADE_HYPERDRIVE_ID>`; Task 8 Step 13 (real Hyperdrive ids) is still awaiting operator DB URLs.
 
 This step is required before any deploy and after any dependency change.
 
@@ -6271,7 +6274,8 @@ Failure modes this catches, and nothing else in the plan does:
 Treat any `Unexpected fields` warning as a failure, not a warning.
 Verified behaviour on wrangler 4.136.2: a deliberately added `"bogus_key": true` produced exactly that warning, while the real config files produced none.
 
-- [ ] **Step 13: Run one tenant locally**
+- [x] **Step 13: Run one tenant locally**
+> Deviation: the exported local Hyperdrive override used port 5432 (`postgresql://test:test@localhost:5432/hfm_test`, the running native test DB) instead of the plan's 5433, whose podman container is down. Wrangler dev accepted the placeholder `<MAOW_HYPERDRIVE_ID>` in local mode and reached `Ready on http://localhost:8787`; the bindings list matches the dry run.
 
 ```bash
 cd apps/api
@@ -6285,7 +6289,8 @@ Expected: `Ready on http://localhost:8787`, and a bindings list that matches the
 The `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_<BINDING>` variable is how local dev reaches a database; it overrides any `localConnectionString` in the config file.
 Local dev talks to that database directly, with no pooling and no Hyperdrive cache.
 
-- [ ] **Step 14: Fire the 5-minute cron locally**
+- [x] **Step 14: Fire the 5-minute cron locally**
+> Deviation: the non-JSON curl returns a 200 whose body is `ok` rather than an empty body on wrangler 4.136.2; the `format=json` form returns exactly `{"outcome":"ok","noRetry":false}`. The dev window printed the handler's structured JSON log lines (`context: 'cron'` for hfm-healthcheck, last-trade-refresh, event-claim-purge).
 
 With `bun run dev:maow` still running, in a second terminal:
 
@@ -6301,7 +6306,8 @@ Path note: the Cloudflare docs document `/cdn-cgi/local/scheduled`.
 The `--test-scheduled` help text in wrangler 4.136.2 still says "by visiting /__scheduled in browser".
 Use the documented `/cdn-cgi/local/scheduled` path; if a future Wrangler rejects it, the legacy `/__scheduled` path is the fallback, not the default.
 
-- [ ] **Step 15: Confirm no daily cron is registered**
+- [x] **Step 15: Confirm no daily cron is registered**
+> Deviation: none functionally - the curl returned exactly `{"outcome":"ok","noRetry":false}` and the dev window printed `no job registered for schedule "0 1 * * *"` (as an error-level structured log entry). No LINE push appears in the logs.
 
 ```bash
 curl "http://localhost:8787/cdn-cgi/local/scheduled?cron=0+1+*+*+*&format=json"
@@ -6312,7 +6318,7 @@ Expected: `{"outcome":"ok","noRetry":false}`, and the `wrangler dev` window prin
 The daily report cron was removed on purpose in commit `96e6a0e`; `dispatchCron` must ignore
 any schedule it does not know.
 
-- [ ] **Step 16: Commit nothing, stop the dev server**
+- [x] **Step 16: Commit nothing, stop the dev server**
 
 Press Ctrl-C in the `bun run dev:maow` window.
 This step produces no repository change; it exists so the runbook in Task 10 starts from a known-good local run.

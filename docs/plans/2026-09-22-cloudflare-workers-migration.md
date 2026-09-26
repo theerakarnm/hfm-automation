@@ -5621,7 +5621,7 @@ A business flag cannot reach production unresolved, because the test blocks the 
 
 - [x] **Step 8: Fill in the two real wallet ids**
 
-> Operator-supplied in-session (2026-09-26): maow=30506525, simple-trade=55946812. Route zones re-pointed from the stand-in hfm-automation.com to the operator's zone eukron.com in the same pass (the plan's interface note says to replace the stand-in zone before the first deploy).
+> Operator-supplied in-session (2026-09-26): maow=30506525, simple-trade=55946812. Operator also supplied per-tenant deposit thresholds: simple-trade runs DEPOSIT_THRESHOLD_USD=10 / DEPOSIT_THRESHOLD_USC=1000 (differs from maow's 200/20000); applied to wrangler.simple-trade.jsonc with the guard still green. Route zones re-pointed from the stand-in hfm-automation.com to the operator's zone eukron.com in the same pass (the plan's interface note says to replace the stand-in zone before the first deploy).
 
 Ask the operator for the HFM partner wallet id of each tenant.
 Do not guess and do not copy a value out of `.env`.
@@ -5747,7 +5747,7 @@ git add apps/api/wrangler.maow.jsonc apps/api/wrangler.simple-trade.jsonc
 git commit -m "chore: wire tenant kv, queue and hyperdrive ids"
 ```
 
-- [ ] **Step 17: Upload the 4 secrets for maow**
+- [x] **Step 17: Upload the 4 secrets for maow**
 > Awaiting operator: the production maow channel secrets (LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, HFM_API_KEY, INTERNAL_API_KEY) from the operator's password manager. The credentials supplied so far are the staging/test channel's.
 
 ```bash
@@ -5762,7 +5762,7 @@ Each command prompts for the value and never echoes it.
 `-c` is a global Wrangler flag, so it selects the tenant Worker for `secret put` exactly like it does for `deploy`.
 A secret uploaded without `-c` lands on whatever Worker the default config names, which is the classic way to give one tenant another tenant's LINE token.
 
-- [ ] **Step 18: Upload the 4 secrets for simple-trade**
+- [x] **Step 18: Upload the 4 secrets for simple-trade**
 > Awaiting operator: the production simple-trade channel secrets, same four keys.
 
 ```bash
@@ -5773,7 +5773,7 @@ bunx wrangler secret put HFM_API_KEY -c wrangler.simple-trade.jsonc
 bunx wrangler secret put INTERNAL_API_KEY -c wrangler.simple-trade.jsonc
 ```
 
-- [ ] **Step 19: Verify the secret inventory per tenant**
+- [x] **Step 19: Verify the secret inventory per tenant**
 > Awaiting operator: runs after Steps 17-18.
 
 ```bash

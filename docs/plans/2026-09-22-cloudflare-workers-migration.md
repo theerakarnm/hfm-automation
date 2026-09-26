@@ -5084,7 +5084,7 @@ Source: <https://developers.cloudflare.com/workers/wrangler/configuration/#envir
 
 All commands in this task run from `apps/api`.
 
-- [ ] **Step 1: Confirm the Cloudflare toolchain from Task 1**
+- [x] **Step 1: Confirm the Cloudflare toolchain from Task 1**
 
 Task 1 Step 1 installed `wrangler` and `@cloudflare/workers-types`. Confirm both are in
 `devDependencies`:
@@ -5096,14 +5096,14 @@ cd apps/api && grep -E '"(wrangler|@cloudflare/workers-types)"' package.json
 Expected: two lines, `"@cloudflare/workers-types": "^5.20260922.1"` and `"wrangler": "^4.136.2"`.
 If either is missing, run Task 1 Steps 1 to 4 first.
 
-- [ ] **Step 2: Verify the Wrangler binary resolves**
+- [x] **Step 2: Verify the Wrangler binary resolves**
 
 Run: `bunx wrangler --version`
 Expected: `4.136.2`.
 
 Record that number. It is the version every command in Tasks 8, 9 and 10 was verified against.
 
-- [ ] **Step 3: Write the failing tenant-config guard test**
+- [x] **Step 3: Write the failing tenant-config guard test**
 
 Create `apps/api/tests/tenant-config.test.ts` with exactly this content.
 
@@ -5424,7 +5424,7 @@ describe("wrangler tenant configs", () => {
 });
 ```
 
-- [ ] **Step 4: Run the guard test and confirm it fails**
+- [x] **Step 4: Run the guard test and confirm it fails**
 
 Run: `bun test tests/tenant-config.test.ts`
 
@@ -5446,7 +5446,7 @@ error: expect(received).toEqual(expected)
 
 The other three failures are `binding names are identical across tenants`, `every tenant declares the same required secrets` and `shared keys have not drifted between tenant files`, all reporting `Received: undefined` because the config list is empty.
 
-- [ ] **Step 5: Create `apps/api/wrangler.maow.jsonc`**
+- [x] **Step 5: Create `apps/api/wrangler.maow.jsonc`**
 
 ```jsonc
 {
@@ -5520,7 +5520,7 @@ The other three failures are `binding names are identical across tenants`, `ever
 }
 ```
 
-- [ ] **Step 6: Create `apps/api/wrangler.simple-trade.jsonc`**
+- [x] **Step 6: Create `apps/api/wrangler.simple-trade.jsonc`**
 
 ```jsonc
 {
@@ -5597,7 +5597,7 @@ The other three failures are `binding names are identical across tenants`, `ever
 The two tenants differ in exactly seven places: `name`, the route pattern, `TENANT`, `TARGET_WALLET`, `FLEX_SUMMARY_VERSION` (flex-v1 versus flex-v2), `LOT_DISPLAY_MODE`, and the three resource identifiers (Hyperdrive id, KV id, queue name).
 Everything else is byte-identical, and the guard test fails if that stops being true.
 
-- [ ] **Step 7: Run the guard test and confirm the two wallet failures**
+- [x] **Step 7: Run the guard test and confirm the two wallet failures**
 
 Run: `bun test tests/tenant-config.test.ts`
 
@@ -5619,7 +5619,9 @@ Received: "wrangler.maow.jsonc: REPLACE_WITH_MAOW_WALLET_ID"
 This is the point of the placeholder rule.
 A business flag cannot reach production unresolved, because the test blocks the commit.
 
-- [ ] **Step 8: Fill in the two real wallet ids**
+- [x] **Step 8: Fill in the two real wallet ids**
+
+> Operator-supplied in-session (2026-09-26): maow=30506525, simple-trade=55946812. Route zones re-pointed from the stand-in hfm-automation.com to the operator's zone eukron.com in the same pass (the plan's interface note says to replace the stand-in zone before the first deploy).
 
 Ask the operator for the HFM partner wallet id of each tenant.
 Do not guess and do not copy a value out of `.env`.
@@ -5648,7 +5650,7 @@ with the real digits, for example:
     "TARGET_WALLET": "1120644",
 ```
 
-- [ ] **Step 9: Run the guard test and confirm it passes**
+- [x] **Step 9: Run the guard test and confirm it passes**
 
 Run: `bun test tests/tenant-config.test.ts`
 

@@ -1,0 +1,69 @@
+{
+  // Complete tenant spec for `maow`. Deployed with:
+  //   bun run deploy:maow   ->  wrangler deploy -c wrangler.maow.jsonc
+  // Nothing is inherited from another file. Every key this tenant needs is
+  // written here, because wrangler `vars`, `hyperdrive`, `kv_namespaces`,
+  // `queues` and secrets are all non-inheritable.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "hfm-bot-maow",
+  "main": "./src/worker.ts",
+  "compatibility_date": "2026-09-22",
+  // nodejs_compat is on by default at this compatibility date, so it is NOT
+  // listed in compatibility_flags. Adding it again is an error.
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "maow-bot.eukron.com", "custom_domain": true }
+  ],
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  // CPU ceiling for HTTP invocations. Cron CPU is capped by the platform at
+  // 30s for the */5 job, which limits does not raise.
+  "limits": { "cpu_ms": 300000 },
+  // UTC only. The daily report cron was removed on purpose (commit 96e6a0e);
+  // run it by hand with `bun run trigger:daily-client-report`.
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "vars": {
+    "TENANT": "maow",
+    "HFM_API_BASE_URL": "https://api.hfaffiliates.com",
+    "TARGET_WALLET": "30506525",
+    "DEPOSIT_THRESHOLD_USD": "200",
+    "DEPOSIT_THRESHOLD_USC": "20000",
+    "LINE_WHITELIST_ENABLED": "true",
+    "LINE_WHITELIST_UIDS": "",
+    "LINE_GROUP_WHITELIST_ENABLED": "true",
+    "LINE_GROUP_WHITELIST_IDS": "",
+    "LINE_NOTIFY_UIDS": "",
+    "LAST_TRADE_DEADLINE_MS": "8000",
+    "FLEX_SUMMARY_VERSION": "flex-v1",
+    "LOT_DISPLAY_MODE": "always",
+    "LOG_LEVEL": "info"
+  },
+  // Names only, never values. A missing secret is reported at deploy time.
+  "secrets": {
+    "required": [
+      "LINE_CHANNEL_ACCESS_TOKEN",
+      "LINE_CHANNEL_SECRET",
+      "HFM_API_KEY",
+      "INTERNAL_API_KEY"
+    ]
+  },
+  // Created with --caching-disabled: this app reads its own writes and
+  // Hyperdrive's query cache does not invalidate on write.
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<MAOW_HYPERDRIVE_ID>" }],
+  "kv_namespaces": [{ "binding": "CACHE", "id": "<MAOW_KV_ID>" }],
+  "queues": {
+    "producers": [{ "binding": "EVENT_QUEUE", "queue": "hfm-events-maow" }],
+    "consumers": [
+      {
+        "queue": "hfm-events-maow",
+        // One LINE event per invocation: a batch runs sequentially, so a
+        // bigger batch lets one slow lookup expire the next reply token (60s).
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        // No retries: a retry can reuse a spent reply token and push a
+        // duplicate answer. Failures go straight to the dead letter queue.
+        "max_retries": 0,
+        "dead_letter_queue": "hfm-events-maow-dlq"
+      }
+    ]
+  }
+}

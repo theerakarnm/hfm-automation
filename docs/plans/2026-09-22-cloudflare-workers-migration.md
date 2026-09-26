@@ -5661,7 +5661,7 @@ Expected: PASS.
  0 fail
 ```
 
-- [ ] **Step 10: Commit the tenant configs**
+- [x] **Step 10: Commit the tenant configs**
 
 ```bash
 git add apps/api/wrangler.maow.jsonc apps/api/wrangler.simple-trade.jsonc apps/api/tests/tenant-config.test.ts apps/api/package.json apps/api/bun.lock
@@ -5739,7 +5739,8 @@ Expected for each: a bindings table listing `env.CACHE`, `env.EVENT_QUEUE`, `env
 Verified on wrangler 4.136.2 with a stub `src/worker.ts`: exit code 0, `Total Upload: 0.17 KiB`.
 This dry run is the single most valuable check in the migration, because it is the only step that compiles the real Worker bundle and reports Workers incompatibilities without touching production.
 
-- [ ] **Step 16: Commit the resource ids**
+- [x] **Step 16: Commit the resource ids**
+> Deviation: commit 633526b wires only the KV ids (queue names were already in the files); Hyperdrive ids remain placeholders until Step 13, so its paste rides with that step.
 
 ```bash
 git add apps/api/wrangler.maow.jsonc apps/api/wrangler.simple-trade.jsonc
@@ -5795,7 +5796,8 @@ Expected for each: a JSON array with exactly these four names and no values.
 If a name is missing, stop and upload it.
 The Worker would otherwise start with `undefined` for that key.
 
-- [ ] **Step 20: Create the local dev secret files**
+- [x] **Step 20: Create the local dev secret files**
+> Deviation: templates created with empty values as the plan's blocks show; filling them is operator work at first local dev (values live in the operator's password manager, never in this repo).
 
 `wrangler dev` loads `.dev.vars.<name>` when `--env <name>` is used, and `.dev.vars` otherwise.
 This project uses separate config files rather than named environments, so the per-tenant files are selected explicitly on the command line in Task 9.
@@ -5821,7 +5823,7 @@ INTERNAL_API_KEY=
 Fill the values locally from the operator's password manager.
 Never commit a filled file.
 
-- [ ] **Step 21: Git-ignore every local secret and build artefact**
+- [x] **Step 21: Git-ignore every local secret and build artefact**
 
 In `apps/api/.gitignore`, the current dotenv block is at lines 19-25:
 
@@ -5854,7 +5856,7 @@ bundled/
 .wrangler/
 ```
 
-- [ ] **Step 22: Prove the secret files are ignored**
+- [x] **Step 22: Prove the secret files are ignored**
 
 Run: `cd apps/api && git status --porcelain --ignored .dev.vars.maow .dev.vars.simple-trade`
 Expected: two lines, each starting with `!!`, which means ignored.
@@ -5867,14 +5869,14 @@ Expected: two lines, each starting with `!!`, which means ignored.
 If a line starts with `??` the file is untracked but **not** ignored.
 Stop and fix `.gitignore` before any commit.
 
-- [ ] **Step 23: Commit the ignore rules**
+- [x] **Step 23: Commit the ignore rules**
 
 ```bash
 git add apps/api/.gitignore
 git commit -m "chore: ignore per-tenant local secrets"
 ```
 
-- [ ] **Step 24: Confirm each feature flag has one reader**
+- [x] **Step 24: Confirm each feature flag has one reader**
 
 Flags stay in `process.env`, which Cloudflare fills from this file's `vars` (Task 1 explains why).
 No accessor layer is added: each flag already has exactly one getter, and that getter is the

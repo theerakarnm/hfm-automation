@@ -5668,7 +5668,7 @@ git add apps/api/wrangler.maow.jsonc apps/api/wrangler.simple-trade.jsonc apps/a
 git commit -m "feat: add per-tenant wrangler configs"
 ```
 
-- [ ] **Step 11: Create the KV namespace for each tenant**
+- [x] **Step 11: Create the KV namespace for each tenant**
 
 ```bash
 cd apps/api
@@ -5680,7 +5680,7 @@ Expected: each command prints a block containing the new namespace id, for examp
 
 Paste the maow id into `apps/api/wrangler.maow.jsonc` replacing `<MAOW_KV_ID>`, and the simple-trade id into `apps/api/wrangler.simple-trade.jsonc` replacing `<SIMPLE_TRADE_KV_ID>`.
 
-- [ ] **Step 12: Create the queues and their dead letter queues**
+- [x] **Step 12: Create the queues and their dead letter queues**
 
 ```bash
 cd apps/api
@@ -5696,6 +5696,7 @@ Queue names are already written into both config files, so nothing needs pasting
 The dead letter queues must exist before a deploy that references them.
 
 - [ ] **Step 13: Create one Hyperdrive config per tenant, caching disabled**
+> Awaiting operator: the tenant origin Postgres URLs (DATABASE_URL_MAOW / DATABASE_URL_SIMPLE_TRADE) - hyperdrive create needs each origin connection string. Wrangler's OAuth scope for hyperdrive create is also unverified; if it fails on permissions, fall back to a dashboard-created token.
 
 ```bash
 cd apps/api
@@ -5717,14 +5718,15 @@ Expected: each command prints the new config and its id, for example `id: 8a2c..
 
 Paste the maow id into `apps/api/wrangler.maow.jsonc` replacing `<MAOW_HYPERDRIVE_ID>`, and the simple-trade id into `apps/api/wrangler.simple-trade.jsonc` replacing `<SIMPLE_TRADE_HYPERDRIVE_ID>`.
 
-- [ ] **Step 14: Verify both configs still pass the guard test**
+- [x] **Step 14: Verify both configs still pass the guard test**
 
 Run: `bun test tests/tenant-config.test.ts`
 Expected: `16 pass`, `0 fail`.
 
 The test does not check the infra ids, so this step only proves that pasting the ids did not break the JSONC syntax or the `vars` block.
 
-- [ ] **Step 15: Run the Wrangler compile-time gate on both tenants**
+- [x] **Step 15: Run the Wrangler compile-time gate on both tenants**
+> Deviation: run before Step 13, so both dry-runs print the Hyperdrive binding with its `<..._HYPERDRIVE_ID>` placeholder; every other Expected condition holds (exit 0, all 14 vars + 3 bindings, no `Unexpected fields` warning). Re-run after the real ids land.
 
 ```bash
 cd apps/api
@@ -5745,6 +5747,7 @@ git commit -m "chore: wire tenant kv, queue and hyperdrive ids"
 ```
 
 - [ ] **Step 17: Upload the 4 secrets for maow**
+> Awaiting operator: the production maow channel secrets (LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, HFM_API_KEY, INTERNAL_API_KEY) from the operator's password manager. The credentials supplied so far are the staging/test channel's.
 
 ```bash
 cd apps/api
@@ -5759,6 +5762,7 @@ Each command prompts for the value and never echoes it.
 A secret uploaded without `-c` lands on whatever Worker the default config names, which is the classic way to give one tenant another tenant's LINE token.
 
 - [ ] **Step 18: Upload the 4 secrets for simple-trade**
+> Awaiting operator: the production simple-trade channel secrets, same four keys.
 
 ```bash
 cd apps/api
@@ -5769,6 +5773,7 @@ bunx wrangler secret put INTERNAL_API_KEY -c wrangler.simple-trade.jsonc
 ```
 
 - [ ] **Step 19: Verify the secret inventory per tenant**
+> Awaiting operator: runs after Steps 17-18.
 
 ```bash
 cd apps/api

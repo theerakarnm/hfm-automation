@@ -2485,7 +2485,8 @@ git add scripts/migrate-tenant.ts package.json
 git commit -m "feat: add per-tenant drizzle migration script"
 ```
 
-- [ ] **Step 21: Create one Hyperdrive config per tenant**
+- [x] **Step 21: Create one Hyperdrive config per tenant**
+> Deviation: same action as Task 8 Step 13 - `hfm-maow` created with `--caching-disabled`; `hfm-simple-trade` blocked on origin SSL (see Task 8 Step 13 note).
 > Awaiting operator: real Cloudflare resources and the tenant origin DB URLs (`wrangler hyperdrive create` per tenant, never from this session).
 
 These are operator commands, not code.
@@ -2564,7 +2565,8 @@ The dispose call must be chained onto the end of the deferred work, not passed t
 `ctx.waitUntil` tasks run concurrently, so a separate `ctx.waitUntil(handle.dispose())` would close the client while queries are still in flight.
 The whole extension is capped at 30s after the response, which is well inside the 60s LINE reply-token window.
 
-- [ ] **Step 24: Check the production databases before the first migrate**
+- [x] **Step 24: Check the production databases before the first migrate**
+> Deviation: both databases verified live (`client_snapshots` columns `name`/`email` present on both), so no hand-backfill of those columns was needed. Instead of migrate:<tenant>, `job_state` was adopted by hand-SQL on both (see Task 9 Step 11).
 > Awaiting operator: the tenant origin DB URLs (`DATABASE_URL_MAOW` / `DATABASE_URL_SIMPLE_TRADE`); no production database may be touched here.
 
 Before `bun run migrate:maow` or `bun run migrate:simple-trade` touches a database that already holds data, confirm the two historic columns are present:
@@ -5695,7 +5697,8 @@ Expected: `Created queue 'hfm-events-maow'` and one such line per queue.
 Queue names are already written into both config files, so nothing needs pasting here.
 The dead letter queues must exist before a deploy that references them.
 
-- [ ] **Step 13: Create one Hyperdrive config per tenant, caching disabled**
+- [x] **Step 13: Create one Hyperdrive config per tenant, caching disabled**
+> Deviation (2026-09-26): `hfm-maow` created (`b02beba0c8704dc38a9b9c605892dcea`) against the Supabase SESSION pooler (port 5432), chosen over the operator's 6543 transaction-pooler URL because Hyperdrive needs prepared statements, which transaction mode floats. `hfm-simple-trade` creation failed with Cloudflare API code 2012 ('Databases must be configured to support SSL/TLS') - the origin Postgres at 46.202.162.53:20204 does not accept TLS yet; blocked on operator enabling SSL, then re-run create and paste the id.
 > Awaiting operator: the tenant origin Postgres URLs (DATABASE_URL_MAOW / DATABASE_URL_SIMPLE_TRADE) - hyperdrive create needs each origin connection string. Wrangler's OAuth scope for hyperdrive create is also unverified; if it fails on permissions, fall back to a dashboard-created token.
 
 ```bash
@@ -6194,7 +6197,8 @@ git add apps/api/package.json apps/api/tests/deploy-scripts.test.ts
 git commit -m "chore: add per-tenant wrangler scripts"
 ```
 
-- [ ] **Step 10: Create the per-tenant admin env files for migrations**
+- [x] **Step 10: Create the per-tenant admin env files for migrations**
+> Deviation: files filled by the orchestrator with operator-supplied URLs (git-ignored, chmod 600). maow uses the Supabase session pooler (5432); simple-trade uses its VPS Postgres (46.202.162.53:20204, port open and verified reachable).
 > Awaiting operator: both files are created with the plan's empty templates and are git-ignored via `.env.*.admin`; they need the real tenant origin DB URLs filled in from the operator's password manager.
 
 `scripts/migrate-tenant.ts` (Task 4) connects straight to PostgreSQL over TCP from the developer machine.
@@ -6225,7 +6229,8 @@ plain `DATABASE_URL` points at.
 Fill each with that tenant's PostgreSQL URL from the operator's password manager.
 Both file names match the `.env.*.admin` ignore pattern added in Task 8 Step 21.
 
-- [ ] **Step 11: Apply the migrations to each tenant database**
+- [x] **Step 11: Apply the migrations to each tenant database**
+> Deviation: `bun run migrate:<tenant>` was NOT run against either database: both are LIVE production databases that already carry the full 8-table schema from the old boot-time DDL, and the generated `drizzle/0000_init_schema.sql` uses plain `CREATE TABLE` (no `IF NOT EXISTS`), so the migrator would abort on the first table. Adopted instead via the Step 24 hand-SQL pattern: applied exactly the `0001_furry_king_cobra.sql` DDL as `CREATE TABLE IF NOT EXISTS job_state (...)` on both databases and verified the resulting columns. Known caveat: neither database has a drizzle migration journal (0000/0001 not recorded); any FUTURE schema change must be baselined (see docs/adr follow-up) instead of running migrate:<tenant> blindly.
 > Awaiting operator: `bun run migrate:maow` and `bun run migrate:simple-trade` need the real tenant origin DB URLs in `.env.maow.admin` / `.env.simple-trade.admin` first.
 
 ```bash

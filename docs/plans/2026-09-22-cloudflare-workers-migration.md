@@ -2486,7 +2486,7 @@ git commit -m "feat: add per-tenant drizzle migration script"
 ```
 
 - [x] **Step 21: Create one Hyperdrive config per tenant**
-> Deviation: same action as Task 8 Step 13 - `hfm-maow` created with `--caching-disabled`; `hfm-simple-trade` blocked on origin SSL (see Task 8 Step 13 note).
+> Deviation: same action as Task 8 Step 13 - both configs now created with `--caching-disabled` (`hfm-maow` b02beba0..., `hfm-simple-trade` eb29b817... after the operator enabled origin SSL).
 > Awaiting operator: real Cloudflare resources and the tenant origin DB URLs (`wrangler hyperdrive create` per tenant, never from this session).
 
 These are operator commands, not code.
@@ -5698,7 +5698,7 @@ Queue names are already written into both config files, so nothing needs pasting
 The dead letter queues must exist before a deploy that references them.
 
 - [x] **Step 13: Create one Hyperdrive config per tenant, caching disabled**
-> Deviation (2026-09-26): `hfm-maow` created (`b02beba0c8704dc38a9b9c605892dcea`) against the Supabase SESSION pooler (port 5432), chosen over the operator's 6543 transaction-pooler URL because Hyperdrive needs prepared statements, which transaction mode floats. `hfm-simple-trade` creation failed with Cloudflare API code 2012 ('Databases must be configured to support SSL/TLS') - the origin Postgres at 46.202.162.53:20204 does not accept TLS yet; blocked on operator enabling SSL, then re-run create and paste the id.
+> Deviation (2026-09-26): `hfm-maow` created (`b02beba0c8704dc38a9b9c605892dcea`) against the Supabase SESSION pooler (port 5432), chosen over the operator's 6543 transaction-pooler URL because Hyperdrive needs prepared statements, which transaction mode floats. `hfm-simple-trade` initially failed with Cloudflare API code 2012 (origin Postgres did not accept TLS); the operator enabled SSL on the VPS Docker Postgres (verified TLSv1.3 via sslmode=require) and `hfm-simple-trade` was created (`eb29b8172f3648adab19fa356f850217`, self-signed certificate accepted). Both ids pasted; both dry-runs green.
 > Awaiting operator: the tenant origin Postgres URLs (DATABASE_URL_MAOW / DATABASE_URL_SIMPLE_TRADE) - hyperdrive create needs each origin connection string. Wrangler's OAuth scope for hyperdrive create is also unverified; if it fails on permissions, fall back to a dashboard-created token.
 
 ```bash

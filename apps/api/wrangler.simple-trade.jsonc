@@ -48,7 +48,7 @@
   },
   // Created with --caching-disabled: this app reads its own writes and
   // Hyperdrive's query cache does not invalidate on write.
-  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<SIMPLE_TRADE_HYPERDRIVE_ID>" }],
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "eb29b8172f3648adab19fa356f850217" }],
   "kv_namespaces": [{ "binding": "CACHE", "id": "3b9345e00dca467fa9d323d08f901b87" }],
   "queues": {
     "producers": [{ "binding": "EVENT_QUEUE", "queue": "hfm-events-simple-trade" }],

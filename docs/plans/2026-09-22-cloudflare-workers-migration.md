@@ -6346,7 +6346,8 @@ That makes cutover one edit and rollback one edit, with no DNS TTL and no deploy
 
 ### Phase 1: staging on workers.dev
 
-- [ ] **Step 1: Create the staging resources**
+- [x] **Step 1: Create the staging resources**
+> Done 2026-09-27: KV `hfm_cache_staging` (48f904e9...), queues `hfm-events-staging` + `-dlq`, Hyperdrive `hfm-staging` (d3f6d061..., `--caching-disabled`). `STAGING_DATABASE_URL` = a new `hfm_staging` database the operator had me create on the VPS Postgres (46.202.162.53:20204).
 
 ```bash
 cd apps/api
@@ -6363,7 +6364,8 @@ Export it in the shell from the operator's password manager; never write it into
 
 Expected: the KV command prints a namespace id, each queue command prints `Created queue '...'`, and the Hyperdrive command prints a config id.
 
-- [ ] **Step 2: Create `apps/api/staging/wrangler.maow-staging.jsonc`**
+- [x] **Step 2: Create `apps/api/staging/wrangler.maow-staging.jsonc`**
+> Deviation: `REPLACE_WITH_TESTER_LINE_UID` still pending - `LINE_NOTIFY_UIDS` deployed as empty (no pushes until the tester UID lands; needed before Step 16).
 
 ```jsonc
 {
@@ -6432,7 +6434,8 @@ Then replace, in that file only:
 - `REPLACE_WITH_MAOW_WALLET_ID` with the same wallet id used in `wrangler.maow.jsonc`;
 - `REPLACE_WITH_TESTER_LINE_UID` with the LINE UID of the person doing the smoke test.
 
-- [ ] **Step 3: Create the staging schema**
+- [x] **Step 3: Create the staging schema**
+> Done via the real drizzle migrator (fresh DB): 9 tables including `job_state`. The benign `truncate_identifier` NOTICE for the long FK name appears, as in the Task 4 smoke.
 
 ```bash
 cd apps/api
@@ -6444,7 +6447,8 @@ Expected: `[migrate] migrations applied to maow-staging`.
 
 `.env.staging.admin` matches the `.env.*.admin` ignore pattern from Task 8 Step 21, so it cannot be committed.
 
-- [ ] **Step 4: Upload the staging secrets from the LINE test channel**
+- [x] **Step 4: Upload the staging secrets from the LINE test channel**
+> LINE token/secret from the operator's test channel; `HFM_API_KEY` and `INTERNAL_API_KEY` reuse the production values (partner/system keys, not channel-scoped) with operator knowledge.
 
 Create a second LINE Messaging API channel for testing, or use the existing development channel.
 
@@ -6458,7 +6462,8 @@ bunx wrangler secret put INTERNAL_API_KEY -c staging/wrangler.maow-staging.jsonc
 
 Use the **test** channel's token and secret here, never the production tenant's.
 
-- [ ] **Step 5: Dry run, then deploy staging**
+- [x] **Step 5: Dry run, then deploy staging**
+> `$STAGING_URL` = `https://hfm-bot-maow-staging.theerakarnm.workers.dev` (schedule `*/5`, queue producer+consumer wired). Health probed: `{"status":"healthy","checks":{"database":"ok","hfm_api":"ok"}}` and wrong key returns 401 - Steps 7-8 effectively pass early.
 
 ```bash
 cd apps/api

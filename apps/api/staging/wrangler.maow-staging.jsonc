@@ -1,0 +1,59 @@
+{
+  // Staging spec for the maow tenant. It lives outside the wrangler.*.jsonc
+  // glob on purpose, so tests/tenant-config.test.ts never sees a config with
+  // workers_dev: true. Deploy with:
+  //   bunx wrangler deploy -c staging/wrangler.maow-staging.jsonc
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "hfm-bot-maow-staging",
+  "main": "../src/worker.ts",
+  "compatibility_date": "2026-09-22",
+  // Staging is reached on <name>.<account>.workers.dev, so no route is set
+  // and workers_dev stays true. Production is the opposite of both.
+  "workers_dev": true,
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "limits": { "cpu_ms": 300000 },
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "vars": {
+    "TENANT": "maow-staging",
+    "HFM_API_BASE_URL": "https://api.hfaffiliates.com",
+    "TARGET_WALLET": "30506525",
+    "DEPOSIT_THRESHOLD_USD": "200",
+    "DEPOSIT_THRESHOLD_USC": "20000",
+    "LINE_WHITELIST_ENABLED": "true",
+    "LINE_WHITELIST_UIDS": "",
+    "LINE_GROUP_WHITELIST_ENABLED": "true",
+    "LINE_GROUP_WHITELIST_IDS": "",
+    // Awaiting operator: tester LINE UID for the smoke-test alerts (Step 16).
+    "LINE_NOTIFY_UIDS": "",
+    "LAST_TRADE_DEADLINE_MS": "8000",
+    "FLEX_SUMMARY_VERSION": "flex-v1",
+    "LOT_DISPLAY_MODE": "always",
+    "LOG_LEVEL": "debug"
+  },
+  "secrets": {
+    "required": [
+      "LINE_CHANNEL_ACCESS_TOKEN",
+      "LINE_CHANNEL_SECRET",
+      "HFM_API_KEY",
+      "INTERNAL_API_KEY"
+    ]
+  },
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "d3f6d06172df4dd8b77894b803de134f" }],
+  "kv_namespaces": [{ "binding": "CACHE", "id": "48f904e93fd441abb3153642948d4079" }],
+  "queues": {
+    "producers": [{ "binding": "EVENT_QUEUE", "queue": "hfm-events-staging" }],
+    "consumers": [
+      {
+        "queue": "hfm-events-staging",
+        // One LINE event per invocation: a batch runs sequentially, so a
+        // bigger batch lets one slow lookup expire the next reply token (60s).
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        // No retries: a retry can reuse a spent reply token and push a
+        // duplicate answer. Failures go straight to the dead letter queue.
+        "max_retries": 0,
+        "dead_letter_queue": "hfm-events-staging-dlq"
+      }
+    ]
+  }
+}

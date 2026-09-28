@@ -12,7 +12,8 @@
   "workers_dev": true,
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "limits": { "cpu_ms": 300000 },
-  "triggers": { "crons": ["*/5 * * * *"] },
+  // Operator-requested stop (2026-09-27): crons emptied. Restore to ["*/5 * * * *"] to resume.
+  "triggers": { "crons": [] },
   "vars": {
     "TENANT": "maow-staging",
     "HFM_API_BASE_URL": "https://api.hfaffiliates.com",
@@ -41,19 +42,8 @@
   "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "d3f6d06172df4dd8b77894b803de134f" }],
   "kv_namespaces": [{ "binding": "CACHE", "id": "48f904e93fd441abb3153642948d4079" }],
   "queues": {
-    "producers": [{ "binding": "EVENT_QUEUE", "queue": "hfm-events-staging" }],
-    "consumers": [
-      {
-        "queue": "hfm-events-staging",
-        // One LINE event per invocation: a batch runs sequentially, so a
-        // bigger batch lets one slow lookup expire the next reply token (60s).
-        "max_batch_size": 1,
-        "max_batch_timeout": 0,
-        // No retries: a retry can reuse a spent reply token and push a
-        // duplicate answer. Failures go straight to the dead letter queue.
-        "max_retries": 0,
-        "dead_letter_queue": "hfm-events-staging-dlq"
-      }
-    ]
+    // Operator-requested stop (2026-09-27): consumer removed so the queue is
+    // not consumed. Restore the block from the plan's Task 10 Step 2 to resume.
+    "producers": [{ "binding": "EVENT_QUEUE", "queue": "hfm-events-staging" }]
   }
 }

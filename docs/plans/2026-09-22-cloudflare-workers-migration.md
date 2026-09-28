@@ -6463,7 +6463,7 @@ bunx wrangler secret put INTERNAL_API_KEY -c staging/wrangler.maow-staging.jsonc
 Use the **test** channel's token and secret here, never the production tenant's.
 
 - [x] **Step 5: Dry run, then deploy staging**
-> `$STAGING_URL` = `https://hfm-bot-maow-staging.theerakarnm.workers.dev` (schedule `*/5`, queue producer+consumer wired). Health probed: `{"status":"healthy","checks":{"database":"ok","hfm_api":"ok"}}` and wrong key returns 401 - Steps 7-8 effectively pass early.
+> `$STAGING_URL` = `https://hfm-bot-maow-staging.theerakarnm.workers.dev` (schedule `*/5`, queue producer+consumer wired). Operator requested a full stop on 2026-09-27: redeployed with empty `triggers.crons` and no queue consumer (cron line gone from deploy output). Resume = restore both blocks in `staging/wrangler.maow-staging.jsonc` from the plan's Step 2 and redeploy. Health probed: `{"status":"healthy","checks":{"database":"ok","hfm_api":"ok"}}` and wrong key returns 401 - Steps 7-8 effectively pass early.
 
 ```bash
 cd apps/api

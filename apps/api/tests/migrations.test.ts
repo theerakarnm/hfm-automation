@@ -17,6 +17,8 @@ const REQUIRED_TABLES = [
   "client_request_snapshots",
   "client_request_snapshot_rows",
   "job_state",
+  "account_match_state",
+  "wallet_idle_alerts",
 ];
 
 const REQUIRED_INDEXES = ["idx_snapshot_date", "idx_req_snapshot_date"];

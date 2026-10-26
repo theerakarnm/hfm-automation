@@ -130,7 +130,7 @@ Put the printed numbers (never the key) in the PR description. No commit for thi
 - Modify: `tests/migrations.test.ts`
 - Generated: `drizzle/0002_*.sql`, `drizzle/meta/*`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `tests/migrations.test.ts`, change the end of `REQUIRED_TABLES` to:
 
@@ -141,12 +141,12 @@ In `tests/migrations.test.ts`, change the end of `REQUIRED_TABLES` to:
 ];
 ```
 
-- [ ] **Step 2: Run it and see it fail**
+- [x] **Step 2: Run it and see it fail**
 
 Run: `bun test tests/migrations.test.ts`
 Expected: FAIL. The new tables have no `CREATE TABLE`.
 
-- [ ] **Step 3: Add the tables to the schema**
+- [x] **Step 3: Add the tables to the schema**
 
 Append to `src/db/schema.ts`:
 
@@ -172,12 +172,12 @@ export const walletIdleAlerts = pgTable("wallet_idle_alerts", {
 });
 ```
 
-- [ ] **Step 4: Generate the migration. Never hand-write it.**
+- [x] **Step 4: Generate the migration. Never hand-write it.**
 
 Run: `bunx drizzle-kit generate`
 Expected: a new `drizzle/0002_*.sql` with two `CREATE TABLE` statements and an updated `drizzle/meta/_journal.json`.
 
-- [ ] **Step 5: Keep the test schema helper in step**
+- [x] **Step 5: Keep the test schema helper in step**
 
 In `tests/db-helpers.ts`, inside `applyTestSchema`, before the closing backtick, add:
 
@@ -200,7 +200,7 @@ In `createTestDb`, add to the DROP list:
     DROP TABLE IF EXISTS wallet_idle_alerts CASCADE;
 ```
 
-- [ ] **Step 6: Run and commit**
+- [x] **Step 6: Run and commit**
 
 Run: `bun test tests/migrations.test.ts && bun run typecheck`
 Expected: PASS.

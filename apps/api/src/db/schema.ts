@@ -136,3 +136,23 @@ export const jobState = pgTable("job_state", {
     .notNull()
     .default(sql`now()`),
 });
+
+// One row per account already reported as matched (cumulative deposits above
+// the threshold). A row means "do not notify this account again". The first
+// scan fills it silently, so accounts that already qualify when the feature
+// goes live are not announced.
+export const accountMatchState = pgTable("account_match_state", {
+  accountId: integer("account_id").primaryKey(),
+  matchedAt: timestamp("matched_at", { mode: "string" })
+    .notNull()
+    .default(sql`now()`),
+});
+
+// One row per wallet with an open "no trade for N days" alert. The row is
+// deleted when the wallet trades again, so the next idle spell alerts again.
+export const walletIdleAlerts = pgTable("wallet_idle_alerts", {
+  walletId: integer("wallet_id").primaryKey(),
+  alertedAt: timestamp("alerted_at", { mode: "string" })
+    .notNull()
+    .default(sql`now()`),
+});

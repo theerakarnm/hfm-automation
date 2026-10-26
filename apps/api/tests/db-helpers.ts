@@ -91,6 +91,16 @@ export async function applyTestSchema(
       value      TEXT NOT NULL,
       updated_at TIMESTAMP NOT NULL DEFAULT now()
     );
+
+    CREATE TABLE IF NOT EXISTS account_match_state (
+      account_id INTEGER PRIMARY KEY,
+      matched_at TIMESTAMP NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS wallet_idle_alerts (
+      wallet_id  INTEGER PRIMARY KEY,
+      alerted_at TIMESTAMP NOT NULL DEFAULT now()
+    );
   `);
 }
 
@@ -108,6 +118,8 @@ export async function createTestDb() {
     DROP TABLE IF EXISTS notify_recipients CASCADE;
     DROP TABLE IF EXISTS client_snapshots CASCADE;
     DROP TABLE IF EXISTS job_state CASCADE;
+    DROP TABLE IF EXISTS account_match_state CASCADE;
+    DROP TABLE IF EXISTS wallet_idle_alerts CASCADE;
   `);
 
   await applyTestSchema(db);

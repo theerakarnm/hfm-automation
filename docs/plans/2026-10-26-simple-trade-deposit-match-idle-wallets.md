@@ -563,7 +563,7 @@ git commit -m "feat: show Partial Match when only TARGET_WALLET differs"
 - Create: `src/services/scan-rules.ts`
 - Create: `tests/scan-rules.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/scan-rules.test.ts`:
 
@@ -744,12 +744,12 @@ describe("joinScanAccounts", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and see it fail**
+- [x] **Step 2: Run it and see it fail**
 
 Run: `bun test tests/scan-rules.test.ts`
 Expected: FAIL. Module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `src/services/scan-rules.ts`:
 
@@ -874,7 +874,7 @@ export function idleWallets(
 }
 ```
 
-- [ ] **Step 4: Run and commit**
+- [x] **Step 4: Run and commit**
 
 Run: `bun test tests/scan-rules.test.ts && bun run typecheck`
 Expected: PASS.

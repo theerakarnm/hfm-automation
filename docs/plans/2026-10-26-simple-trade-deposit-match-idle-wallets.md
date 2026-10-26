@@ -1221,7 +1221,7 @@ git commit -m "feat: add scan message builders, share recipient lookup"
 - Create: `src/jobs/deposit-idle-scan.ts`
 - Create: `tests/deposit-idle-scan.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/deposit-idle-scan.test.ts`:
 
@@ -1460,12 +1460,12 @@ describe("idle wallets", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and see it fail**
+- [x] **Step 2: Run it and see it fail**
 
 Run: `bun test tests/deposit-idle-scan.test.ts`
 Expected: FAIL. Module not found.
 
-- [ ] **Step 3: Implement the job**
+- [x] **Step 3: Implement the job**
 
 Create `src/jobs/deposit-idle-scan.ts`:
 
@@ -1643,7 +1643,9 @@ async function runIdleWallets(
 }
 ```
 
-- [ ] **Step 4: Run and commit**
+> Deviation: Step 3 reference code used `await Promise.all([...])` for the two HFM fetches; tests/no-unbounded-fanout.test.ts bans the `Promise.all(` API anywhere in src/ (Workers 6-connection budget), so the job now starts both fetches and awaits them as two fixed promises (still concurrent). The Step 4 widening hint was not needed: typecheck accepted the test fakes against `typeof fetchAllClients` unchanged.
+
+- [x] **Step 4: Run and commit**
 
 Run: `bun test tests/deposit-idle-scan.test.ts && bun run typecheck`
 Expected: PASS.

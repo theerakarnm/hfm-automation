@@ -892,7 +892,7 @@ git commit -m "feat: add pure deposit match and idle wallet rules"
 - Create: `src/repositories/scan-state.repository.ts`
 - Create: `tests/scan-state.repository.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/scan-state.repository.test.ts`:
 
@@ -962,12 +962,12 @@ describe("idle claims", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and see it fail**
+- [x] **Step 2: Run it and see it fail**
 
 Run: `bun test tests/scan-state.repository.test.ts`
 Expected: FAIL. Module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `src/repositories/scan-state.repository.ts`:
 
@@ -1044,7 +1044,7 @@ export async function clearRecoveredIdleAlerts(
 }
 ```
 
-- [ ] **Step 4: Run and commit**
+- [x] **Step 4: Run and commit**
 
 Run: `bun test tests/scan-state.repository.test.ts && bun run typecheck`
 Expected: PASS.

@@ -35,6 +35,10 @@ export interface ConditionCheck {
   underTargetWallet: boolean;
   depositThresholdMet: boolean;
   matchAll: boolean;
+  // Set only by the deposits rule: the deposit condition passed but the
+  // account is not under TARGET_WALLET. Optional so the balance rule and the
+  // frozen card tests do not have to mention it.
+  partialMatch?: boolean;
 }
 
 export interface HFMClientsPerformanceResponse {

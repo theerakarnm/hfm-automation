@@ -97,6 +97,35 @@ export function getDepositThreshold(accountCurrency: string): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+// Which condition decides the deposit half of "Match". "balance" is the
+// original rule (current balance >= threshold). "deposits" is cumulative
+// deposits strictly above the threshold, USD and USC accounts only. Read per
+// call for the same reason as the other flags: Bun caches the module.
+export type MatchRule = "balance" | "deposits";
+
+export function getMatchRule(): MatchRule {
+  const raw = (process.env.MATCH_RULE ?? "").trim().toLowerCase();
+  return raw === "deposits" ? "deposits" : "balance";
+}
+
+// Days without a trade before a wallet is reported. Anything that is not a
+// positive whole number (including unset) turns the idle alert off.
+export function getIdleAlertDays(): number {
+  const parsed = Number((process.env.IDLE_ALERT_DAYS ?? "").trim());
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+}
+
+// Cumulative deposits strictly above the per-currency threshold. USC deposits
+// arrive in cents and DEPOSIT_THRESHOLD_USC is in cents too, so one comparison
+// serves both. THB, EUR and any other currency never qualify.
+export function depositsExceedThreshold(
+  deposits: number | string | null | undefined,
+  accountCurrency: string,
+): boolean {
+  if (accountCurrency !== "USD" && accountCurrency !== "USC") return false;
+  return toNum(deposits) > getDepositThreshold(accountCurrency);
+}
+
 export function parsePerformanceLookup(input: string): PerformanceLookup | null {
   const trimmed = input.trim();
 
@@ -132,12 +161,15 @@ export function checkConditions(
   const underTargetWallet =
     !Number.isNaN(targetWallet) && walletNum === targetWallet;
 
-  const depositThreshold = getDepositThreshold(data.account_currency);
-  const depositThresholdMet = data.balance >= depositThreshold;
+  const useDeposits = getMatchRule() === "deposits";
+  const depositThresholdMet = useDeposits
+    ? depositsExceedThreshold(data.deposits, data.account_currency)
+    : data.balance >= getDepositThreshold(data.account_currency);
 
   const matchAll = underTargetWallet && depositThresholdMet;
+  const partialMatch = useDeposits && depositThresholdMet && !underTargetWallet;
 
-  return { underTargetWallet, depositThresholdMet, matchAll };
+  return { underTargetWallet, depositThresholdMet, matchAll, partialMatch };
 }
 
 async function readJsonResponse<T>(res: Response): Promise<T> {

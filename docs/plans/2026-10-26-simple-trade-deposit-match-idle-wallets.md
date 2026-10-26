@@ -219,7 +219,7 @@ git commit -m "feat: add match and idle alert state tables"
 - Modify: `src/services/hfm.service.ts`
 - Create: `tests/match-rule.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/match-rule.test.ts`:
 
@@ -362,12 +362,12 @@ describe("checkConditions with the default balance rule", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and see it fail**
+- [x] **Step 2: Run it and see it fail**
 
 Run: `bun test tests/match-rule.test.ts`
 Expected: FAIL. The new exports do not exist.
 
-- [ ] **Step 3: Extend the type**
+- [x] **Step 3: Extend the type**
 
 In `src/types/hfm.types.ts` change `ConditionCheck` to:
 
@@ -383,7 +383,7 @@ export interface ConditionCheck {
 }
 ```
 
-- [ ] **Step 4: Implement the helpers and the branch**
+- [x] **Step 4: Implement the helpers and the branch**
 
 In `src/services/hfm.service.ts`, directly after `getDepositThreshold`, add:
 
@@ -443,13 +443,13 @@ with
   return { underTargetWallet, depositThresholdMet, matchAll, partialMatch };
 ```
 
-- [ ] **Step 5: Run the new and the old tests**
+- [x] **Step 5: Run the new and the old tests**
 
 Run: `bun test tests/match-rule.test.ts tests/hfm.service.test.ts && bun run typecheck`
 Expected: PASS.
 If an old `checkConditions` test compares a whole object with `toEqual`, add `partialMatch: false` to its expected value.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/types/hfm.types.ts src/services/hfm.service.ts tests/match-rule.test.ts tests/hfm.service.test.ts

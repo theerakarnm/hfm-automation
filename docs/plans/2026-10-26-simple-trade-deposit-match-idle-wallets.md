@@ -1064,7 +1064,7 @@ git commit -m "feat: add scan state repository"
 - Create: `src/jobs/scan-messages.ts`
 - Create: `tests/scan-messages.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/scan-messages.test.ts`:
 
@@ -1126,12 +1126,12 @@ describe("buildIdleMessage", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and see it fail**
+- [x] **Step 2: Run it and see it fail**
 
 Run: `bun test tests/scan-messages.test.ts`
 Expected: FAIL. Module not found.
 
-- [ ] **Step 3: Implement the message builders**
+- [x] **Step 3: Implement the message builders**
 
 Create `src/jobs/scan-messages.ts`:
 
@@ -1185,7 +1185,7 @@ export function buildIdleMessage(wallets: IdleWallet[], days: number): string {
 }
 ```
 
-- [ ] **Step 4: Move the recipient lookup into the repository**
+- [x] **Step 4: Move the recipient lookup into the repository**
 
 Append to `src/repositories/recipient.repository.ts`:
 
@@ -1203,7 +1203,7 @@ In `src/jobs/hfm-healthcheck.ts`:
 - change the recipient import to `import { resolveNotifyUids } from "../repositories/recipient.repository";`,
 - replace `options.getUidsFn ?? resolveUids` with `options.getUidsFn ?? resolveNotifyUids`.
 
-- [ ] **Step 5: Run and commit**
+- [x] **Step 5: Run and commit**
 
 Run: `bun test tests/scan-messages.test.ts tests/hfm-healthcheck.test.ts tests/recipient.repository.test.ts && bun run typecheck`
 Expected: PASS.

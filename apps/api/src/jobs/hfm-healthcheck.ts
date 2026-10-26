@@ -1,6 +1,6 @@
 import { getDb, type DrizzleDb } from "../db/connection";
 import { getJobState, setJobState } from "../db/state.repository";
-import { getActiveUids, seedFromEnv } from "../repositories/recipient.repository";
+import { resolveNotifyUids } from "../repositories/recipient.repository";
 import { checkHfmApiHealthy } from "../services/hfm.service";
 import { pushToAll } from "../services/line.service";
 
@@ -26,18 +26,13 @@ export interface RunHfmHealthCheckOptions {
   setStateFn?: (db: DrizzleDb, key: string, value: string) => Promise<void>;
 }
 
-async function resolveUids(db: DrizzleDb): Promise<string[]> {
-  await seedFromEnv(db, process.env.LINE_NOTIFY_UIDS ?? "");
-  return getActiveUids(db);
-}
-
 export async function runHfmHealthCheck(
   options: RunHfmHealthCheckOptions = {},
 ): Promise<void> {
   const db = options.db ?? getDb();
   const checkHealthy = options.checkHealthyFn ?? checkHfmApiHealthy;
   const pushAll = options.pushToAllFn ?? pushToAll;
-  const getUids = options.getUidsFn ?? resolveUids;
+  const getUids = options.getUidsFn ?? resolveNotifyUids;
   const getState = options.getStateFn ?? getJobState;
   const setState = options.setStateFn ?? setJobState;
 

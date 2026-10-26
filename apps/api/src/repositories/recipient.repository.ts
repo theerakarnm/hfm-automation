@@ -32,3 +32,10 @@ export async function getActiveUids(db: DrizzleDb): Promise<string[]> {
     .where(eq(notifyRecipients.active, 1));
   return rows.map((r) => r.lineUid);
 }
+
+// Seeds LINE_NOTIFY_UIDS into the table (idempotent) and returns everyone who
+// is active. Shared by every job that pushes to the notify list.
+export async function resolveNotifyUids(db: DrizzleDb): Promise<string[]> {
+  await seedFromEnv(db, process.env.LINE_NOTIFY_UIDS ?? "");
+  return getActiveUids(db);
+}

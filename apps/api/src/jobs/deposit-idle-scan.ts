@@ -119,11 +119,16 @@ async function runDepositMatch(
     return;
   }
 
+  // Claim first, then push: claiming prevents duplicate announcements, at the
+  // cost that an isolate dying between claim and push loses that notice.
   const claimed = await claimNewMatches(db, ids);
   if (claimed.length === 0) return;
 
   const uids = await getUids(db);
   if (uids.length === 0) {
+    // Give the claims back so a later run announces these accounts once a
+    // recipient exists.
+    await releaseMatches(db, claimed);
     logInfo("daily-scan", { matches: claimed.length }, "no active recipients, match not announced");
     return;
   }
@@ -153,11 +158,16 @@ async function runIdleWallets(
   // Wallets that traded again lose their open alert, so a later idle spell
   // alerts again.
   await clearRecoveredIdleAlerts(db, ids);
+  // Claim first, then push: claiming prevents duplicate announcements, at the
+  // cost that an isolate dying between claim and push loses that notice.
   const claimed = await claimIdleAlerts(db, ids);
   if (claimed.length === 0) return;
 
   const uids = await getUids(db);
   if (uids.length === 0) {
+    // Give the claims back so a later run announces these wallets once a
+    // recipient exists.
+    await releaseIdleAlerts(db, claimed);
     logInfo("daily-scan", { idle: claimed.length }, "no active recipients, idle wallets not announced");
     return;
   }

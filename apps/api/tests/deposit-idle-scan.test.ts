@@ -92,6 +92,7 @@ function harness(initial: { perf?: HFMPerformanceData[]; clients?: HFMClientRow[
     perf: initial.perf ?? [],
     clients: initial.clients ?? [],
     now: "2026-10-26T00:00:00Z",
+    uids: ["U1"],
     failPush: false,
     failClients: false,
     fetchCalls: 0,
@@ -114,7 +115,7 @@ function harness(initial: { perf?: HFMPerformanceData[]; clients?: HFMClientRow[
           h.failClients
             ? { ok: false as const, reason: "timeout" as const }
             : { ok: true as const, data: h.clients },
-        getUidsFn: async () => ["U1"],
+        getUidsFn: async () => h.uids,
         pushToAllFn: async (_uids, text) => {
           if (h.failPush) throw new Error("push down");
           h.sent.push(text);
@@ -183,6 +184,19 @@ describe("deposit match", () => {
     expect(h.sent).toEqual([]);
     expect(await getJobState(db, MATCH_BASELINE_KEY)).toBeNull();
   });
+
+  test("a match with no recipients is announced once a recipient exists", async () => {
+    const h = harness({ perf: [perfRow({ account_id: 1 })] });
+    await h.run();
+    h.perf = [perfRow({ account_id: 1 }), perfRow({ account_id: 2, client_id: 20, deposits: 31 })];
+    h.uids = [];
+    await h.run();
+    expect(h.sent).toEqual([]);
+    h.uids = ["U1"];
+    await h.run();
+    expect(h.sent).toHaveLength(1);
+    expect(h.sent[0]).toContain("T2 (wallet 20)");
+  });
 });
 
 describe("idle wallets", () => {
@@ -228,5 +242,19 @@ describe("idle wallets", () => {
     });
     await h.run();
     expect(h.sent).toEqual([]);
+  });
+
+  test("an idle wallet with no recipients is announced once a recipient exists", async () => {
+    const h = harness({
+      perf: [perfRow()],
+      clients: [clientRow({ last_trade: "2026-09-01 10:00:00" })],
+    });
+    h.uids = [];
+    await h.run();
+    expect(h.sent).toEqual([]);
+    h.uids = ["U1"];
+    await h.run();
+    expect(h.sent).toHaveLength(1);
+    expect(h.sent[0]).toContain("• 10 - เทรดล่าสุด 2026-09-01");
   });
 });

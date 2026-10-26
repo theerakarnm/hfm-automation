@@ -18,15 +18,16 @@
   // CPU ceiling for HTTP invocations. Cron CPU is capped by the platform at
   // 30s for the */5 job, which limits does not raise.
   "limits": { "cpu_ms": 300000 },
-  // UTC only. The daily report cron was removed on purpose (commit 96e6a0e);
-  // run it by hand with `bun run trigger:daily-client-report`.
-  "triggers": { "crons": ["*/5 * * * *"] },
+  // UTC only. 30 17 is 00:30 in Bangkok. The daily report cron was removed on
+  // purpose (commit 96e6a0e); run it by hand with
+  // `bun run trigger:daily-client-report`.
+  "triggers": { "crons": ["*/5 * * * *", "30 17 * * *"] },
   "vars": {
     "TENANT": "simple-trade",
     "HFM_API_BASE_URL": "https://api.hfaffiliates.com",
     "TARGET_WALLET": "55946812",
-    "DEPOSIT_THRESHOLD_USD": "10",
-    "DEPOSIT_THRESHOLD_USC": "1000",
+    "DEPOSIT_THRESHOLD_USD": "30",
+    "DEPOSIT_THRESHOLD_USC": "3000",
     "LINE_WHITELIST_ENABLED": "false",
     "LINE_WHITELIST_UIDS": "U933b5efab0122b77587b4cb0080ac1e2,U151f52f387b8ea7c49b19c6e0dfbd515,U5502febf389ed0ca31fa13ccc9a16791,U20906e3c94bf7a912b7f3d00b6780389",
     "LINE_GROUP_WHITELIST_ENABLED": "true",
@@ -35,6 +36,8 @@
     "LAST_TRADE_DEADLINE_MS": "8000",
     "FLEX_SUMMARY_VERSION": "flex-v2",
     "LOT_DISPLAY_MODE": "lot_prefix_only",
+    "MATCH_RULE": "deposits",
+    "IDLE_ALERT_DAYS": "21",
     "LOG_LEVEL": "info"
   },
   // Names only, never values. A missing secret is reported at deploy time.

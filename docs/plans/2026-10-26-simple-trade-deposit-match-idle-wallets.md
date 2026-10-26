@@ -1667,7 +1667,7 @@ git commit -m "feat: add daily deposit match and idle wallet scan"
 - Modify: `.env.example`
 - Modify: `tests/worker.test.ts`, `tests/tenant-config.test.ts`
 
-- [ ] **Step 1: Update the tests first**
+- [x] **Step 1: Update the tests first**
 
 In `tests/worker.test.ts` replace the test `does not schedule the daily client report` with:
 
@@ -1695,12 +1695,12 @@ In `tests/tenant-config.test.ts`:
     expect(first).toBe("./src/worker.ts|2026-09-22|*/5 * * * *;30 17 * * *");
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run: `bun test tests/worker.test.ts tests/tenant-config.test.ts`
 Expected: FAIL.
 
-- [ ] **Step 3: Register the cron**
+- [x] **Step 3: Register the cron**
 
 In `src/jobs/index.ts` add the import
 
@@ -1733,7 +1733,7 @@ and in `dispatchCron`, directly before `await runStep("hfm-healthcheck", ...)`, 
 
 ```
 
-- [ ] **Step 4: Declare the vars**
+- [x] **Step 4: Declare the vars**
 
 In `src/config/env.ts`, in `WorkerEnv` after `LOT_DISPLAY_MODE: string;` add:
 
@@ -1797,12 +1797,12 @@ MATCH_RULE=balance
 IDLE_ALERT_DAYS=0
 ```
 
-- [ ] **Step 5: Run the suite**
+- [x] **Step 5: Run the suite**
 
 Run: `bun test && bun run typecheck && bun run check:bundle:maow && bun run check:bundle:simple-trade`
 Expected: all tests pass, typecheck silent, both bundles exit 0.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/jobs/index.ts src/config/env.ts wrangler.maow.jsonc wrangler.simple-trade.jsonc .env.example tests/worker.test.ts tests/tenant-config.test.ts

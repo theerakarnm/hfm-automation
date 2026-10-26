@@ -24,6 +24,8 @@ export interface WorkerEnv {
   LAST_TRADE_DEADLINE_MS: string;
   FLEX_SUMMARY_VERSION: string;
   LOT_DISPLAY_MODE: string;
+  MATCH_RULE: string;
+  IDLE_ALERT_DAYS: string;
   LOG_LEVEL: string;
 
   // secrets (wrangler secret put <NAME> -c wrangler.<tenant>.jsonc)

@@ -6,11 +6,15 @@ describe("cron dispatch", () => {
     expect(cronJobName("*/5 * * * *")).toBe("hfm-healthcheck");
   });
 
-  // The daily report cron was removed on purpose in commit 96e6a0e.
-  test("does not schedule the daily client report", () => {
+  test("maps the daily scan schedule (00:30 Bangkok is 17:30 UTC)", () => {
+    expect(cronJobName("30 17 * * *")).toBe("daily-scan");
+  });
+
+  // The daily client report cron was removed on purpose in commit 96e6a0e.
+  test("still does not schedule the daily client report", () => {
     expect(cronJobName("0 1 * * *")).toBeNull();
     expect(cronJobName("0 22 * * *")).toBeNull();
-    expect(Object.values(CRON_JOBS)).toEqual(["hfm-healthcheck"]);
+    expect(Object.values(CRON_JOBS)).toEqual(["hfm-healthcheck", "daily-scan"]);
   });
 
   test("returns null for an unknown schedule", () => {

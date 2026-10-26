@@ -1,4 +1,5 @@
 import { runHfmHealthCheck } from "./hfm-healthcheck";
+import { runDailyScan } from "./deposit-idle-scan";
 import { refreshLastTradeCache } from "../services/last-trade.service";
 import { purgeEventClaims } from "../db/state.repository";
 import { getDb } from "../db/connection";
@@ -15,6 +16,9 @@ import { logError, logInfo } from "../utils/logger";
 export const CRON_JOBS = {
   // Every 5 minutes. Interval independent of timezone.
   "*/5 * * * *": "hfm-healthcheck",
+  // 00:30 Asia/Bangkok. A tenant that sets MATCH_RULE=balance and
+  // IDLE_ALERT_DAYS=0 makes this tick a no-op.
+  "30 17 * * *": "daily-scan",
 } as const;
 
 export type CronJobName = (typeof CRON_JOBS)[keyof typeof CRON_JOBS];
@@ -43,6 +47,11 @@ export async function dispatchCron(cron: string): Promise<void> {
   const name = cronJobName(cron);
   if (!name) {
     logError("cron", `no job registered for schedule "${cron}"`);
+    return;
+  }
+
+  if (name === "daily-scan") {
+    await runStep("daily-scan", () => runDailyScan());
     return;
   }
 

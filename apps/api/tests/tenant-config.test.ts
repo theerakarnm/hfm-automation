@@ -25,6 +25,8 @@ const REQUIRED_VAR_KEYS = [
   "LAST_TRADE_DEADLINE_MS",
   "FLEX_SUMMARY_VERSION",
   "LOT_DISPLAY_MODE",
+  "MATCH_RULE",
+  "IDLE_ALERT_DAYS",
   "LOG_LEVEL",
 ] as const;
 
@@ -307,8 +309,9 @@ describe("wrangler tenant configs", () => {
         `${configs[i]!.file}: ${first}`,
       );
     }
-    // Only the 5 minute job. The daily report cron was removed on purpose in
-    // commit 96e6a0e and must not come back through a tenant config.
-    expect(first).toBe("./src/worker.ts|2026-09-22|*/5 * * * *");
+    // The 5 minute health check and the 00:30 Bangkok (17:30 UTC) daily scan.
+    // The daily client report cron was removed on purpose in commit 96e6a0e
+    // and must not come back through a tenant config.
+    expect(first).toBe("./src/worker.ts|2026-09-22|*/5 * * * *;30 17 * * *");
   });
 });

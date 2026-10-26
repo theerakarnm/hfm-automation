@@ -464,7 +464,7 @@ git commit -m "feat: add deposits match rule behind MATCH_RULE"
 - Modify: `src/builders/flex-message.builder.ts`
 - Modify: `tests/flex-message.builder.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/flex-message.builder.test.ts` (it already defines `mockData`, `notMatchConditions` and `extractTexts`):
 
@@ -493,12 +493,12 @@ describe("partial match (deposits rule)", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and see it fail**
+- [x] **Step 2: Run it and see it fail**
 
 Run: `bun test tests/flex-message.builder.test.ts -t "partial match"`
 Expected: FAIL.
 
-- [ ] **Step 3: Replace the badge helper**
+- [x] **Step 3: Replace the badge helper**
 
 In `src/builders/flex-message.builder.ts`, replace the whole `getMatchAllMeta` function with:
 
@@ -543,12 +543,12 @@ grep -n "getMatchAllMeta" src/builders/flex-message.builder.ts
 
 Expected: the `grep` prints nothing.
 
-- [ ] **Step 4: Run the whole builder suite**
+- [x] **Step 4: Run the whole builder suite**
 
 Run: `bun test tests/flex-message.builder.test.ts && bun run typecheck`
 Expected: PASS, including the frozen v1 and v2 JSON. maow output must not change.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/builders/flex-message.builder.ts tests/flex-message.builder.test.ts

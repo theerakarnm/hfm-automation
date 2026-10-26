@@ -121,14 +121,21 @@ const getAccountStatusMeta = (
   };
 };
 
-const getMatchAllMeta = (
-  matchAll: boolean
+const getMatchMeta = (
+  conditions: ConditionCheck
 ): { label: string; color: string; backgroundColor: string } => {
-  if (matchAll) {
+  if (conditions.matchAll) {
     return {
       label: "\u2713 Match All",
       color: colors.green,
       backgroundColor: colors.greenSoft,
+    };
+  }
+  if (conditions.partialMatch) {
+    return {
+      label: "\u25D0 Partial Match",
+      color: "#B45309",
+      backgroundColor: "#FEF3C7",
     };
   }
   return {
@@ -141,6 +148,7 @@ const getMatchAllMeta = (
 const getFailedConditionsText = (
   conditions: ConditionCheck
 ): string[] => {
+  if (conditions.partialMatch) return ["TARGET_WALLET does not match"];
   const failed: string[] = [];
   if (!conditions.underTargetWallet) {
     failed.push("Wallet does not match target");
@@ -244,7 +252,7 @@ export function buildTradingCardV1(
 ): object {
   const status = getStatusMeta(data.activity_status);
   const accountStatus = getAccountStatusMeta(data.status);
-  const matchAllBadge = getMatchAllMeta(conditions.matchAll);
+  const matchAllBadge = getMatchMeta(conditions);
   const walletIdValue = String(data.client_id);
   const accountIdValue = String(data.account_id);
   const lastTrade = fmtLastTrade(data.last_trade);
@@ -435,7 +443,7 @@ export function buildTradingCardV2(
 ): object {
   const status = getStatusMeta(data.activity_status);
   const accountStatus = getAccountStatusMeta(data.status);
-  const matchAllBadge = getMatchAllMeta(conditions.matchAll);
+  const matchAllBadge = getMatchMeta(conditions);
   const walletIdValue = String(data.client_id);
   const accountIdValue = String(data.account_id);
   const lastTrade = fmtLastTrade(data.last_trade);

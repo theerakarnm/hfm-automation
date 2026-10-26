@@ -545,3 +545,26 @@ describe("flex-v2 trading card", () => {
     expect(texts).not.toContain("Rank");
   });
 });
+
+describe("partial match (deposits rule)", () => {
+  const partial = {
+    underTargetWallet: false,
+    depositThresholdMet: true,
+    matchAll: false,
+    partialMatch: true,
+  };
+
+  test("the card says Partial Match and names TARGET_WALLET", () => {
+    const texts = extractTexts(buildTradingCard(mockData, partial, {}));
+    expect(texts.some((t) => t.includes("Partial Match"))).toBe(true);
+    expect(texts.some((t) => t.includes("TARGET_WALLET does not match"))).toBe(true);
+    expect(texts.some((t) => t.includes("Not Match"))).toBe(false);
+    expect(texts.some((t) => t.includes("Wallet does not match target"))).toBe(false);
+  });
+
+  test("a card without partialMatch is unchanged", () => {
+    const texts = extractTexts(buildTradingCard(mockData, notMatchConditions, {}));
+    expect(texts.some((t) => t.includes("Not Match"))).toBe(true);
+    expect(texts.some((t) => t.includes("Wallet does not match target"))).toBe(true);
+  });
+});

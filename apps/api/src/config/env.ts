@@ -16,6 +16,7 @@ export interface WorkerEnv {
   TARGET_WALLET: string;
   DEPOSIT_THRESHOLD_USD: string;
   DEPOSIT_THRESHOLD_USC: string;
+  DEPOSIT_MATCH_RULE: string;
   LINE_WHITELIST_ENABLED: string;
   LINE_WHITELIST_UIDS: string;
   LINE_GROUP_WHITELIST_ENABLED: string;

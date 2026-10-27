@@ -1,6 +1,7 @@
 import type { HFMPerformanceData, ConditionCheck, MonthlyActivity } from "../types/hfm.types";
 import { dayjs } from "../utils/dayjs";
 import { logger } from "../utils/logger";
+import { getDepositMatchRule } from "../services/hfm.service";
 
 const fmtCurrency = (n: number, currency: string): string => {
   if (currency === "USC") {
@@ -146,7 +147,11 @@ const getFailedConditionsText = (
     failed.push("Wallet does not match target");
   }
   if (!conditions.depositThresholdMet) {
-    failed.push("Deposit below threshold");
+    failed.push(
+      getDepositMatchRule() === "deposits_gt"
+        ? "Deposits not above threshold"
+        : "Deposit below threshold"
+    );
   }
   return failed;
 };

@@ -97,6 +97,18 @@ export function getDepositThreshold(accountCurrency: string): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+// Which amount the deposit condition reads, and how it compares to the
+// threshold. "balance_gte" (the default) checks balance >= threshold.
+// "deposits_gt" checks HFM's cumulative `deposits` > threshold, so a balance
+// lost to trading or withdrawn does not undo a match. Any other value falls
+// back to "balance_gte". Read per call for the same reason as above.
+export type DepositMatchRule = "balance_gte" | "deposits_gt";
+
+export function getDepositMatchRule(): DepositMatchRule {
+  const raw = (process.env.DEPOSIT_MATCH_RULE ?? "").trim().toLowerCase();
+  return raw === "deposits_gt" ? "deposits_gt" : "balance_gte";
+}
+
 export function parsePerformanceLookup(input: string): PerformanceLookup | null {
   const trimmed = input.trim();
 
@@ -133,7 +145,10 @@ export function checkConditions(
     !Number.isNaN(targetWallet) && walletNum === targetWallet;
 
   const depositThreshold = getDepositThreshold(data.account_currency);
-  const depositThresholdMet = data.balance >= depositThreshold;
+  const depositThresholdMet =
+    getDepositMatchRule() === "deposits_gt"
+      ? toNum(data.deposits) > depositThreshold
+      : data.balance >= depositThreshold;
 
   const matchAll = underTargetWallet && depositThresholdMet;
 

@@ -236,6 +236,18 @@ describe("buildTradingCard", () => {
     expect(texts.some((t) => t.includes("Deposit below threshold"))).toBe(true);
   });
 
+  test("deposits_gt rule names the deposits condition when it fails", () => {
+    process.env.DEPOSIT_MATCH_RULE = "deposits_gt";
+    try {
+      const card = buildTradingCard(mockData, notMatchConditions);
+      const texts = extractTexts(card);
+      expect(texts.some((t) => t.includes("Deposits not above threshold"))).toBe(true);
+      expect(texts.some((t) => t.includes("Deposit below threshold"))).toBe(false);
+    } finally {
+      delete process.env.DEPOSIT_MATCH_RULE;
+    }
+  });
+
   test("match all does not show failing conditions", () => {
     const card = buildTradingCard(mockData, matchAllConditions);
     const texts = extractTexts(card);

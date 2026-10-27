@@ -174,6 +174,7 @@ describe("checkConditions", () => {
     delete process.env.TARGET_WALLET;
     delete process.env.DEPOSIT_THRESHOLD_USD;
     delete process.env.DEPOSIT_THRESHOLD_USC;
+    delete process.env.DEPOSIT_MATCH_RULE;
   });
 
   test("match all when wallet matches target and balance >= 200 USD", () => {
@@ -242,6 +243,57 @@ describe("checkConditions", () => {
     const result = checkConditions({ ...baseData, balance: 250 });
     expect(result.depositThresholdMet).toBe(true);
     expect(result.matchAll).toBe(true);
+  });
+
+  describe("DEPOSIT_MATCH_RULE=deposits_gt", () => {
+    const setup = () => {
+      process.env.TARGET_WALLET = "98241376";
+      process.env.DEPOSIT_MATCH_RULE = "deposits_gt";
+      process.env.DEPOSIT_THRESHOLD_USD = "30";
+      process.env.DEPOSIT_THRESHOLD_USC = "3000";
+    };
+
+    test("deposits strictly above the threshold match", () => {
+      setup();
+      const result = checkConditions({ ...baseData, deposits: 30.01, balance: 0 });
+      expect(result.depositThresholdMet).toBe(true);
+      expect(result.matchAll).toBe(true);
+    });
+
+    test("deposits equal to the threshold do not match", () => {
+      setup();
+      const result = checkConditions({ ...baseData, deposits: 30, balance: 99999 });
+      expect(result.depositThresholdMet).toBe(false);
+      expect(result.matchAll).toBe(false);
+    });
+
+    test("missing deposits do not match, whatever the balance", () => {
+      setup();
+      const result = checkConditions({ ...baseData, balance: 99999 });
+      expect(result.depositThresholdMet).toBe(false);
+    });
+
+    test("USC deposits compare against the cents threshold", () => {
+      setup();
+      const usc = { ...baseData, account_currency: "USC" };
+      expect(checkConditions({ ...usc, deposits: 30_00 }).depositThresholdMet).toBe(false);
+      expect(checkConditions({ ...usc, deposits: 30_01 }).depositThresholdMet).toBe(true);
+    });
+
+    test("wallet outside the target still fails", () => {
+      setup();
+      process.env.TARGET_WALLET = "30506525";
+      const result = checkConditions({ ...baseData, deposits: 500 });
+      expect(result.depositThresholdMet).toBe(true);
+      expect(result.matchAll).toBe(false);
+    });
+  });
+
+  test("unknown DEPOSIT_MATCH_RULE keeps the balance >= rule", () => {
+    process.env.TARGET_WALLET = "98241376";
+    process.env.DEPOSIT_MATCH_RULE = "nonsense";
+    process.env.DEPOSIT_THRESHOLD_USD = "30";
+    expect(checkConditions({ ...baseData, balance: 30, deposits: 0 }).depositThresholdMet).toBe(true);
   });
 });
 

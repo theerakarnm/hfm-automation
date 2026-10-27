@@ -164,7 +164,7 @@ git commit -m "feat: add wallet_activity table"
 - Create: `apps/api/src/services/wallet-dormancy.service.ts`
 - Test: `apps/api/tests/wallet-dormancy.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `apps/api/tests/wallet-dormancy.test.ts`:
 
@@ -269,12 +269,12 @@ describe("buildDormantAlertMessages", () => {
 });
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run: `bun test tests/wallet-dormancy.test.ts`
 Expected: FAIL with "Cannot find module ../src/services/wallet-dormancy.service".
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `apps/api/src/services/wallet-dormancy.service.ts`:
 
@@ -368,12 +368,12 @@ export function buildDormantAlertMessages(
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `bun test tests/wallet-dormancy.test.ts`
 Expected: PASS (all 8 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/services/wallet-dormancy.service.ts tests/wallet-dormancy.test.ts

@@ -390,7 +390,7 @@ git commit -m "feat: add wallet dormancy helpers"
 
 Needs the test database: `docker compose up -d postgres-test` from the repo root and `TEST_DATABASE_URL=postgresql://test:test@localhost:5433/hfm_test`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `apps/api/tests/wallet-activity.repository.test.ts`:
 
@@ -476,12 +476,12 @@ describe("wallet-activity.repository", () => {
 });
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run: `bun test tests/wallet-activity.repository.test.ts`
 Expected: FAIL with "Cannot find module ../src/repositories/wallet-activity.repository".
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `apps/api/src/repositories/wallet-activity.repository.ts`:
 
@@ -566,12 +566,12 @@ export async function markWalletsAlerted(
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `bun test tests/wallet-activity.repository.test.ts && bun run typecheck`
 Expected: PASS (4 tests), no type errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/repositories/wallet-activity.repository.ts tests/wallet-activity.repository.test.ts

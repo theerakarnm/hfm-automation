@@ -973,7 +973,7 @@ In `apps/api/package.json` `scripts`, after `trigger:hfm-healthcheck`:
     "trigger:dormant-wallet-alert": "bun run scripts/trigger-dormant-wallet-alert.ts",
 ```
 
-- [ ] **Step 3: Smoke-test against the local test database**
+- [x] **Step 3: Smoke-test against the local test database**
 
 Run (from `apps/api`, test DB up, real `HFM_API_KEY` in `.env`):
 `DATABASE_URL=postgresql://test:test@localhost:5433/hfm_test DRY_RUN=1 bun run trigger:dormant-wallet-alert`

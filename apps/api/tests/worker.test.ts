@@ -6,11 +6,15 @@ describe("cron dispatch", () => {
     expect(cronJobName("*/5 * * * *")).toBe("hfm-healthcheck");
   });
 
+  test("maps 02:00 UTC (09:00 ICT) to the dormant wallet alert", () => {
+    expect(cronJobName("0 2 * * *")).toBe("dormant-wallet-alert");
+  });
+
   // The daily report cron was removed on purpose in commit 96e6a0e.
   test("does not schedule the daily client report", () => {
     expect(cronJobName("0 1 * * *")).toBeNull();
     expect(cronJobName("0 22 * * *")).toBeNull();
-    expect(Object.values(CRON_JOBS)).toEqual(["hfm-healthcheck"]);
+    expect(Object.values(CRON_JOBS)).toEqual(["hfm-healthcheck", "dormant-wallet-alert"]);
   });
 
   test("returns null for an unknown schedule", () => {

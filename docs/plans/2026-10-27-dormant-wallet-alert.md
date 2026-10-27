@@ -805,7 +805,7 @@ git commit -m "feat: add dormant wallet alert job"
 - Modify: `apps/api/wrangler.simple-trade.jsonc`
 - Modify: `apps/api/tests/worker.test.ts`, `apps/api/tests/tenant-config.test.ts`
 
-- [ ] **Step 1: Update the tests first**
+- [x] **Step 1: Update the tests first**
 
 In `apps/api/tests/worker.test.ts`, add a test and update the list assertion:
 
@@ -850,12 +850,12 @@ Replace the whole "shared keys have not drifted between tenant files" test with:
   });
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run: `bun test tests/worker.test.ts tests/tenant-config.test.ts`
 Expected: FAIL on the new mapping, the `CRON_JOBS` list, and the simple-trade crons.
 
-- [ ] **Step 3: Register and route the job**
+- [x] **Step 3: Register and route the job**
 
 In `apps/api/src/jobs/index.ts`, add the import and the schedule:
 
@@ -890,7 +890,7 @@ Replace the body of `dispatchCron` after the `if (!name)` guard so each schedule
 
 At 02:00 UTC both crons fire as two separate invocations; the `*/5` one keeps doing its usual steps.
 
-- [ ] **Step 4: Add the trigger to the simple-trade tenant file**
+- [x] **Step 4: Add the trigger to the simple-trade tenant file**
 
 In `apps/api/wrangler.simple-trade.jsonc` only:
 
@@ -904,12 +904,12 @@ In `apps/api/wrangler.simple-trade.jsonc` only:
 
 Leave `wrangler.maow.jsonc` and `staging/wrangler.maow-staging.jsonc` alone.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `bun test tests/worker.test.ts tests/tenant-config.test.ts && bun run typecheck`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/jobs/index.ts wrangler.simple-trade.jsonc tests/worker.test.ts tests/tenant-config.test.ts

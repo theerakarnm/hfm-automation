@@ -1,3 +1,4 @@
+import { runDormantWalletAlert } from "./dormant-wallet-alert";
 import { runHfmHealthCheck } from "./hfm-healthcheck";
 import { refreshLastTradeCache } from "../services/last-trade.service";
 import { purgeEventClaims } from "../db/state.repository";
@@ -15,6 +16,8 @@ import { logError, logInfo } from "../utils/logger";
 export const CRON_JOBS = {
   // Every 5 minutes. Interval independent of timezone.
   "*/5 * * * *": "hfm-healthcheck",
+  // 02:00 UTC = 09:00 ICT, once a day at the start of the working day.
+  "0 2 * * *": "dormant-wallet-alert",
 } as const;
 
 export type CronJobName = (typeof CRON_JOBS)[keyof typeof CRON_JOBS];
@@ -43,6 +46,11 @@ export async function dispatchCron(cron: string): Promise<void> {
   const name = cronJobName(cron);
   if (!name) {
     logError("cron", `no job registered for schedule "${cron}"`);
+    return;
+  }
+
+  if (name === "dormant-wallet-alert") {
+    await runStep("dormant-wallet-alert", () => runDormantWalletAlert());
     return;
   }
 

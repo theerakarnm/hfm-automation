@@ -18,9 +18,11 @@
   // CPU ceiling for HTTP invocations. Cron CPU is capped by the platform at
   // 30s for the */5 job, which limits does not raise.
   "limits": { "cpu_ms": 300000 },
-  // UTC only. The daily report cron was removed on purpose (commit 96e6a0e);
-  // run it by hand with `bun run trigger:daily-client-report`.
-  "triggers": { "crons": ["*/5 * * * *"] },
+  // UTC only. */5 = health check + last-trade refresh; 0 2 = 09:00 ICT
+  // dormant wallet alert (this tenant only). The daily report cron was
+  // removed on purpose (commit 96e6a0e); run it by hand with
+  // `bun run trigger:daily-client-report`.
+  "triggers": { "crons": ["*/5 * * * *", "0 2 * * *"] },
   "vars": {
     "TENANT": "simple-trade",
     "HFM_API_BASE_URL": "https://api.hfaffiliates.com",

@@ -300,7 +300,7 @@ describe("wrangler tenant configs", () => {
 
   test("shared keys have not drifted between tenant files", () => {
     const shared = configs.map((c) =>
-      [c.cfg.main, c.cfg.compatibility_date, c.cfg.triggers.crons.join(";")].join("|"),
+      [c.cfg.main, c.cfg.compatibility_date].join("|"),
     );
     const first = shared[0]!;
     for (let i = 0; i < configs.length; i++) {
@@ -308,8 +308,19 @@ describe("wrangler tenant configs", () => {
         `${configs[i]!.file}: ${first}`,
       );
     }
-    // Only the 5 minute job. The daily report cron was removed on purpose in
+    expect(first).toBe("./src/worker.ts|2026-09-22");
+  });
+
+  test("each tenant runs exactly its own cron jobs", () => {
+    // The 5 minute job runs everywhere. The 09:00 ICT dormant wallet alert is
+    // simple-trade only. The daily report cron was removed on purpose in
     // commit 96e6a0e and must not come back through a tenant config.
-    expect(first).toBe("./src/worker.ts|2026-09-22|*/5 * * * *");
+    const crons = Object.fromEntries(
+      configs.map((c) => [c.file, c.cfg.triggers.crons.join(";")]),
+    );
+    expect(crons).toEqual({
+      "wrangler.maow.jsonc": "*/5 * * * *",
+      "wrangler.simple-trade.jsonc": "*/5 * * * *;0 2 * * *",
+    });
   });
 });

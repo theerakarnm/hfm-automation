@@ -586,7 +586,7 @@ git commit -m "feat: add wallet activity repository"
 - Create: `apps/api/src/jobs/dormant-wallet-alert.ts`
 - Test: `apps/api/tests/dormant-wallet-alert.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `apps/api/tests/dormant-wallet-alert.test.ts`:
 
@@ -689,12 +689,12 @@ describe("runDormantWalletAlert", () => {
 });
 ```
 
-- [ ] **Step 2: Run them and see them fail**
+- [x] **Step 2: Run them and see them fail**
 
 Run: `bun test tests/dormant-wallet-alert.test.ts`
 Expected: FAIL with "Cannot find module ../src/jobs/dormant-wallet-alert".
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `apps/api/src/jobs/dormant-wallet-alert.ts`:
 
@@ -784,12 +784,12 @@ export async function runDormantWalletAlert(
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `bun test tests/dormant-wallet-alert.test.ts && bun run typecheck`
 Expected: PASS (5 tests), no type errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/jobs/dormant-wallet-alert.ts tests/dormant-wallet-alert.test.ts

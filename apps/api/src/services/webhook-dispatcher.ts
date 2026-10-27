@@ -18,6 +18,8 @@ import { getLastTradeMapWithin } from "../services/last-trade.service";
 import {
   buildTradingCard,
   buildPaginationCard,
+  buildArchivedWalletCard,
+  getArchivedNoticeFormat,
   getFlexSummaryVersion,
 } from "../builders/flex-message.builder";
 import { generateReportForUser, type ReportPeriod } from "../jobs/daily-client-report";
@@ -475,6 +477,18 @@ async function handleLookupAndReply(
         ),
       );
     }
+    return;
+  }
+
+  if (result.reason === "all_archived" && getArchivedNoticeFormat() === "flex") {
+    await sendReply(webhookEventId, "flex", () =>
+      replyOrPushFlex(
+        replyToken,
+        ctx.chatId,
+        `${lookup.kind === "wallet" ? "Wallet" : "Account"} ${lookup.label} - no active Trading Account`,
+        buildArchivedWalletCard(lookup.label, result.subaffiliate, lookup.kind),
+      ),
+    );
     return;
   }
 

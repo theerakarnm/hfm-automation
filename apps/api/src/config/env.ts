@@ -26,6 +26,7 @@ export interface WorkerEnv {
   LOT_DISPLAY_MODE: string;
   MATCH_RULE: string;
   IDLE_ALERT_DAYS: string;
+  ARCHIVED_NOTICE_FORMAT: string;
   LOG_LEVEL: string;
 
   // secrets (wrangler secret put <NAME> -c wrangler.<tenant>.jsonc)

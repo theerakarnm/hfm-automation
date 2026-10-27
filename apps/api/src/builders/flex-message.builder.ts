@@ -1,6 +1,7 @@
 import type { HFMPerformanceData, ConditionCheck, MonthlyActivity } from "../types/hfm.types";
 import { dayjs } from "../utils/dayjs";
 import { logger } from "../utils/logger";
+import { extractWalletNumber } from "../services/hfm.service";
 
 const fmtCurrency = (n: number, currency: string): string => {
   if (currency === "USC") {
@@ -569,6 +570,108 @@ export function buildTradingCardV2(
           "Account Currency",
           displayCurrencyLabel(data.account_currency)
         ),
+      ],
+    },
+    footer: {
+      type: "box",
+      layout: "vertical",
+      paddingAll: "12px",
+      contents: [
+        {
+          type: "text",
+          text: "For assistance, please contact support.",
+          size: "xs",
+          color: colors.muted,
+          align: "center",
+          wrap: true,
+        },
+      ],
+    },
+  };
+}
+
+// How a wallet whose trading accounts are all archived is answered. "text"
+// (default) keeps the one-line partner notice; "flex" sends a card in the same
+// style as the trading summary. Read per call: Bun caches the module.
+export type ArchivedNoticeFormat = "text" | "flex";
+
+export function getArchivedNoticeFormat(): ArchivedNoticeFormat {
+  const raw = (process.env.ARCHIVED_NOTICE_FORMAT ?? "").trim().toLowerCase();
+  return raw === "flex" ? "flex" : "text";
+}
+
+export function buildArchivedWalletCard(
+  idValue: string,
+  subaffiliate: number,
+  kind: "wallet" | "account" = "wallet",
+): object {
+  const partner = extractWalletNumber(String(subaffiliate));
+  const target = Number(process.env.TARGET_WALLET);
+  const reasons = ["No active Trading Account (all archived)"];
+  if (partner !== target) reasons.push("TARGET_WALLET does not match");
+  const badge = getMatchMeta({
+    underTargetWallet: partner === target,
+    depositThresholdMet: false,
+    matchAll: false,
+  });
+
+  return {
+    type: "bubble",
+    size: "mega",
+    styles: {
+      header: { backgroundColor: colors.green },
+      footer: { backgroundColor: colors.footer },
+    },
+    header: {
+      type: "box",
+      layout: "vertical",
+      paddingAll: "16px",
+      contents: [
+        {
+          type: "text",
+          text: "Wallet Summary",
+          color: colors.white,
+          weight: "bold",
+          size: "lg",
+        },
+      ],
+    },
+    body: {
+      type: "box",
+      layout: "vertical",
+      paddingAll: "16px",
+      spacing: "md",
+      contents: [
+        {
+          type: "box",
+          layout: "horizontal",
+          spacing: "sm",
+          contents: [
+            infoCard(kind === "wallet" ? "Wallet ID" : "Account ID", idValue),
+            infoCard("Partner", String(partner ?? subaffiliate)),
+          ],
+        },
+        { type: "separator", color: colors.border },
+        detailCard("Condition", badge.label, {
+          color: badge.color,
+          backgroundColor: badge.backgroundColor,
+        }),
+        {
+          type: "box",
+          layout: "vertical",
+          spacing: "xs",
+          backgroundColor: "#FEF2F2",
+          cornerRadius: "8px",
+          paddingAll: "10px",
+          contents: reasons.map((msg) => ({
+            type: "text",
+            text: `\u2022 ${msg}`,
+            size: "xs",
+            color: "#DC2626",
+            wrap: true,
+          })),
+        },
+        detailCard("Trading Account", "-"),
       ],
     },
     footer: {

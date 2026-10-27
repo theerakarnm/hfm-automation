@@ -70,7 +70,7 @@ A wallet is due when its anchor is older than 21 days and it was not alerted sin
 - Modify: `apps/api/tests/migrations.test.ts`
 - Generate: `apps/api/drizzle/0002_<random>.sql`, `apps/api/drizzle/meta/_journal.json`, `apps/api/drizzle/meta/0002_snapshot.json`
 
-- [ ] **Step 1: Make the migration test require the table (failing test)**
+- [x] **Step 1: Make the migration test require the table (failing test)**
 
 In `apps/api/tests/migrations.test.ts`, add `"wallet_activity"` to `REQUIRED_TABLES`:
 
@@ -89,12 +89,12 @@ const REQUIRED_TABLES = [
 ];
 ```
 
-- [ ] **Step 2: Run it and see it fail**
+- [x] **Step 2: Run it and see it fail**
 
 Run (from `apps/api`): `bun test tests/migrations.test.ts`
 Expected: FAIL in "every schema.ts table has a CREATE TABLE in drizzle/" (no match for `wallet_activity`).
 
-- [ ] **Step 3: Add the table to `schema.ts`**
+- [x] **Step 3: Add the table to `schema.ts`**
 
 Append to `apps/api/src/db/schema.ts`:
 
@@ -117,13 +117,13 @@ export const walletActivity = pgTable("wallet_activity", {
 });
 ```
 
-- [ ] **Step 4: Generate the migration**
+- [x] **Step 4: Generate the migration**
 
 Run (from `apps/api`): `bun run db:generate`
 Expected: a new `drizzle/0002_<random>.sql` containing `CREATE TABLE "wallet_activity"` with the six columns, plus an updated `drizzle/meta/_journal.json` and a new `drizzle/meta/0002_snapshot.json`.
 Do not edit the SQL by hand.
 
-- [ ] **Step 5: Add the table to the test schema**
+- [x] **Step 5: Add the table to the test schema**
 
 In `apps/api/tests/db-helpers.ts`, inside `applyTestSchema`, after the `job_state` block:
 
@@ -144,12 +144,12 @@ And in `createTestDb`, add to the `DROP TABLE` list:
     DROP TABLE IF EXISTS wallet_activity CASCADE;
 ```
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `bun test tests/migrations.test.ts && bun run typecheck`
 Expected: PASS, no type errors.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/db/schema.ts drizzle tests/db-helpers.ts tests/migrations.test.ts

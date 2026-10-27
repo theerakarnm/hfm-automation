@@ -91,6 +91,15 @@ export async function applyTestSchema(
       value      TEXT NOT NULL,
       updated_at TIMESTAMP NOT NULL DEFAULT now()
     );
+
+    CREATE TABLE IF NOT EXISTS wallet_activity (
+      wallet_id       INTEGER PRIMARY KEY,
+      name            TEXT,
+      last_trade_at   TIMESTAMP,
+      first_funded_at TIMESTAMP,
+      alerted_at      TIMESTAMP,
+      seen_at         TIMESTAMP NOT NULL
+    );
   `);
 }
 
@@ -108,6 +117,7 @@ export async function createTestDb() {
     DROP TABLE IF EXISTS notify_recipients CASCADE;
     DROP TABLE IF EXISTS client_snapshots CASCADE;
     DROP TABLE IF EXISTS job_state CASCADE;
+    DROP TABLE IF EXISTS wallet_activity CASCADE;
   `);
 
   await applyTestSchema(db);

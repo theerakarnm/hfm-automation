@@ -136,3 +136,20 @@ export const jobState = pgTable("job_state", {
     .notNull()
     .default(sql`now()`),
 });
+
+// One row per HFM wallet for the dormant-wallet alert. HFM stays the source of
+// truth for trades; the daily job copies its latest last_trade in here so a
+// row that briefly comes back null cannot reset a wallet to "never traded",
+// and alerted_at lets the alert fire once per dormant spell, not every day.
+// All timestamps are UTC written by the app; compare them with a cutoff built
+// in JS, never with now(), so the session time zone cannot skew the result.
+export const walletActivity = pgTable("wallet_activity", {
+  walletId: integer("wallet_id").primaryKey(),
+  name: text("name"),
+  lastTradeAt: timestamp("last_trade_at", { mode: "string" }),
+  firstFundedAt: timestamp("first_funded_at", { mode: "string" }),
+  alertedAt: timestamp("alerted_at", { mode: "string" }),
+  // Run time of the last sync that saw this wallet in HFM. Only wallets seen
+  // by the current run are checked, so a wallet HFM dropped is never alerted.
+  seenAt: timestamp("seen_at", { mode: "string" }).notNull(),
+});

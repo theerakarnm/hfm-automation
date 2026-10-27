@@ -7,7 +7,8 @@ import { logError, logInfo } from "../utils/logger";
 
 /**
  * Cloudflare cron triggers are UTC only. Changing a cron string here also
- * means changing triggers.crons in every wrangler.<tenant>.jsonc, and a deploy
+ * means changing triggers.crons in the wrangler.<tenant>.jsonc files that run
+ * that job (the dormant wallet alert is simple-trade only), and a deploy
  * replaces the whole trigger set for that Worker.
  *
  * The daily client report is deliberately not scheduled: its cron was removed

@@ -924,7 +924,7 @@ git commit -m "feat: schedule dormant wallet alert at 09:00"
 - Create: `apps/api/scripts/trigger-dormant-wallet-alert.ts`
 - Modify: `apps/api/package.json` (`scripts`)
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 Create `apps/api/scripts/trigger-dormant-wallet-alert.ts`:
 
@@ -965,7 +965,7 @@ async function main() {
 main();
 ```
 
-- [ ] **Step 2: Register it**
+- [x] **Step 2: Register it**
 
 In `apps/api/package.json` `scripts`, after `trigger:hfm-healthcheck`:
 
@@ -981,7 +981,7 @@ Expected: either `[dry-run] would push ...` with the wallet list, or only `dorma
 Check the output by eye: Thai text renders, dates are `DD/MM/YY`, day counts look right against HFM.
 (Run `bun test tests/wallet-activity.repository.test.ts` once first so the table exists in `hfm_test`.)
 
-- [ ] **Step 4: Full check and commit**
+- [x] **Step 4: Full check and commit**
 
 Run: `bun test && bun run typecheck`
 Expected: all green.

@@ -1,5 +1,4 @@
 import type {
-  HFMApiResult,
   HFMPerformanceData,
   ConditionCheck,
   MonthlyActivity,
@@ -718,7 +717,11 @@ export function buildPaginationCard(
   };
 }
 
-type LookupFailure = Extract<HFMApiResult, { ok: false }>;
+// HFM answered with data for the lookup but there is no live account to show.
+// Misses (not_found), timeouts and outages are plain text replies instead.
+export type LookupNotice =
+  | { reason: "all_archived"; subaffiliate: number }
+  | { reason: "no_wallet" };
 
 interface NoticeTone {
   headerColor: string;
@@ -726,54 +729,36 @@ interface NoticeTone {
   backgroundColor: string;
 }
 
-// Archived is information, not a fault, so it is grey. A missing record is red.
-// A timeout or HFM outage is amber because a retry usually fixes it.
+// Archived is information, not a fault, so it is grey. An account with no
+// linked wallet is a data problem worth a second look, so it is red.
 const NOTICE_TONES = {
   info: { headerColor: "#6B7280", color: "#4B5563", backgroundColor: "#F3F4F6" },
   error: { headerColor: "#DC2626", color: "#DC2626", backgroundColor: "#FEF2F2" },
-  warning: { headerColor: "#D97706", color: "#B45309", backgroundColor: "#FEF3C7" },
 } satisfies Record<string, NoticeTone>;
 
 // The altText is the text the bot used to send as a plain reply. It is what
 // LINE shows in the chat list and push notification, so it keeps that wording.
 function describeLookupFailure(
   lookup: { kind: "wallet" | "account"; label: string },
-  failure: LookupFailure
+  failure: LookupNotice
 ): { tone: NoticeTone; status: string; altText: string; message: string } {
-  const idLabel =
-    lookup.kind === "wallet"
-      ? `Wallet ID ${lookup.label}`
-      : `Account ID ${lookup.label}`;
-
   switch (failure.reason) {
     case "all_archived": {
       const message = `อยู่ใต้ Partner ${failure.subaffiliate} แต่ไม่มี Trading Account`;
       return { tone: NOTICE_TONES.info, status: "Archived", altText: message, message };
     }
-    case "not_found": {
-      const message = `ไม่พบข้อมูล ${idLabel} ในระบบ\nกรุณาตรวจสอบและลองใหม่อีกครั้ง`;
-      return { tone: NOTICE_TONES.error, status: "Not Found", altText: `❌ ${message}`, message };
-    }
     case "no_wallet": {
       const message = `Account ID ${lookup.label} ไม่มี Wallet ที่เชื่อมโยง`;
       return { tone: NOTICE_TONES.error, status: "No Linked Wallet", altText: `❌ ${message}`, message };
     }
-    case "timeout": {
-      const message = "การเชื่อมต่อหมดเวลา\nกรุณาลองใหม่อีกครั้ง";
-      return { tone: NOTICE_TONES.warning, status: "Timeout", altText: `⚠️ ${message}`, message };
-    }
-    case "server_error": {
-      const message = "ระบบ HFM API ขัดข้องชั่วคราว\nกรุณาลองใหม่ในอีกสักครู่ หรือติดต่อ Support";
-      return { tone: NOTICE_TONES.warning, status: "HFM API Unavailable", altText: `⚠️ ${message}`, message };
-    }
   }
 }
 
-// Reply for a Wallet ID / Account ID lookup that produced no trading card.
+// Reply for a Wallet ID / Account ID lookup that found data but no live account.
 // Same bubble frame as the trading card so every lookup answer looks alike.
 export function buildLookupNoticeCard(
   lookup: { kind: "wallet" | "account"; label: string },
-  failure: LookupFailure
+  failure: LookupNotice
 ): { altText: string; contents: object } {
   const { tone, status, altText, message } = describeLookupFailure(lookup, failure);
 

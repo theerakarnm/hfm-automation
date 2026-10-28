@@ -451,7 +451,8 @@ describe("webhook", () => {
     );
     // "HFM API" appears verbatim inside the Thai server_error notice.
     expect(reply?.body).toContain("HFM API");
-    expect(JSON.parse(reply!.body!).messages[0].type).toBe("flex");
+    // A miss or outage is still a plain text reply.
+    expect(JSON.parse(reply!.body!).messages[0].type).toBe("text");
   });
 
   test("wallet whose accounts are all archived replies with the partner notice", async () => {

@@ -564,11 +564,7 @@ describe("buildLookupNoticeCard", () => {
   const account = { kind: "account" as const, label: "1928491038" };
 
   test("archived wallet shows an Archived badge and the partner", () => {
-    const { altText, contents } = buildLookupNoticeCard(wallet, {
-      ok: false,
-      reason: "all_archived",
-      subaffiliate: 30428234,
-    });
+    const { altText, contents } = buildLookupNoticeCard(wallet, { reason: "all_archived", subaffiliate: 30428234 });
     const texts = extractTexts(contents);
     expect((contents as { type: string }).type).toBe("bubble");
     expect(texts).toContain("Wallet ID");
@@ -580,47 +576,30 @@ describe("buildLookupNoticeCard", () => {
   });
 
   test("an account lookup is labelled Account ID", () => {
-    const { contents } = buildLookupNoticeCard(account, {
-      ok: false,
-      reason: "no_wallet",
-    });
+    const { contents } = buildLookupNoticeCard(account, { reason: "no_wallet" });
     const texts = extractTexts(contents);
     expect(texts).toContain("Account ID");
     expect(texts).toContain("1928491038");
     expect(texts).toContain("No Linked Wallet");
   });
 
-  test.each([
-    ["not_found", "Not Found", "❌ ไม่พบข้อมูล Wallet ID 64392729 ในระบบ\nกรุณาตรวจสอบและลองใหม่อีกครั้ง"],
-    ["timeout", "Timeout", "⚠️ การเชื่อมต่อหมดเวลา\nกรุณาลองใหม่อีกครั้ง"],
-    [
-      "server_error",
-      "HFM API Unavailable",
-      "⚠️ ระบบ HFM API ขัดข้องชั่วคราว\nกรุณาลองใหม่ในอีกสักครู่ หรือติดต่อ Support",
-    ],
-  ] as const)("%s keeps the old text as altText and shows %s", (reason, badge, alt) => {
-    const { altText, contents } = buildLookupNoticeCard(wallet, { ok: false, reason });
-    expect(altText).toBe(alt);
-    expect(extractTexts(contents)).toContain(badge);
+  test("no linked wallet keeps the old text as altText", () => {
+    const { altText } = buildLookupNoticeCard(account, { reason: "no_wallet" });
+    expect(altText).toBe("❌ Account ID 1928491038 ไม่มี Wallet ที่เชื่อมโยง");
   });
 
-  test("an archived notice is grey, an error is red, an outage is amber", () => {
+  test("an archived notice is grey and a missing wallet is red", () => {
     const header = (f: Parameters<typeof buildLookupNoticeCard>[1]) =>
       (buildLookupNoticeCard(wallet, f).contents as {
         styles: { header: { backgroundColor: string } };
       }).styles.header.backgroundColor;
-    const archived = header({ ok: false, reason: "all_archived", subaffiliate: 1 });
-    const notFound = header({ ok: false, reason: "not_found" });
-    const timeout = header({ ok: false, reason: "timeout" });
-    expect(new Set([archived, notFound, timeout]).size).toBe(3);
+    const archived = header({ reason: "all_archived", subaffiliate: 1 });
+    const noWallet = header({ reason: "no_wallet" });
+    expect(archived).not.toBe(noWallet);
   });
 
   test("JSON stays inside LINE Flex limits", () => {
-    const { contents } = buildLookupNoticeCard(wallet, {
-      ok: false,
-      reason: "all_archived",
-      subaffiliate: 30428234,
-    });
+    const { contents } = buildLookupNoticeCard(wallet, { reason: "all_archived", subaffiliate: 30428234 });
     expect(JSON.stringify(contents).length).toBeLessThan(10_000);
   });
 });

@@ -998,18 +998,18 @@ git commit -m "feat: add dormant wallet alert trigger script"
 The cron must never run against a database without `wallet_activity`, so migrate first.
 These steps touch the production database and Worker, so they run only after the user approves.
 
-- [ ] **Step 1: Migrate the simple-trade database**
+- [x] **Step 1: Migrate the simple-trade database**
 
 Run (from `apps/api`): `bun run migrate:simple-trade`
 Expected: `[migrate] migrations applied to simple-trade`.
 
-- [ ] **Step 2: Dry run to size the first-run backlog**
+- [x] **Step 2: Dry run to size the first-run backlog**
 
 Run with the tenant's direct origin URL and HFM key (from `.env.simple-trade.admin`):
 `DATABASE_URL=$DATABASE_URL_SIMPLE_TRADE DRY_RUN=1 bun --env-file=.env.simple-trade.admin run scripts/trigger-dormant-wallet-alert.ts`
 Note the `due` count and the number of message parts.
 
-- [ ] **Step 3: Decide on the backlog (only if the list is too long)**
+- [x] **Step 3: Decide on the backlog (only if the list is too long)**
 
 If the operator does not want the first-run list, mark today's backlog as already alerted in the simple-trade database:
 
@@ -1021,7 +1021,7 @@ WHERE COALESCE(last_trade_at, first_funded_at) < (now() AT TIME ZONE 'UTC') - in
 
 Wallets that go dormant after today are still alerted normally.
 
-- [ ] **Step 4: Deploy**
+- [x] **Step 4: Deploy**
 
 Run: `bun run check:bundle:simple-trade`, then `bun run deploy:simple-trade`.
 Expected: wrangler lists two schedules for `hfm-bot-simple-trade`: `*/5 * * * *` and `0 2 * * *`.

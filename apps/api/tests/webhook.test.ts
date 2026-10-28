@@ -451,6 +451,7 @@ describe("webhook", () => {
     );
     // "HFM API" appears verbatim inside the Thai server_error notice.
     expect(reply?.body).toContain("HFM API");
+    expect(JSON.parse(reply!.body!).messages[0].type).toBe("flex");
   });
 
   test("wallet whose accounts are all archived replies with the partner notice", async () => {
@@ -533,7 +534,13 @@ describe("webhook", () => {
     const reply = fetchCalls.find(
       (c) => c.url === "https://api.line.me/v2/bot/message/reply"
     );
-    expect(reply?.body).toContain("\u0E2D\u0E22\u0E39\u0E48\u0E43\u0E15\u0E49 Partner 30506525 \u0E41\u0E15\u0E48\u0E44\u0E21\u0E48\u0E21\u0E35 Trading Account");
+    // Flex, not plain text: the archived state and partner are in the bubble,
+    // and the old wording survives as the altText.
+    const message = JSON.parse(reply!.body!).messages[0];
+    expect(message.type).toBe("flex");
+    expect(message.altText).toBe("\u0E2D\u0E22\u0E39\u0E48\u0E43\u0E15\u0E49 Partner 30506525 \u0E41\u0E15\u0E48\u0E44\u0E21\u0E48\u0E21\u0E35 Trading Account");
+    expect(reply?.body).toContain("Archived");
+    expect(reply?.body).toContain("65238209");
     expect(reply?.body).not.toContain("\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25");
   });
 

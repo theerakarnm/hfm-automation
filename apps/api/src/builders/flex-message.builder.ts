@@ -1,4 +1,9 @@
-import type { HFMPerformanceData, ConditionCheck, MonthlyActivity } from "../types/hfm.types";
+import type {
+  HFMApiResult,
+  HFMPerformanceData,
+  ConditionCheck,
+  MonthlyActivity,
+} from "../types/hfm.types";
 import { dayjs } from "../utils/dayjs";
 import { logger } from "../utils/logger";
 import { getDepositMatchRule } from "../services/hfm.service";
@@ -713,3 +718,148 @@ export function buildPaginationCard(
   };
 }
 
+type LookupFailure = Extract<HFMApiResult, { ok: false }>;
+
+interface NoticeTone {
+  headerColor: string;
+  color: string;
+  backgroundColor: string;
+}
+
+// Archived is information, not a fault, so it is grey. A missing record is red.
+// A timeout or HFM outage is amber because a retry usually fixes it.
+const NOTICE_TONES = {
+  info: { headerColor: "#6B7280", color: "#4B5563", backgroundColor: "#F3F4F6" },
+  error: { headerColor: "#DC2626", color: "#DC2626", backgroundColor: "#FEF2F2" },
+  warning: { headerColor: "#D97706", color: "#B45309", backgroundColor: "#FEF3C7" },
+} satisfies Record<string, NoticeTone>;
+
+// The altText is the text the bot used to send as a plain reply. It is what
+// LINE shows in the chat list and push notification, so it keeps that wording.
+function describeLookupFailure(
+  lookup: { kind: "wallet" | "account"; label: string },
+  failure: LookupFailure
+): { tone: NoticeTone; status: string; altText: string; message: string } {
+  const idLabel =
+    lookup.kind === "wallet"
+      ? `Wallet ID ${lookup.label}`
+      : `Account ID ${lookup.label}`;
+
+  switch (failure.reason) {
+    case "all_archived": {
+      const message = `อยู่ใต้ Partner ${failure.subaffiliate} แต่ไม่มี Trading Account`;
+      return { tone: NOTICE_TONES.info, status: "Archived", altText: message, message };
+    }
+    case "not_found": {
+      const message = `ไม่พบข้อมูล ${idLabel} ในระบบ\nกรุณาตรวจสอบและลองใหม่อีกครั้ง`;
+      return { tone: NOTICE_TONES.error, status: "Not Found", altText: `❌ ${message}`, message };
+    }
+    case "no_wallet": {
+      const message = `Account ID ${lookup.label} ไม่มี Wallet ที่เชื่อมโยง`;
+      return { tone: NOTICE_TONES.error, status: "No Linked Wallet", altText: `❌ ${message}`, message };
+    }
+    case "timeout": {
+      const message = "การเชื่อมต่อหมดเวลา\nกรุณาลองใหม่อีกครั้ง";
+      return { tone: NOTICE_TONES.warning, status: "Timeout", altText: `⚠️ ${message}`, message };
+    }
+    case "server_error": {
+      const message = "ระบบ HFM API ขัดข้องชั่วคราว\nกรุณาลองใหม่ในอีกสักครู่ หรือติดต่อ Support";
+      return { tone: NOTICE_TONES.warning, status: "HFM API Unavailable", altText: `⚠️ ${message}`, message };
+    }
+  }
+}
+
+// Reply for a Wallet ID / Account ID lookup that produced no trading card.
+// Same bubble frame as the trading card so every lookup answer looks alike.
+export function buildLookupNoticeCard(
+  lookup: { kind: "wallet" | "account"; label: string },
+  failure: LookupFailure
+): { altText: string; contents: object } {
+  const { tone, status, altText, message } = describeLookupFailure(lookup, failure);
+
+  return {
+    altText,
+    contents: {
+      type: "bubble",
+      size: "mega",
+      styles: {
+        header: { backgroundColor: tone.headerColor },
+        footer: { backgroundColor: colors.footer },
+      },
+      header: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "16px",
+        spacing: "xs",
+        contents: [
+          {
+            type: "text",
+            text: "Lookup Result",
+            color: colors.white,
+            weight: "bold",
+            size: "md",
+            wrap: true,
+            maxLines: 2,
+            adjustMode: "shrink-to-fit",
+          },
+          {
+            type: "text",
+            text: "Customer Support",
+            color: "#F3F4F6",
+            size: "xs",
+            wrap: true,
+            maxLines: 1,
+          },
+        ],
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        paddingAll: "14px",
+        contents: [
+          detailCard(lookup.kind === "wallet" ? "Wallet ID" : "Account ID", lookup.label),
+          detailCard("Status", status, {
+            color: tone.color,
+            backgroundColor: tone.backgroundColor,
+          }),
+          ...(failure.reason === "all_archived"
+            ? [detailCard("Subaffiliate", String(failure.subaffiliate))]
+            : []),
+          { type: "separator", color: colors.border },
+          {
+            type: "box",
+            layout: "vertical",
+            backgroundColor: tone.backgroundColor,
+            cornerRadius: "8px",
+            paddingAll: "10px",
+            contents: [
+              {
+                type: "text",
+                text: message,
+                size: "sm",
+                color: tone.color,
+                wrap: true,
+              },
+            ],
+          },
+        ],
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "12px",
+        contents: [
+          {
+            type: "text",
+            text: "For assistance, please contact support.",
+            size: "xs",
+            color: colors.muted,
+            align: "center",
+            wrap: true,
+          },
+        ],
+      },
+    },
+  };
+}

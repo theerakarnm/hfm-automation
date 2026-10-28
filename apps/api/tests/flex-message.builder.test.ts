@@ -1,5 +1,6 @@
 import { test, expect, describe, afterEach } from "bun:test";
 import {
+  buildLookupNoticeCard,
   buildTradingCard,
   buildPaginationCard,
   getFlexSummaryVersion,
@@ -555,5 +556,71 @@ describe("flex-v2 trading card", () => {
     );
     expect(texts).toContain("Volume");
     expect(texts).not.toContain("Rank");
+  });
+});
+
+describe("buildLookupNoticeCard", () => {
+  const wallet = { kind: "wallet" as const, label: "64392729" };
+  const account = { kind: "account" as const, label: "1928491038" };
+
+  test("archived wallet shows an Archived badge and the partner", () => {
+    const { altText, contents } = buildLookupNoticeCard(wallet, {
+      ok: false,
+      reason: "all_archived",
+      subaffiliate: 30428234,
+    });
+    const texts = extractTexts(contents);
+    expect((contents as { type: string }).type).toBe("bubble");
+    expect(texts).toContain("Wallet ID");
+    expect(texts).toContain("64392729");
+    expect(texts).toContain("Archived");
+    expect(texts).toContain("Subaffiliate");
+    expect(texts).toContain("30428234");
+    expect(altText).toBe("อยู่ใต้ Partner 30428234 แต่ไม่มี Trading Account");
+  });
+
+  test("an account lookup is labelled Account ID", () => {
+    const { contents } = buildLookupNoticeCard(account, {
+      ok: false,
+      reason: "no_wallet",
+    });
+    const texts = extractTexts(contents);
+    expect(texts).toContain("Account ID");
+    expect(texts).toContain("1928491038");
+    expect(texts).toContain("No Linked Wallet");
+  });
+
+  test.each([
+    ["not_found", "Not Found", "❌ ไม่พบข้อมูล Wallet ID 64392729 ในระบบ\nกรุณาตรวจสอบและลองใหม่อีกครั้ง"],
+    ["timeout", "Timeout", "⚠️ การเชื่อมต่อหมดเวลา\nกรุณาลองใหม่อีกครั้ง"],
+    [
+      "server_error",
+      "HFM API Unavailable",
+      "⚠️ ระบบ HFM API ขัดข้องชั่วคราว\nกรุณาลองใหม่ในอีกสักครู่ หรือติดต่อ Support",
+    ],
+  ] as const)("%s keeps the old text as altText and shows %s", (reason, badge, alt) => {
+    const { altText, contents } = buildLookupNoticeCard(wallet, { ok: false, reason });
+    expect(altText).toBe(alt);
+    expect(extractTexts(contents)).toContain(badge);
+  });
+
+  test("an archived notice is grey, an error is red, an outage is amber", () => {
+    const header = (f: Parameters<typeof buildLookupNoticeCard>[1]) =>
+      (buildLookupNoticeCard(wallet, f).contents as {
+        styles: { header: { backgroundColor: string } };
+      }).styles.header.backgroundColor;
+    const archived = header({ ok: false, reason: "all_archived", subaffiliate: 1 });
+    const notFound = header({ ok: false, reason: "not_found" });
+    const timeout = header({ ok: false, reason: "timeout" });
+    expect(new Set([archived, notFound, timeout]).size).toBe(3);
+  });
+
+  test("JSON stays inside LINE Flex limits", () => {
+    const { contents } = buildLookupNoticeCard(wallet, {
+      ok: false,
+      reason: "all_archived",
+      subaffiliate: 30428234,
+    });
+    expect(JSON.stringify(contents).length).toBeLessThan(10_000);
   });
 });
